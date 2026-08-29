@@ -713,14 +713,16 @@ async function storageSet(key, value, attempt){
       return storageSet(key, value, attempt+1);
     }
     if(!res.ok){
-      throw new Error(`${body.message || 'GitHub save failed'} (HTTP ${res.status})`);
+      const tk = c.token || '';
+      const tkMasked = tk ? `${tk.slice(0,10)}...${tk.slice(-4)} (len ${tk.length})` : 'MISSING';
+      throw new Error(`${body.message || 'GitHub save failed'} (HTTP ${res.status}) -- used ${c.owner}/${c.repo}@${c.branch||'main'}, token ${tkMasked}`);
     }
     shaCache[key] = body.content.sha;
     return true;
   }catch(e){
     console.error('storage set failed', key, e);
     const detail = (e && e.message) ? e.message : 'unknown error';
-    showToast(`Could not save "${key}" to GitHub: ${detail}`, 6000);
+    showToast(`Could not save "${key}" to GitHub: ${detail}`, 9000);
     return false;
   }
 }
