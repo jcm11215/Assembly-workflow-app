@@ -378,7 +378,7 @@ main{flex:1;overflow-y:auto;padding:12px 12px 90px 12px;-webkit-overflow-scrolli
    Vanilla JS single-file app -- runs standalone in any browser, no
    server needed. Jobs/blockers/notes are stored in a GitHub repo you
    control (shared across every device). AI features (Assistant +
-   Blueprint extraction) call the Anthropic API directly using a key
+   Blueprint extraction) call Google's free Gemini API directly using a key
    you enter in Settings, stored only in that browser.
    ========================================================= */
 
@@ -996,7 +996,7 @@ function renderAssistant(){
   }).join('');
   document.getElementById('content').innerHTML = `
     <div class="section-title">AI Assistant</div>
-    ${!getApiKey() ? `<div class="focus-banner"><div class="focus-banner-head">Setup Needed</div><div style="font-size:13px;margin-bottom:10px;">Add an Anthropic API key to turn this on.</div><button class="btn btn-primary btn-sm" data-action="open-settings">Open Settings</button></div>` : ''}
+    ${!getApiKey() ? `<div class="focus-banner"><div class="focus-banner-head">Setup Needed</div><div style="font-size:13px;margin-bottom:10px;">Add a free Google Gemini API key to turn this on.</div><button class="btn btn-primary btn-sm" data-action="open-settings">Open Settings</button></div>` : ''}
     <div class="prompt-grid">
       ${QUICK_PROMPTS.map(p=>`<button data-action="quick-prompt" data-prompt="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('')}
     </div>
@@ -1015,39 +1015,47 @@ function goToAssistantWithPrompt(promptText){
   window.scrollTo(0,0);
   sendChat(promptText);
 }
-function getApiKey(){ return (localStorage.getItem('awt_apiKey') || '').trim(); }
-function setApiKey(key){ localStorage.setItem('awt_apiKey', (key||'').trim()); }
+function getApiKey(){ return (localStorage.getItem('awt_geminiKey') || '').trim(); }
+function setApiKey(key){ localStorage.setItem('awt_geminiKey', (key||'').trim()); }
 
-// Standalone (outside Claude.ai) there's no built-in connection to Claude --
-// each browser needs its own Anthropic API key, entered once in Settings.
-// The key is stored only in this browser's localStorage and sent directly
-// to Anthropic with each request; it is never sent anywhere else.
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+// Standalone (outside Claude.ai) there's no built-in connection to an AI --
+// each browser needs its own free Google Gemini API key, entered once in
+// Settings. The key is stored only in this browser's localStorage and sent
+// directly to Google with each request; it is never sent anywhere else.
+// `content` uses the same shape either way: a plain string, or an array of
+// {type:'text', text} / {type:'image', source:{media_type, data}} blocks.
+function toGeminiParts(content){
+  if(typeof content === 'string') return [{ text: content }];
+  return content.map(block=>{
+    if(block.type === 'image'){
+      return { inline_data: { mime_type: block.source.media_type, data: block.source.data } };
+    }
+    return { text: block.text || '' };
+  });
+}
 async function callClaudeAPI(systemPrompt, content){
   const apiKey = getApiKey();
   if(!apiKey) throw new Error('NO_API_KEY');
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-sonnet-5',
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages: [{role:'user', content: content}]
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: toGeminiParts(content) }]
     })
   });
   const raw = await response.text();
   let data;
-  try{ data = JSON.parse(raw); }catch(e){ throw new Error('Unexpected response from Claude (not JSON). Please try again.'); }
+  try{ data = JSON.parse(raw); }catch(e){ throw new Error('Unexpected response from Gemini (not JSON). Please try again.'); }
   if(!response.ok){
     const apiMsg = (data && data.error && data.error.message) ? data.error.message : `Request failed (${response.status})`;
     throw new Error(apiMsg);
   }
-  return data && data.content ? data.content.map(b=>b.text||'').filter(Boolean).join('\n') : '';
+  const candidate = data && data.candidates && data.candidates[0];
+  const parts = candidate && candidate.content && candidate.content.parts;
+  return parts ? parts.map(p=>p.text||'').filter(Boolean).join('\n') : '';
 }
 
 async function sendChat(promptText){
@@ -1253,17 +1261,19 @@ function settingsModalHtml(){
       <div class="fab-row"><button type="submit" class="btn btn-primary btn-block">Save Connection</button></div>
     </form>
 
-    <div class="section-title">Anthropic API Key</div>
+    <div class="section-title">Google Gemini API Key</div>
     <div class="bp-hint" style="margin-bottom:10px;">
-      Running outside Claude.ai, this app needs its own Anthropic API key to power the AI Assistant and Blueprint extraction.
-      Get one at <b>console.anthropic.com</b>. The key is stored only in this browser and sent directly
-      to Anthropic with each request -- it is never sent anywhere else. Only use this on a device you trust.
+      Running outside Claude.ai, this app needs its own API key to power the AI Assistant and Blueprint extraction --
+      using Google's free Gemini API. Get one at <b>aistudio.google.com</b> (Get API Key, no credit card needed).
+      The key is stored only in this browser and sent directly to Google with each request -- it is never sent
+      anywhere else. Only use this on a device you trust. The free tier has a request-per-minute cap, so if you hit
+      a rate-limit error during a busy stretch, just wait a minute and try again.
     </div>
     ${key ? `<div class="bp-file-chip">Current key: ${escapeHtml(masked)}</div>` : ''}
     <form id="apiKeyForm">
       <div class="field">
         <label>API Key</label>
-        <input type="text" name="apiKey" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" value="">
+        <input type="text" name="apiKey" placeholder="AIzaSy..." autocomplete="off" spellcheck="false" value="">
       </div>
       <div class="fab-row">
         <button type="submit" class="btn btn-primary btn-block">Save Key</button>
@@ -1427,10 +1437,10 @@ function openBlueprintModal(jobId){
 function explainFetchError(err){
   const msg = (err && err.message) || '';
   if(msg === 'NO_API_KEY'){
-    return 'Add your Anthropic API key in Settings (the gear icon, top right) to use AI features.';
+    return 'Add your free Google Gemini API key in Settings (the gear icon, top right) to use AI features.';
   }
   if(/Failed to fetch|NetworkError|Load failed/i.test(msg)){
-    return "Couldn't reach Claude. Check your API key in Settings and your internet connection, then try again.";
+    return "Couldn't reach Gemini. Check your API key in Settings and your internet connection, then try again.";
   }
   return msg || 'Please try again.';
 }
