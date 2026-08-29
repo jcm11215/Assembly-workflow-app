@@ -1458,11 +1458,18 @@ function openNoteForm(prefillJobNumber){
 }
 
 /* ================= SETTINGS ================= */
+function hasLocalGhOverride(){
+  try{
+    const s = JSON.parse(localStorage.getItem('awt_gh')||'null');
+    return !!(s && s.token);
+  }catch(e){ return false; }
+}
 function settingsModalHtml(){
   const key = getApiKey();
   const masked = key ? (key.slice(0,7) + '...' + key.slice(-4)) : '';
   const gh = getGhConfig();
   const ghMasked = gh.token ? (gh.token.slice(0,7) + '...' + gh.token.slice(-4)) : '';
+  const isOverride = hasLocalGhOverride();
   return `
   <div class="modal-sheet">
     <div class="modal-title">Settings <button class="modal-close" data-close-overlay>&times;</button></div>
@@ -1473,7 +1480,8 @@ function settingsModalHtml(){
       same repo sees the same live data. This app already has a connection built in, so nothing below is required --
       only fill this in if you want to point this specific device at a different repo instead.
     </div>
-    ${gh.token ? `<div class="bp-file-chip">Connected: ${escapeHtml(gh.owner||'')}/${escapeHtml(gh.repo||'')} (${escapeHtml(gh.branch||'main')}) &middot; token ${escapeHtml(ghMasked)}</div>` : ''}
+    ${gh.token ? `<div class="bp-file-chip">${isOverride ? 'Custom connection on this device' : 'Using built-in connection'}: ${escapeHtml(gh.owner||'')}/${escapeHtml(gh.repo||'')} (${escapeHtml(gh.branch||'main')}) &middot; token ${escapeHtml(ghMasked)}</div>` : ''}
+    ${isOverride ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-gh-override">Clear Override -- Use Built-in Connection</button></div>` : ''}
     <form id="ghForm">
       <div class="field"><label>Repo Owner</label><input name="owner" placeholder="your-github-username" value="${escapeHtml(gh.owner||'')}"></div>
       <div class="field"><label>Repo Name</label><input name="repo" placeholder="assembly-tracker-data" value="${escapeHtml(gh.repo||'')}"></div>
@@ -1959,256 +1967,4 @@ async function extractNewJobFromBlueprint(){
     let text = await callClaudeAPI(systemPrompt, content);
     text = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
     let parsed = {};
-    try{ parsed = JSON.parse(text); }catch(e){ parsed = {}; }
-    const components = Array.isArray(parsed.components) ? parsed.components.map(c=>({
-      item: (c && c.item) ? String(c.item) : 'Unspecified item',
-      specification: (c && c.specification) ? String(c.specification) : '',
-      quantity: (c && c.quantity!=null && c.quantity!=='') ? c.quantity : null
-    })) : [];
-
-    // Generate the job's id now (instead of at save time) so the blueprint
-    // image can be uploaded under it right away and be there once the job
-    // itself is saved from the pre-filled form.
-    const pendingId = uid('job');
-    saveBlueprintImage(pendingId, primaryImageBase64);
-
-    const prefill = {
-      id: pendingId,
-      jobNumber: parsed.jobNumber ? String(parsed.jobNumber) : '',
-      customer: parsed.customer ? String(parsed.customer) : '',
-      description: parsed.description ? String(parsed.description) : '',
-      billOfMaterials: components,
-      blueprintExtractedAt: new Date().toISOString(),
-      hasBlueprintImage: true
-    };
-
-    closeModal();
-    openJobForm(null, prefill);
-    showToast(components.length ? `Read the blueprint -- found ${components.length} components. Review and save.` : 'Read the blueprint, but found no components -- fill in details manually.');
-  }catch(err){
-    console.error(err);
-    const detail = explainFetchError(err);
-    if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#9888;</div>Could not read the blueprint.<br><span style="font-size:11px;color:var(--text-faint);">${escapeHtml(detail)}</span></div>`;
-    if(btn){ btn.disabled = false; btn.textContent = 'Read Blueprint & Create Job'; }
-  }
-}
-
-/* ================= EVENT DELEGATION ================= */
-document.addEventListener('click', e=>{
-  const btn = e.target.closest('[data-action]');
-  const tabBtn = e.target.closest('.tab-btn');
-  if(tabBtn){
-    state.tab = tabBtn.getAttribute('data-tab');
-    render();
-    window.scrollTo(0,0);
-    return;
-  }
-  if(!btn) return;
-  const action = btn.getAttribute('data-action');
-  const id = btn.getAttribute('data-id');
-
-  switch(action){
-    case 'open-settings':
-      openSettingsModal();
-      break;
-    case 'clear-api-key':
-      setApiKey('');
-      closeModal();
-      showToast('API key removed');
-      break;
-    case 'manual-sync':
-      reloadFromStorage(true);
-      break;
-    case 'goto-filter':
-      state.tab = 'dashboard';
-      state.jobFilter = btn.getAttribute('data-filter');
-      render();
-      window.scrollTo(0,0);
-      break;
-    case 'filter-jobs':
-      state.jobFilter = btn.getAttribute('data-filter');
-      document.querySelectorAll('#jobFilterChips .chip').forEach(c=>c.classList.toggle('active', c.getAttribute('data-filter')===state.jobFilter));
-      updateDashboardList();
-      break;
-    case 'filter-blockers':
-      state.blockerFilter = btn.getAttribute('data-filter');
-      document.querySelectorAll('#blockerFilterChips .chip').forEach(c=>c.classList.toggle('active', c.getAttribute('data-filter')===state.blockerFilter));
-      updateBlockersList();
-      break;
-    case 'new-job':
-      openJobForm(null);
-      break;
-    case 'new-job-from-blueprint':
-      openNewJobBlueprintModal();
-      break;
-    case 'edit-job':
-      openJobForm(id);
-      break;
-    case 'open-job-detail':
-      openJobDetail(id);
-      break;
-    case 'delete-job': {
-      const job = state.jobs.find(j=>j.id===id);
-      if(job && confirm(`Delete job ${job.jobNumber}? This cannot be undone.`)){
-        state.jobs = state.jobs.filter(j=>j.id!==id);
-        persistJobs();
-        closeModal();
-        showToast('Job deleted');
-        render();
-      }
-      break;
-    }
-    case 'attempt-advance':
-      attemptAdvance(id);
-      break;
-    case 'report-blocker':
-      openBlockerForm(btn.getAttribute('data-jobnumber'));
-      break;
-    case 'new-blocker':
-      openBlockerForm(null);
-      break;
-    case 'delete-blocker':
-      state.blockers = state.blockers.filter(b=>b.id!==id);
-      persistBlockers();
-      showToast('Blocker deleted');
-      render();
-      break;
-    case 'cycle-blocker-status': {
-      const b = state.blockers.find(b=>b.id===id);
-      if(b){
-        const order = ['Open','In Progress','Resolved'];
-        const next = order[(order.indexOf(b.status)+1) % order.length];
-        b.status = next;
-        persistBlockers();
-        showToast(`Status: ${next}`);
-        render();
-      }
-      break;
-    }
-    case 'new-note':
-      openNoteForm(null);
-      break;
-    case 'stage-prev':
-      stepStage(id, -1);
-      break;
-    case 'open-mover':
-      openMover(id);
-      break;
-    case 'pick-stage':
-      moveJobToStage(id, btn.getAttribute('data-stage'));
-      closeModal();
-      break;
-    case 'quick-prompt':
-      sendChat(btn.getAttribute('data-prompt'));
-      break;
-    case 'send-chat':
-      sendChat();
-      break;
-    case 'copy-msg': {
-      const idx = parseInt(btn.getAttribute('data-index'),10);
-      const msg = state.chat[idx];
-      if(msg) copyToClipboard(msg.text);
-      break;
-    }
-    case 'ask-ai-focus':
-      goToAssistantWithPrompt('What should the team focus on today?');
-      break;
-    case 'open-blueprint':
-      openBlueprintModal(id);
-      break;
-    case 'extract-bom':
-      extractComponents(id);
-      break;
-    case 'extract-new-job':
-      extractNewJobFromBlueprint();
-      break;
-    case 'toggle-stage-checklist-item':
-      toggleStageChecklistItem(id, btn.getAttribute('data-key'));
-      break;
-    case 'confirm-advance':
-      confirmAdvance(id);
-      break;
-  }
-});
-document.addEventListener('change', e=>{
-  if(e.target.id === 'bpFileInput'){
-    const file = e.target.files[0];
-    selectedBlueprintFile = file || null;
-    const btn = document.getElementById('bpExtractBtn');
-    const preview = document.getElementById('bpPreviewArea');
-    if(!file){
-      if(btn) btn.disabled = true;
-      if(preview) preview.innerHTML = '';
-      return;
-    }
-    if(btn){ btn.disabled = false; btn.textContent = 'Extract Components'; }
-    if(preview){
-      if(file.type === 'application/pdf'){
-        preview.innerHTML = `<div class="bp-file-chip">&#128196; ${escapeHtml(file.name)}</div>`;
-      }else{
-        const url = URL.createObjectURL(file);
-        preview.innerHTML = `<img src="${url}" class="bp-preview-img" alt="Blueprint preview">`;
-      }
-    }
-  }
-});
-document.addEventListener('input', e=>{
-  if(e.target.id==='dashSearch'){
-    state.jobSearch = e.target.value;
-    updateDashboardList();
-  }else if(e.target.id==='noteSearch'){
-    state.noteSearch = e.target.value;
-    updateNotesList();
-  }
-});
-document.addEventListener('keydown', e=>{
-  if(e.key==='Enter' && e.target.id==='chatInput'){
-    e.preventDefault();
-    sendChat();
-  }
-});
-
-/* ================= RENDER ROUTER ================= */
-function render(){
-  document.querySelectorAll('.tab-btn').forEach(b=>{
-    b.classList.toggle('active', b.getAttribute('data-tab')===state.tab);
-  });
-  if(!ghReady()){
-    document.getElementById('metricsStrip').innerHTML = '';
-    document.getElementById('content').innerHTML = `
-      <div class="focus-banner" style="margin-top:20px;">
-        <div class="focus-banner-head">Connect Your Data Repo</div>
-        <div style="font-size:13px;margin-bottom:12px;line-height:1.5;">
-          This app stores jobs, blockers, and notes in a GitHub repo so every device stays in sync. Connect one in
-          Settings to get started -- takes a couple of minutes the first time.
-        </div>
-        <button class="btn btn-primary btn-sm" data-action="open-settings">Open Settings</button>
-      </div>`;
-    return;
-  }
-  renderMetrics();
-  if(state.tab==='dashboard') renderDashboard();
-  else if(state.tab==='board') renderBoard();
-  else if(state.tab==='blockers') renderBlockers();
-  else if(state.tab==='notes') renderNotes();
-  else if(state.tab==='assistant') renderAssistant();
-}
-
-function updateDateSub(){
-  const el = document.getElementById('dateSub');
-  const now = new Date();
-  const hr = now.getHours();
-  const shift = hr < 14 ? 'Day Shift' : hr < 22 ? 'Afternoon Shift' : 'Night Shift';
-  el.textContent = `${shift} \u2014 ${now.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}`;
-}
-
-/* ================= INIT ================= */
-(async function init(){
-  updateDateSub();
-  document.getElementById('content').innerHTML = `<div class="empty-state"><div class="big">&#8987;</div>Loading shop data...</div>`;
-  await loadAll();
-  render();
-})();
-</script>
-</body>
-</html>
+    try{ parsed = JSON.parse(text); }catch(e){
