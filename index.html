@@ -405,11 +405,12 @@ main{flex:1;overflow-y:auto;padding:12px 12px 90px 12px;-webkit-overflow-scrolli
 <script>
 /* =========================================================
    ASSEMBLY WORKFLOW TRACKER
-   Vanilla JS single-file app -- runs standalone in any browser, no
-   server needed. Jobs/blockers/notes are stored in a GitHub repo you
-   control (shared across every device). AI features (Assistant +
-   Blueprint extraction) call Google's free Gemini API directly using a key
-   you enter in Settings, stored only in that browser.
+   Vanilla JS single-file frontend. Jobs/blockers/notes are stored in a
+   Supabase project (see SUPABASE_URL / SUPABASE_ANON_KEY below) --
+   shared live across every device automatically, no server to deploy
+   or maintain. AI features (Assistant + Blueprint extraction) call
+   Google's free Gemini API directly using a key each person enters
+   once in Settings, stored only in their own browser.
    ========================================================= */
 
 const STAGES = [
@@ -621,177 +622,83 @@ function seedNotes(jobs){
 }
 
 /* ---------------- Storage ----------------
-   Data is stored as JSON files in a GitHub repo (via the GitHub Contents
-   API), so it's shared across every device pointed at the same repo --
-   no server of your own required. Connect it in Settings (gear icon):
-   a repo, a branch, and a Personal Access Token with write access. */
+   Data lives in a Supabase project, in one table (app_data: key text
+   primary key, value jsonb). The "anon" key below is meant to be public
+   -- Supabase's model is that access control happens via database
+   policies, not by hiding this key -- so unlike a GitHub token, there's
+   nothing here for a scanner to find and revoke, and nothing sensitive
+   in this page's source. Set SUPABASE_URL and SUPABASE_ANON_KEY to your
+   project's values (Project Settings -> API). */
+const SUPABASE_URL = 'https://cxzogbtjxcfzgybtquwd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_kSu43otuTKZTtjeLPmuT3g_Kop5RzGz';
 
-// EMBEDDED CONNECTION -- so every device works the instant it opens this
-// link, with nothing to set up. IMPORTANT: this page is public (GitHub
-// Pages), so this token is visible to anyone who views this page's
-// source, not just your team. Only put a token here that you're okay
-// with anyone who has this link being able to use to write to the repo
-// below. Paste your token on the line marked TOKEN_HERE, then re-publish.
-const EMBEDDED_GH_CONFIG = {
-  owner: 'jcm11215',
-  repo: 'Assembly-Workflow',
-  branch: 'main',
-  token: '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'
-};
-
-function getGhConfig(){
-  try{
-    const stored = JSON.parse(localStorage.getItem('awt_gh')||'null');
-    if(stored && stored.token) return stored; // Settings, if ever filled in, overrides the embedded default
-  }catch(e){}
-  if(EMBEDDED_GH_CONFIG.token && EMBEDDED_GH_CONFIG.token !== 'TOKEN_HERE') return EMBEDDED_GH_CONFIG;
-  return {};
+function supabaseReady(){
+  return !!(SUPABASE_URL && SUPABASE_URL !== 'SUPABASE_URL_HERE' && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'SUPABASE_ANON_KEY_HERE');
 }
-function setGhConfig(cfg){ localStorage.setItem('awt_gh', JSON.stringify(cfg)); }
-function ghReady(){
-  const c = getGhConfig();
-  return !!(c.token && c.owner && c.repo);
-}
-function utf8ToBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
-function base64ToUtf8(b64){ return decodeURIComponent(escape(atob(b64))); }
-
-const shaCache = {}; // remembers each file's current git blob sha, needed to update it
-
-// Not for security -- just a fast way to confirm two copies of a token
-// string are byte-for-byte identical without displaying the whole secret.
-function simpleHash(str){
-  let h = 0;
-  for(let i=0;i<str.length;i++){
-    h = (Math.imul(31,h) + str.charCodeAt(i)) | 0;
-  }
-  return (h>>>0).toString(16);
-}
-async function ghRequest(path, options){
-  const c = getGhConfig();
-  const headers = {
-    'Authorization': `Bearer ${c.token}`,
-    'Accept': 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28'
+function supabaseHeaders(extra){
+  return {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json',
+    ...(extra||{})
   };
-  if(options && options.body) headers['Content-Type'] = 'application/json';
-  const res = await fetch(`https://api.github.com/repos/${c.owner}/${c.repo}/contents/${path}${options && options.query ? options.query : ''}`, {
-    method: (options && options.method) || 'GET',
-    cache: 'no-store',
-    headers,
-    body: options && options.body ? JSON.stringify(options.body) : undefined
-  });
-  return res;
 }
 async function storageGet(key){
-  if(!ghReady()) return null;
+  if(!supabaseReady()) return null;
   try{
-    const c = getGhConfig();
-    const res = await ghRequest(`data/${key}.json`, { query: `?ref=${encodeURIComponent(c.branch||'main')}&_=${Date.now()}` });
-    if(res.status === 404) return null;
-    if(!res.ok) throw new Error(`GitHub read failed (${res.status})`);
-    const data = await res.json();
-    shaCache[key] = data.sha;
-    return JSON.parse(base64ToUtf8(data.content.replace(/\n/g,'')));
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`, {
+      headers: supabaseHeaders(),
+      cache: 'no-store'
+    });
+    if(!res.ok){
+      const body = await res.json().catch(()=>({}));
+      throw new Error(body.message || `Supabase read failed (${res.status})`);
+    }
+    const rows = await res.json();
+    return (rows && rows[0]) ? rows[0].value : null;
   }catch(e){
     console.error('storage get failed', key, e);
     return null;
   }
 }
-async function storageSet(key, value, attempt){
-  attempt = attempt || 0;
-  if(!ghReady()) return false;
+async function storageSet(key, value){
+  if(!supabaseReady()) return false;
   try{
-    const c = getGhConfig();
-    const res = await ghRequest(`data/${key}.json`, {
-      method: 'PUT',
-      body: {
-        message: `Update ${key} -- Assembly Workflow Tracker`,
-        content: utf8ToBase64(JSON.stringify(value, null, 2)),
-        branch: c.branch || 'main',
-        sha: shaCache[key] || undefined
-      }
+    // Upsert -- Postgres handles this atomically, so unlike the old
+    // GitHub-file approach there's no sha/version to track or retry on.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_data`, {
+      method: 'POST',
+      headers: supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify([{ key, value }])
     });
-    const body = res.ok ? await res.json() : await res.json().catch(()=>({}));
-    // GitHub reports a stale sha (someone else -- another tab, another
-    // device -- saved in between) as either 409 or 422, with a "does not
-    // match" message. Refetch the real sha and retry, up to twice, before
-    // giving up -- this is what makes multiple open tabs/devices safe.
-    const isConflict = (res.status===409 || res.status===422) || /does not match/i.test(body.message||'');
-    if(!res.ok && isConflict && attempt < 2){
-      await storageGet(key);
-      return storageSet(key, value, attempt+1);
-    }
     if(!res.ok){
-      const tk = c.token || '';
-      const tkInfo = tk ? `len ${tk.length}, checksum ${simpleHash(tk)}` : 'MISSING';
-      throw new Error(`${body.message || 'GitHub save failed'} (HTTP ${res.status}) -- used ${c.owner}/${c.repo}@${c.branch||'main'}, token ${tkInfo}`);
+      const body = await res.json().catch(()=>({}));
+      throw new Error(body.message || `Supabase save failed (${res.status})`);
     }
-    shaCache[key] = body.content.sha;
     return true;
   }catch(e){
     console.error('storage set failed', key, e);
     const detail = (e && e.message) ? e.message : 'unknown error';
-    showToast(`Could not save "${key}" to GitHub: ${detail}`, 9000);
+    showToast(`Could not save "${key}": ${detail}`, 6000);
     return false;
   }
 }
 
 /* ---------------- Blueprint image storage ----------------
-   Stored as an actual image file in the GitHub data repo (not JSON),
-   one per job, so the Job Detail view can show the real drawing --
-   not just the extracted text list. Only the primary page/photo used
-   for extraction is kept, to keep this lightweight. */
-const blueprintShaCache = {};
+   Reuses the same app_data table -- one image per job, stored as a
+   base64 string under key "blueprint:{jobId}". Used by the Job Detail
+   view to show the real scanned drawing, not just the extracted list. */
 const blueprintImageCache = {}; // jobId -> base64 string once loaded, or false if confirmed missing
-function blueprintImagePath(jobId){ return `blueprints/${jobId}.jpg`; }
 async function saveBlueprintImage(jobId, base64Jpeg){
-  if(!ghReady() || !base64Jpeg) return false;
-  try{
-    const c = getGhConfig();
-    const path = blueprintImagePath(jobId);
-    let sha = blueprintShaCache[jobId];
-    if(sha === undefined){
-      const existing = await ghRequest(path, { query: `?ref=${encodeURIComponent(c.branch||'main')}&_=${Date.now()}` });
-      sha = existing.ok ? (await existing.json()).sha : null;
-    }
-    const res = await ghRequest(path, {
-      method: 'PUT',
-      body: {
-        message: `Save blueprint image for ${jobId}`,
-        content: base64Jpeg,
-        branch: c.branch || 'main',
-        sha: sha || undefined
-      }
-    });
-    if(!res.ok){
-      console.error('blueprint image save failed', await res.json().catch(()=>({})));
-      return false;
-    }
-    const data = await res.json();
-    blueprintShaCache[jobId] = data.content.sha;
-    return true;
-  }catch(e){
-    console.error('blueprint image save failed', e);
-    return false;
-  }
+  if(!base64Jpeg) return false;
+  return storageSet(`blueprint:${jobId}`, base64Jpeg);
 }
 async function fetchBlueprintImage(jobId){
-  if(!ghReady()) return null;
-  try{
-    const c = getGhConfig();
-    const path = blueprintImagePath(jobId);
-    const res = await ghRequest(path, { query: `?ref=${encodeURIComponent(c.branch||'main')}&_=${Date.now()}` });
-    if(!res.ok) return null;
-    const data = await res.json();
-    blueprintShaCache[jobId] = data.sha;
-    return data.content.replace(/\n/g,'');
-  }catch(e){
-    return null;
-  }
+  return storageGet(`blueprint:${jobId}`);
 }
 
 async function loadAll(){
-  if(!ghReady()){ state.jobs = []; state.blockers = []; state.notes = []; return; }
+  if(!supabaseReady()){ state.jobs = []; state.blockers = []; state.notes = []; return; }
   let [jobs, blockers, notes] = await Promise.all([
     storageGet('jobs'), storageGet('blockers'), storageGet('notes')
   ]);
@@ -829,7 +736,7 @@ function isFormActive(){
   return modalOpen || typing;
 }
 async function reloadFromStorage(manual){
-  if(!ghReady()) return;
+  if(!supabaseReady()) return;
   if(isFormActive()){
     if(manual) showToast('Finish editing, then sync');
     return;
@@ -1494,37 +1401,18 @@ function openNoteForm(prefillJobNumber){
 }
 
 /* ================= SETTINGS ================= */
-function hasLocalGhOverride(){
-  try{
-    const s = JSON.parse(localStorage.getItem('awt_gh')||'null');
-    return !!(s && s.token);
-  }catch(e){ return false; }
-}
 function settingsModalHtml(){
   const key = getApiKey();
   const masked = key ? (key.slice(0,7) + '...' + key.slice(-4)) : '';
-  const gh = getGhConfig();
-  const ghMasked = gh.token ? (gh.token.slice(0,7) + '...' + gh.token.slice(-4)) : '';
-  const isOverride = hasLocalGhOverride();
   return `
   <div class="modal-sheet">
     <div class="modal-title">Settings <button class="modal-close" data-close-overlay>&times;</button></div>
 
-    <div class="section-title" style="margin-top:0;">GitHub Data Repo (shared)</div>
+    <div class="section-title" style="margin-top:0;">Shared Data</div>
     <div class="bp-hint" style="margin-bottom:10px;">
-      Jobs, blockers, and notes are stored as JSON files in a GitHub repo you control. Every device connected to the
-      same repo sees the same live data. This app already has a connection built in, so nothing below is required --
-      only fill this in if you want to point this specific device at a different repo instead.
+      Jobs, blockers, and notes are stored centrally and shared live across every device automatically -- there's
+      nothing to connect or configure here. ${supabaseReady() ? 'Connected.' : 'Not connected -- if data is not loading, this app needs its server-side connection checked (contact whoever set this up).'}
     </div>
-    ${gh.token ? `<div class="bp-file-chip">${isOverride ? 'Custom connection on this device' : 'Using built-in connection'}: ${escapeHtml(gh.owner||'')}/${escapeHtml(gh.repo||'')} (${escapeHtml(gh.branch||'main')}) &middot; token ${escapeHtml(ghMasked)}</div>` : ''}
-    ${isOverride ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-gh-override">Clear Override -- Use Built-in Connection</button></div>` : ''}
-    <form id="ghForm">
-      <div class="field"><label>Repo Owner</label><input name="owner" placeholder="your-github-username" value="${escapeHtml(gh.owner||'')}"></div>
-      <div class="field"><label>Repo Name</label><input name="repo" placeholder="assembly-tracker-data" value="${escapeHtml(gh.repo||'')}"></div>
-      <div class="field"><label>Branch</label><input name="branch" placeholder="main" value="${escapeHtml(gh.branch||'main')}"></div>
-      <div class="field"><label>Personal Access Token</label><input type="text" name="token" placeholder="ghp_..." autocomplete="off" spellcheck="false" value=""></div>
-      <div class="fab-row"><button type="submit" class="btn btn-primary btn-block">Save Connection</button></div>
-    </form>
 
     <div class="section-title">Google Gemini API Key</div>
     <div class="bp-hint" style="margin-bottom:10px;">
@@ -1549,27 +1437,6 @@ function settingsModalHtml(){
 }
 function openSettingsModal(){
   openModal(settingsModalHtml());
-  const ghForm = document.getElementById('ghForm');
-  if(ghForm){
-    ghForm.addEventListener('submit', async e=>{
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const owner = (fd.get('owner')||'').trim();
-      const repo = (fd.get('repo')||'').trim();
-      const branch = (fd.get('branch')||'main').trim() || 'main';
-      const tokenInput = (fd.get('token')||'').trim();
-      if(!owner || !repo){ showToast('Enter both repo owner and repo name'); return; }
-      const existing = getGhConfig();
-      const token = tokenInput || existing.token || '';
-      if(!token){ showToast('Enter a Personal Access Token'); return; }
-      setGhConfig({owner, repo, branch, token});
-      closeModal();
-      showToast('Connecting to GitHub...');
-      await loadAll();
-      render();
-      showToast(ghReady() ? 'Connected -- data synced from GitHub' : 'Saved, but could not connect -- check details');
-    });
-  }
   const form = document.getElementById('apiKeyForm');
   if(form){
     form.addEventListener('submit', e=>{
@@ -2064,12 +1931,6 @@ document.addEventListener('click', e=>{
       closeModal();
       showToast('API key removed');
       break;
-    case 'clear-gh-override':
-      localStorage.removeItem('awt_gh');
-      closeModal();
-      showToast('Cleared -- reconnecting with built-in connection...');
-      loadAll().then(()=>{ render(); showToast('Connected'); });
-      break;
     case 'manual-sync':
       reloadFromStorage(true);
       break;
@@ -2227,16 +2088,16 @@ function render(){
   document.querySelectorAll('.tab-btn').forEach(b=>{
     b.classList.toggle('active', b.getAttribute('data-tab')===state.tab);
   });
-  if(!ghReady()){
+  if(!supabaseReady()){
     document.getElementById('metricsStrip').innerHTML = '';
     document.getElementById('content').innerHTML = `
       <div class="focus-banner" style="margin-top:20px;">
-        <div class="focus-banner-head">Connect Your Data Repo</div>
-        <div style="font-size:13px;margin-bottom:12px;line-height:1.5;">
-          This app stores jobs, blockers, and notes in a GitHub repo so every device stays in sync. Connect one in
-          Settings to get started -- takes a couple of minutes the first time.
+        <div class="focus-banner-head">Setup Needed</div>
+        <div style="font-size:13px;line-height:1.5;">
+          This app isn't connected to its data store yet. If you're setting this up: create a Supabase project,
+          set SUPABASE_URL and SUPABASE_ANON_KEY near the top of this file, then republish. If you're
+          not the one who set this up, let them know this message is showing.
         </div>
-        <button class="btn btn-primary btn-sm" data-action="open-settings">Open Settings</button>
       </div>`;
     return;
   }
