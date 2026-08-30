@@ -1,0 +1,3511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Assembly Workflow Tracker</title>
+<style>
+:root{
+  --steel-950:#0f1215;
+  --steel-900:#181c20;
+  --steel-800:#22262b;
+  --steel-700:#2c3137;
+  --steel-600:#3d434b;
+  --line:#39404a;
+  --text:#eef1f3;
+  --text-dim:#98a1a9;
+  --text-faint:#6b737b;
+  --yellow:#f5b400;
+  --yellow-ink:#3a2a00;
+  --red:#e34b3a;
+  --red-bg:#2e1613;
+  --amber:#e2a13d;
+  --amber-bg:#2e2210;
+  --green:#4fae57;
+  --green-bg:#132f16;
+  --blue:#5aa3d8;
+  --blue-bg:#12242f;
+  --radius:10px;
+  font-size:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  background:var(--steel-950);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior-y:none;
+}
+button{font-family:inherit;}
+::selection{background:var(--yellow);color:#1a1400;}
+
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+/* ---------- App bar ---------- */
+.appbar{
+  background:var(--steel-900);
+  border-bottom:3px solid var(--yellow);
+  padding:10px 10px 10px 14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-shrink:0;
+  gap:8px;
+}
+.appbar .brand{display:flex;flex-direction:column;line-height:1.15;min-width:0;}
+.appbar .brand .name{
+  font-size:15px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text);
+}
+.appbar .brand .sub{font-size:11px;color:var(--text-dim);letter-spacing:.03em;margin-top:2px;}
+.appbar .right{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.appbar .stamp{
+  background:var(--yellow);color:#241a00;font-weight:800;font-size:11px;letter-spacing:.06em;
+  padding:6px 10px;border-radius:6px;text-transform:uppercase;white-space:nowrap;
+}
+.refresh-btn{
+  background:var(--steel-800);border:1px solid var(--steel-600);color:var(--text);
+  width:38px;height:38px;border-radius:8px;font-size:17px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.refresh-btn:active{background:var(--steel-700);}
+.refresh-btn.spinning{animation:spin .7s linear;}
+@keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+
+/* ---------- Metrics strip ---------- */
+.metrics-strip{
+  display:flex;gap:8px;overflow-x:auto;padding:10px 12px;background:var(--steel-900);
+  border-bottom:1px solid var(--line);flex-shrink:0;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.metrics-strip::-webkit-scrollbar{display:none;}
+.metric-card{
+  background:var(--steel-800);border:1px solid var(--line);border-radius:var(--radius);
+  padding:8px 14px;min-width:108px;flex-shrink:0;text-align:left;-webkit-appearance:none;cursor:pointer;
+}
+.metric-card:active{background:var(--steel-700);}
+.metric-card .num{font-size:22px;font-weight:800;line-height:1;}
+.metric-card .lbl{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-top:4px;}
+.metric-card.m-red .num{color:var(--red);}
+.metric-card.m-amber .num{color:var(--amber);}
+.metric-card.m-green .num{color:var(--green);}
+.metric-card.m-blue .num{color:var(--blue);}
+.metric-card.m-yellow .num{color:var(--yellow);}
+
+/* ---------- Main content ---------- */
+main{flex:1;overflow-y:auto;padding:12px 12px 90px 12px;-webkit-overflow-scrolling:touch;}
+.section-title{
+  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-dim);margin:14px 0 8px 0;display:flex;align-items:center;justify-content:space-between;
+}
+.section-title .count-badge{
+  background:var(--steel-700);color:var(--text-dim);font-size:11px;padding:2px 7px;border-radius:20px;
+}
+.sticky-bar{position:sticky;top:0;background:var(--steel-950);z-index:5;padding-top:2px;padding-bottom:4px;}
+
+/* ---------- Focus banner ---------- */
+.focus-banner{
+  background:var(--steel-800);border-left:4px solid var(--yellow);border-radius:var(--radius);
+  padding:12px 12px 10px 12px;margin-bottom:12px;
+}
+.focus-banner-head{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--yellow);margin-bottom:8px;}
+.focus-jobs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.focus-job-chip{
+  background:var(--steel-700);border-radius:6px;padding:5px 9px;font-size:12px;font-weight:700;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.focus-job-chip .fd{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;}
+.focus-calm{color:var(--green);font-size:13px;font-weight:600;margin-bottom:10px;}
+
+/* ---------- Buttons ---------- */
+.btn{
+  border:none;border-radius:8px;font-weight:700;font-size:14px;padding:12px 16px;
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  min-height:44px;
+}
+.btn-primary{background:var(--yellow);color:#241a00;}
+.btn-primary:active{background:#d69d00;}
+.btn-outline{background:transparent;border:1.5px solid var(--steel-600);color:var(--text);}
+.btn-outline:active{background:var(--steel-800);}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-ghost{background:var(--steel-800);color:var(--text);}
+.btn-block{width:100%;}
+.btn-sm{padding:9px 12px;font-size:12.5px;min-height:40px;}
+.btn:disabled{background:var(--steel-700);color:var(--text-faint);cursor:not-allowed;}
+.fab-row{display:flex;gap:8px;margin-top:6px;}
+
+/* ---------- Filter chips ---------- */
+.chip-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;}
+.chip-row::-webkit-scrollbar{display:none;}
+.chip{
+  flex-shrink:0;background:var(--steel-800);border:1px solid var(--line);color:var(--text-dim);
+  font-size:12px;font-weight:700;padding:10px 14px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;
+  min-height:40px;-webkit-appearance:none;
+}
+.chip.active{background:var(--yellow);color:#241a00;border-color:var(--yellow);}
+
+/* ---------- Job cards ---------- */
+.job-card{
+  background:var(--steel-800);border:1px solid var(--line);border-left:5px solid var(--steel-600);
+  border-radius:var(--radius);padding:12px;margin-bottom:10px;position:relative;cursor:pointer;
+}
+.job-card.due-overdue{border-left-color:var(--red);background:linear-gradient(90deg,var(--red-bg),var(--steel-800) 40%);}
+.job-card.due-soon{border-left-color:var(--amber);background:linear-gradient(90deg,var(--amber-bg),var(--steel-800) 40%);}
+.job-card.due-ok{border-left-color:var(--green);}
+.job-card.due-complete{border-left-color:var(--text-faint);opacity:.75;}
+.job-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.job-num{font-weight:800;font-size:15px;letter-spacing:.02em;}
+.job-cust{font-size:12px;color:var(--text-dim);margin-top:1px;}
+.job-desc{font-size:13px;color:var(--text);margin-top:6px;line-height:1.4;}
+.badge{
+  font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+  padding:3px 7px;border-radius:5px;border:1.5px solid currentColor;white-space:nowrap;
+}
+.badge-high{color:var(--red);}
+.badge-medium{color:var(--amber);}
+.badge-low{color:var(--blue);}
+.job-meta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:11px;color:var(--text-dim);}
+.job-meta-row b{color:var(--text);font-weight:700;}
+.due-tag{font-weight:800;text-transform:uppercase;font-size:10px;letter-spacing:.04em;}
+.due-tag.due-overdue{color:var(--red);}
+.due-tag.due-soon{color:var(--amber);}
+.due-tag.due-ok{color:var(--green);}
+.due-tag.due-complete{color:var(--text-faint);}
+
+.gauge{margin-top:10px;}
+.gauge-track{
+  height:10px;border-radius:5px;background:var(--steel-700);
+  background-image:repeating-linear-gradient(90deg,transparent,transparent calc(10% - 1px),var(--steel-900) 10%);
+  overflow:hidden;position:relative;
+}
+.gauge-fill{height:100%;background:var(--yellow);border-radius:5px 0 0 5px;transition:width .2s;}
+.gauge-label{font-size:10px;color:var(--text-dim);margin-top:3px;text-align:right;font-weight:700;}
+
+.job-card-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;}
+.job-card-actions .btn{flex:1;white-space:nowrap;}
+
+/* ---------- Board ---------- */
+.board-wrap{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;}
+.board-col{
+  flex:0 0 80vw;max-width:320px;scroll-snap-align:start;background:var(--steel-900);
+  border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column;max-height:100%;
+}
+.board-col-head{
+  padding:10px 12px;border-bottom:2px solid var(--yellow);display:flex;justify-content:space-between;align-items:center;
+  position:sticky;top:0;background:var(--steel-900);border-radius:var(--radius) var(--radius) 0 0;
+}
+.board-col-head .t{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;}
+.board-col-head .c{font-size:11px;color:var(--text-dim);background:var(--steel-800);padding:2px 8px;border-radius:20px;}
+.board-col-body{padding:8px;overflow-y:auto;flex:1;min-height:120px;}
+.board-col-body.drag-over{background:var(--steel-800);}
+.board-card{
+  background:var(--steel-800);border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-bottom:8px;
+  cursor:grab;
+}
+.board-card:active{cursor:grabbing;}
+.board-card .bn{font-weight:800;font-size:13px;}
+.board-card .bc{font-size:11px;color:var(--text-dim);}
+.board-card .ba{font-size:11px;color:var(--text-dim);margin-top:4px;}
+.board-card-actions{display:flex;gap:6px;margin-top:8px;}
+.icon-btn{
+  background:var(--steel-700);border:none;color:var(--text);border-radius:6px;width:40px;height:40px;
+  font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.move-btn{flex:1;background:var(--steel-700);border:none;color:var(--text);border-radius:6px;height:40px;font-size:11px;font-weight:700;text-transform:uppercase;}
+.empty-col{color:var(--text-faint);font-size:12px;text-align:center;padding:16px 4px;}
+
+/* ---------- Blockers ---------- */
+.blocker-card{
+  background:var(--steel-800);border:1px solid var(--line);border-left:5px solid var(--red);
+  border-radius:var(--radius);padding:12px;margin-bottom:10px;
+}
+.blocker-card.resolved{border-left-color:var(--green);opacity:.7;}
+.blocker-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.sev-badge{font-size:10px;font-weight:800;text-transform:uppercase;padding:3px 7px;border-radius:5px;color:#fff;flex-shrink:0;}
+.sev-critical{background:var(--red);}
+.sev-high{background:#b5502f;}
+.sev-medium{background:var(--amber);color:#241a00;}
+.sev-low{background:var(--steel-600);}
+.status-pill{font-size:10px;font-weight:800;text-transform:uppercase;padding:5px 9px;border-radius:20px;border:1.5px solid currentColor;}
+.status-open{color:var(--red);}
+.status-inprogress{color:var(--amber);}
+.status-resolved{color:var(--green);}
+
+/* ---------- Notes ---------- */
+.note-card{background:var(--steel-800);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:10px;}
+.note-head{display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:6px;}
+.note-type-tag{font-size:10px;font-weight:800;text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-right:6px;}
+.note-progress{background:var(--blue-bg);color:var(--blue);}
+.note-issue{background:var(--red-bg);color:var(--red);}
+.note-next{background:var(--green-bg);color:var(--green);}
+.note-body{font-size:13px;line-height:1.45;}
+.note-author{font-size:11px;color:var(--text-faint);margin-top:6px;font-style:italic;}
+
+/* ---------- Activity log ---------- */
+.act-row{
+  background:var(--steel-800);border:1px solid var(--line);border-left:3px solid var(--steel-600);
+  border-radius:8px;padding:10px 12px;margin-bottom:8px;
+}
+.act-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px;}
+.act-who{font-size:12px;font-weight:800;color:var(--yellow);}
+.act-when{font-size:10px;color:var(--text-faint);white-space:nowrap;}
+.act-action{font-size:12px;font-weight:700;}
+.act-detail{font-size:12px;color:var(--text-dim);margin-top:2px;line-height:1.4;word-break:break-word;}
+
+/* ---------- Forms / Modal ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;
+  z-index:200;
+}
+.modal-sheet{
+  background:var(--steel-900);border-top:3px solid var(--yellow);border-radius:16px 16px 0 0;
+  width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:16px 16px calc(20px + env(safe-area-inset-bottom));
+}
+.modal-title{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;}
+.modal-close{background:var(--steel-800);border:none;color:var(--text);width:36px;height:36px;border-radius:8px;font-size:16px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin-bottom:5px;}
+.field input,.field select,.field textarea{
+  width:100%;background:var(--steel-800);border:1.5px solid var(--steel-600);color:var(--text);
+  border-radius:8px;padding:12px;font-size:16px;font-family:inherit;
+}
+.field textarea{min-height:70px;resize:vertical;}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--yellow);border-color:var(--yellow);}
+.preset-row{display:flex;gap:6px;margin-top:8px;}
+.preset-row button{
+  flex:1;background:var(--steel-700);border:none;color:var(--text);border-radius:6px;padding:8px 4px;
+  font-size:12px;font-weight:700;min-height:36px;
+}
+.stage-picker{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stage-picker button{
+  background:var(--steel-800);border:1.5px solid var(--steel-600);color:var(--text);border-radius:8px;
+  padding:12px 8px;font-size:12px;font-weight:700;text-transform:uppercase;min-height:48px;
+}
+.stage-picker button.current{border-color:var(--yellow);color:var(--yellow);}
+
+/* ---------- Assistant ---------- */
+.chat-log{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;}
+.chat-msg{max-width:92%;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5;white-space:pre-wrap;}
+.chat-msg.user{align-self:flex-end;background:var(--yellow);color:#241a00;font-weight:600;}
+.chat-msg.ai{align-self:flex-start;background:var(--steel-800);border:1px solid var(--line);display:flex;flex-direction:column;align-items:flex-start;gap:8px;}
+.chat-msg.ai.loading{color:var(--text-dim);font-style:italic;}
+.copy-btn{
+  background:var(--steel-700);border:none;color:var(--text-dim);font-size:11px;font-weight:700;
+  text-transform:uppercase;padding:6px 11px;border-radius:6px;align-self:flex-start;
+}
+.prompt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+.prompt-grid button{
+  background:var(--steel-800);border:1px solid var(--line);color:var(--text);border-radius:8px;
+  padding:10px 8px;font-size:12px;font-weight:600;text-align:left;min-height:56px;line-height:1.3;
+}
+.chat-input-row{display:flex;gap:8px;position:sticky;bottom:0;background:var(--steel-950);padding-top:8px;}
+.chat-input-row input{
+  flex:1;background:var(--steel-800);border:1.5px solid var(--steel-600);color:var(--text);
+  border-radius:8px;padding:12px;font-size:16px;
+}
+.chat-input-row input:focus{outline:2px solid var(--yellow);border-color:var(--yellow);}
+
+/* ---------- Tab bar ---------- */
+.tabbar{
+  position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--steel-900);
+  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:100;
+}
+.tab-btn{
+  flex:1;background:none;border:none;color:var(--text-faint);display:flex;flex-direction:column;
+  align-items:center;gap:3px;padding:9px 1px 8px 1px;font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:0;min-height:56px;position:relative;min-width:0;
+}
+.tab-btn .ic{font-size:18px;}
+.tab-btn.active{color:var(--yellow);}
+.tab-btn .dot{
+  position:absolute;top:4px;right:calc(50% - 20px);width:8px;height:8px;background:var(--red);
+  border-radius:50%;
+}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--text-faint);}
+.empty-state .big{font-size:32px;margin-bottom:8px;}
+.hidden{display:none !important;}
+.search-input{
+  width:100%;background:var(--steel-800);border:1.5px solid var(--steel-600);color:var(--text);
+  border-radius:8px;padding:11px 12px;font-size:16px;margin-bottom:10px;
+}
+
+/* ---------- Blueprint extraction ---------- */
+.field input[type=file]{
+  background:var(--steel-800);border:1.5px dashed var(--steel-600);padding:12px;color:var(--text-dim);font-size:13px;
+}
+.bp-preview-img{
+  width:100%;max-height:220px;object-fit:contain;border-radius:8px;border:1px solid var(--line);
+  background:var(--steel-800);margin-top:10px;
+}
+.bp-file-chip{
+  background:var(--steel-800);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+  font-size:13px;margin-top:10px;
+}
+.bom-list{display:flex;flex-direction:column;gap:8px;}
+.bom-row{background:var(--steel-800);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
+.bom-item{font-weight:700;font-size:13px;}
+.bom-spec{font-size:12px;color:var(--text-dim);margin-top:2px;}
+.bom-qty{font-size:11px;color:var(--text-faint);margin-top:4px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
+.bp-hint{font-size:11px;color:var(--text-faint);margin-top:6px;line-height:1.4;}
+.bp-preview-img{cursor:zoom-in;}
+
+/* ---------- Fullscreen blueprint viewer ---------- */
+.bp-fullscreen{
+  position:fixed;inset:0;background:#0b0d0f;z-index:400;display:flex;flex-direction:column;
+}
+.bp-fs-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;
+  background:var(--steel-900);border-bottom:1px solid var(--line);flex-shrink:0;
+}
+.bp-fs-title{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;}
+.bp-fs-stage{flex:1;overflow:hidden;position:relative;touch-action:none;background:#0b0d0f;}
+.bp-fs-img{
+  position:absolute;top:0;left:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none;
+  max-width:none;
+}
+.bp-fs-hint{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.65);
+  color:var(--text-dim);font-size:11px;padding:6px 12px;border-radius:20px;pointer-events:none;
+}
+
+/* ---------- 3D model viewer ---------- */
+.model-stage{
+  width:100%;height:260px;background:var(--steel-900);border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;position:relative;touch-action:none;margin-bottom:10px;
+}
+.model-stage canvas{display:block;width:100%;height:100%;}
+.model-legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.model-chip{
+  display:inline-flex;align-items:center;gap:6px;background:var(--steel-800);border:1px solid var(--line);
+  border-radius:20px;padding:6px 11px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;
+}
+.model-chip.dim{opacity:.4;}
+.model-swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+.model-specs{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--text-dim);margin-bottom:10px;}
+.model-specs b{color:var(--text);}
+.eng-table{background:var(--steel-900);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:10px;}
+.eng-group{font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--yellow);background:var(--steel-800);padding:7px 12px;text-transform:uppercase;}
+.eng-row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 12px;border-bottom:1px solid var(--steel-800);}
+.eng-row:last-child{border-bottom:none;}
+.eng-label{font-size:12px;color:var(--text-dim);}
+.eng-val{font-size:13px;font-weight:700;text-align:right;}
+.eng-extra{font-size:10px;color:var(--text-faint);font-weight:400;}
+.eng-meta{grid-column:1/-1;display:flex;gap:8px;align-items:center;}
+.eng-src{font-size:10px;color:var(--text-faint);}
+.cf{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.04em;}
+.cf-high{background:var(--green-bg);color:var(--green);}
+.cf-med{background:var(--amber-bg);color:var(--amber);}
+.cf-low{background:var(--steel-700);color:var(--text-dim);}
+.cf-inf{background:var(--blue-bg);color:var(--blue);}
+.cf-none{background:var(--steel-800);color:var(--text-faint);}
+.cf-conflict{background:var(--red-bg);color:var(--red);}
+.val-box{border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;border:1px solid var(--line);}
+.val-box.val-ok{background:var(--green-bg);border-color:var(--green);}
+.val-box.val-warn{background:var(--amber-bg);border-color:var(--amber);}
+.val-box.val-conflict,.val-box.val-bad{background:var(--red-bg);border-color:var(--red);}
+.val-head{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;}
+.val-line{font-size:12px;line-height:1.45;margin-bottom:3px;}
+.vc-error,.vc-conflict{color:var(--red);}
+.vc-warn{color:var(--amber);}
+.vc-ok{color:var(--green);}
+.ver-head,.ver-row{padding:8px 10px;border-bottom:1px solid var(--steel-800);}
+.ver-head{background:var(--steel-800);font-size:10px;font-weight:800;text-transform:uppercase;color:var(--text-dim);}
+.ver-label{font-size:12px;font-weight:700;margin-bottom:4px;}
+.ver-cells{display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;font-size:11px;color:var(--text-dim);align-items:center;}
+.ver-status{font-weight:800;font-size:9px;padding:2px 6px;border-radius:4px;text-align:center;}
+.vs-pass{background:var(--green-bg);color:var(--green);}
+.vs-fail{background:var(--red-bg);color:var(--red);}
+.vs-omitted,.vs-no-source{background:var(--steel-700);color:var(--text-faint);}
+.bom-group-head{
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--yellow);
+  margin:12px 0 6px 0;display:flex;align-items:center;gap:7px;
+}
+
+/* ---------- Procedure checklist ---------- */
+.checklist-progress{
+  background:var(--steel-800);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;
+  margin-bottom:14px;
+}
+.checklist-progress .cp-label{font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;justify-content:space-between;}
+.checklist-step{margin-bottom:16px;}
+.checklist-step-head{
+  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--yellow);
+  margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;
+}
+.checklist-item{
+  display:flex;align-items:flex-start;gap:10px;padding:9px 4px;border-bottom:1px solid var(--steel-800);
+  cursor:pointer;
+}
+.checklist-item:last-child{border-bottom:none;}
+.checklist-check{
+  flex-shrink:0;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--steel-600);
+  display:flex;align-items:center;justify-content:center;margin-top:1px;font-size:14px;font-weight:800;
+}
+.checklist-item.done .checklist-check{background:var(--green);border-color:var(--green);color:#0c1f0e;}
+.checklist-item.done .checklist-text{color:var(--text-faint);text-decoration:line-through;}
+.checklist-text{font-size:13px;line-height:1.4;}
+.checklist-badge{
+  font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;background:var(--steel-700);color:var(--text-dim);
+  margin-left:6px;
+}
+.checklist-badge.complete{background:var(--green-bg);color:var(--green);}
+.toast{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--steel-700);
+  color:var(--text);padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:300;
+  box-shadow:0 4px 14px rgba(0,0,0,.4);max-width:88vw;text-align:center;
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="appbar">
+    <div class="brand">
+      <div class="name">Assembly Workflow Tracker</div>
+      <div class="sub" id="dateSub">Loading shift...</div>
+    </div>
+    <div class="right">
+      <div class="stamp">Screw Conveyor Mfg</div>
+      <button class="refresh-btn" id="refreshBtn" data-action="manual-sync" title="Sync latest data">&#8635;</button>
+      <button class="refresh-btn" id="settingsBtn" data-action="open-settings" title="Settings">&#9881;</button>
+    </div>
+  </header>
+
+  <div class="metrics-strip" id="metricsStrip"></div>
+
+  <main id="content"></main>
+
+  <nav class="tabbar">
+    <button class="tab-btn" data-tab="dashboard"><span class="ic">&#128203;</span>Dashboard</button>
+    <button class="tab-btn" data-tab="board"><span class="ic">&#128736;</span>Board</button>
+    <button class="tab-btn" data-tab="blockers"><span class="ic">&#9888;</span>Blockers</button>
+    <button class="tab-btn" data-tab="notes"><span class="ic">&#128221;</span>Notes</button>
+    <button class="tab-btn" data-tab="assistant"><span class="ic">&#129302;</span>Assistant</button>
+    <button class="tab-btn" data-tab="activity"><span class="ic">&#128203;</span>Activity</button>
+  </nav>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+/* =========================================================
+   ASSEMBLY WORKFLOW TRACKER
+   Vanilla JS single-file frontend. Jobs/blockers/notes are stored in a
+   Supabase project (see SUPABASE_URL / SUPABASE_ANON_KEY below) --
+   shared live across every device automatically, no server to deploy
+   or maintain. AI features (Assistant + Blueprint extraction) call
+   Google's free Gemini API directly using a key each person enters
+   once in Settings, stored only in their own browser.
+   ========================================================= */
+
+const STAGES = [
+  {id:'ready',    label:'Ready for Assembly'},
+  {id:'layout',   label:'Layout'},
+  {id:'bearings', label:'Bearings Installed'},
+  {id:'drive',    label:'Drive Installed'},
+  {id:'final',    label:'Final Assembly'},
+  {id:'testing',  label:'Testing'},
+  {id:'qc',       label:'Ready for QC'},
+  {id:'complete', label:'Complete'}
+];
+const stageLabel = id => (STAGES.find(s=>s.id===id)||{}).label || id;
+
+// Shop-standard assembly procedure -- tracked per job as a checklist so
+// assemblers can check off each step as they physically complete it.
+const PROCEDURE = [
+  { title:'Verify Hardware & Purchased Components', items:[
+    'Verify all hardware and purchased components against the approved drawing and BOM.',
+    'Confirm the correct quantity, size, type, and specification of each component.',
+    'Verify bearings, seals, sprockets, shafts, couplings, drives, and other purchased components are correct for the job.',
+    'Inspect all components for damage or defects.',
+    'Set aside any incorrect, damaged, or missing components and notify the assembly lead/supervisor.'
+  ]},
+  { title:'Verify Fabricated Parts', items:[
+    'Verify all fabricated parts against the approved drawing and BOM.',
+    'Confirm all measurements and dimensions are correct.',
+    'Verify hole locations, mounting patterns, lengths, widths, and overall configuration.',
+    'Inspect fabricated parts for defects that could affect assembly.',
+    'Report any discrepancies before beginning assembly.'
+  ]},
+  { title:'Assemble Troughs', items:[
+    'Assemble trough sections in the correct order according to the approved drawing.',
+    'Verify proper orientation of each trough section.',
+    'Align and join the trough sections.',
+    'Install the required hardware.',
+    'Verify the assembled trough is straight, square, and properly aligned.'
+  ]},
+  { title:'Assemble Screws, Troughs, Couplings & Shafts', items:[
+    'Install screw sections into the assembled troughs in the correct order and orientation.',
+    'Assemble and connect screw sections using the specified couplings and hardware.',
+    'Install required shafts according to the approved drawing.',
+    'Verify screw flight direction and positioning.',
+    'Verify proper shaft and coupling alignment.',
+    'Secure all coupling and shaft connections.'
+  ]},
+  { title:'Assemble Drive End', items:[
+    'Install the required waste pack, flange gland, and/or bearings at the drive end, as specified by the drawing.',
+    'Install and secure the drive shaft and drive components.',
+    'Install the drive plate and required hardware.',
+    'Verify proper alignment of the shaft, bearings, seals, and drive.',
+    'Ensure all components are properly positioned and secured.'
+  ]},
+  { title:'Mark, Drill & Install Hanger Bearings', items:[
+    'Mark hanger bearing locations according to the approved drawing.',
+    'Verify hanger locations and spacing before drilling.',
+    'Drill the required mounting holes.',
+    'Remove burrs and clean the drilled areas.',
+    'Install hanger bearings and required hardware.',
+    'Verify hanger bearing alignment with the screw shaft.',
+    'Secure all hanger bearing hardware.'
+  ]},
+  { title:'Assemble Tail End', items:[
+    'Install the tail end onto the conveyor.',
+    'Install any required bearings, seals, waste pack, or flange gland as specified by the drawing.',
+    'Install the tail shaft and associated hardware, if applicable.',
+    'Verify proper shaft and bearing alignment.',
+    'Secure all hardware and ensure the tail end is properly positioned.'
+  ]}
+];
+const PROCEDURE_TOTAL = PROCEDURE.reduce((n,s)=>n+s.items.length, 0);
+// "2-1" -> "Assemble Troughs / Verify proper orientation..." for the log.
+function checklistItemLabel(key){
+  const [si, ii] = String(key).split('-').map(Number);
+  const step = PROCEDURE[si];
+  if(!step) return key;
+  const item = step.items[ii];
+  return item ? `${step.title} / ${item}` : step.title;
+}
+
+// Maps each Board stage to the procedure step(s) that must be completed
+// while a job sits in that stage, before it can advance to the next one.
+// Indices refer to PROCEDURE above. Stages not listed (testing, qc,
+// complete) have no gating checklist -- they're sign-off stages, not
+// build steps.
+const STAGE_PROCEDURE = {
+  ready:    [0, 1], // Verify Hardware & Purchased Components, Verify Fabricated Parts
+  layout:   [2, 3], // Assemble Troughs, Assemble Screws/Couplings/Shafts
+  bearings: [5],    // Mark, Drill & Install Hanger Bearings
+  drive:    [4],    // Assemble Drive End
+  final:    [6]     // Assemble Tail End
+};
+function stageChecklistProgress(job, stageId){
+  const stepIdxs = STAGE_PROCEDURE[stageId] || [];
+  const checked = job.checklist || {};
+  let total = 0, done = 0;
+  stepIdxs.forEach(si=> PROCEDURE[si].items.forEach((_,ii)=>{
+    total++;
+    if(checked[si+'-'+ii]) done++;
+  }));
+  return { done, total };
+}
+
+// Automation: quick stage moves (arrows / mover / dashboard advance) snap
+// percent-complete to a sensible baseline for that stage, so the Lead
+// doesn't have to separately open a form and drag a slider every time.
+const STAGE_DEFAULT_PERCENT = {
+  ready:0, layout:15, bearings:30, drive:50, final:65, testing:80, qc:92, complete:100
+};
+
+let selectedBlueprintFile = null;
+
+const state = {
+  tab: 'dashboard',
+  jobs: [],
+  blockers: [],
+  notes: [],
+  jobFilter: 'all',
+  jobSearch: '',
+  blockerFilter: 'active',
+  noteSearch: '',
+  activity: [],
+  activitySearch: '',
+  chat: []
+};
+
+function uid(prefix){ return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+function daysUntil(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const t = new Date(todayISO()+'T00:00:00');
+  return Math.round((d-t)/86400000);
+}
+function fmtDate(dateStr){
+  if(!dateStr) return '--';
+  const d = new Date(dateStr+'T00:00:00');
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+}
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function distinctValues(field, arr, extra){
+  const set = new Set((extra||[]));
+  arr.forEach(x=>{ if(x[field]) set.add(x[field]); });
+  return [...set].filter(v=>v && v!=='Unassigned').sort();
+}
+function datalistHtml(id, values){
+  return `<datalist id="${id}">${values.map(v=>`<option value="${escapeHtml(v)}">`).join('')}</datalist>`;
+}
+
+function dueStatus(job){
+  if(job.assemblyStatus === 'complete') return 'complete';
+  const du = daysUntil(job.dueDate);
+  if(du < 0) return 'overdue';
+  if(du <= 3) return 'soon';
+  return 'ok';
+}
+function dueStatusLabel(s){
+  return {overdue:'Overdue', soon:'Due Soon', ok:'On Schedule', complete:'Complete'}[s];
+}
+function openBlockerJobSet(){
+  return new Set(state.blockers.filter(b=>b.status!=='Resolved').map(b=>b.jobNumber));
+}
+
+/* Filters shown as chips on the Dashboard -- also the target of tapping
+   a metric card, so the two systems stay in sync (1 tap from a metric
+   straight to the matching filtered list). */
+function getJobFilters(){
+  const blockedSet = openBlockerJobSet();
+  return [
+    {id:'all', label:'All', test:()=>true},
+    {id:'overdue', label:'Overdue', test:j=>dueStatus(j)==='overdue'},
+    {id:'soon', label:'Due Soon', test:j=>dueStatus(j)==='soon'},
+    {id:'week', label:'Due This Week', test:j=> j.assemblyStatus!=='complete' && daysUntil(j.dueDate)>=0 && daysUntil(j.dueDate)<=7},
+    {id:'blocked', label:'Blocked', test:j=> blockedSet.has(j.jobNumber)},
+    {id:'ready', label:'Ready', test:j=> j.assemblyStatus==='ready'},
+    {id:'inprogress', label:'In Progress', test:j=> j.assemblyStatus!=='ready' && j.assemblyStatus!=='complete'},
+    {id:'ok', label:'On Schedule', test:j=>dueStatus(j)==='ok'},
+    {id:'complete', label:'Complete', test:j=>dueStatus(j)==='complete'}
+  ];
+}
+const BLOCKER_FILTERS = [
+  {id:'active', label:'Active', test:b=>b.status!=='Resolved'},
+  {id:'open', label:'Open', test:b=>b.status==='Open'},
+  {id:'inprogress', label:'In Progress', test:b=>b.status==='In Progress'},
+  {id:'resolved', label:'Resolved', test:b=>b.status==='Resolved'},
+  {id:'all', label:'All', test:()=>true}
+];
+
+/* ---------------- Seed data (first run only) ---------------- */
+function seedJobs(){
+  const t = new Date();
+  const iso = off => { const d=new Date(t); d.setDate(d.getDate()+off); return d.toISOString().slice(0,10); };
+  return [
+    {id:uid('job'), jobNumber:'SC-4471', customer:'Midwest Grain Co.', description:'14" x 40ft screw conveyor, carbon steel trough, drive end gearmotor', dueDate: iso(-2), priority:'High', assignedAssembler:'D. Reyes', assemblyStatus:'testing', percentComplete:80},
+    {id:uid('job'), jobNumber:'SC-4472', customer:'Prairie Feed Systems', description:'9" x 22ft shafted conveyor, stainless, sanitary flush ends', dueDate: iso(1), priority:'High', assignedAssembler:'M. Okafor', assemblyStatus:'drive', percentComplete:55},
+    {id:uid('job'), jobNumber:'SC-4473', customer:'Redline Aggregates', description:'16" shaftless conveyor, U-trough, abrasion resistant liner', dueDate: iso(6), priority:'Medium', assignedAssembler:'J. Whitfield', assemblyStatus:'layout', percentComplete:20},
+    {id:uid('job'), jobNumber:'SC-4474', customer:'Great Lakes Cement', description:'12" x 30ft incline conveyor, 15deg incline, flighting cleats', dueDate: iso(10), priority:'Low', assignedAssembler:'Unassigned', assemblyStatus:'ready', percentComplete:0},
+    {id:uid('job'), jobNumber:'SC-4465', customer:'Heartland Ethanol', description:'10" x 18ft transfer conveyor, replacement unit', dueDate: iso(-6), priority:'High', assignedAssembler:'D. Reyes', assemblyStatus:'qc', percentComplete:95},
+    {id:uid('job'), jobNumber:'SC-4468', customer:'Bluegrass Milling', description:'8" x 12ft short-run conveyor, painted mild steel', dueDate: iso(3), priority:'Medium', assignedAssembler:'M. Okafor', assemblyStatus:'bearings', percentComplete:35},
+    {id:uid('job'), jobNumber:'SC-4460', customer:'Delta Ag Processing', description:'20" x 45ft high-capacity conveyor, twin drive', dueDate: iso(-1), priority:'High', assignedAssembler:'J. Whitfield', assemblyStatus:'final', percentComplete:70},
+    {id:uid('job'), jobNumber:'SC-4455', customer:'Northstar Fertilizer', description:'12" x 25ft conveyor, epoxy coated trough', dueDate: iso(-10), priority:'Medium', assignedAssembler:'D. Reyes', assemblyStatus:'complete', percentComplete:100}
+  ];
+}
+function seedBlockers(jobs){
+  const j1 = jobs.find(j=>j.jobNumber==='SC-4472');
+  const j2 = jobs.find(j=>j.jobNumber==='SC-4468');
+  return [
+    {id:uid('blk'), jobNumber:j1?j1.jobNumber:'SC-4472', issueDescription:'Gearmotor shipment delayed from vendor, ETA unknown', responsibleDepartment:'Purchasing', dateReported: todayISO(), severity:'Critical', status:'Open'},
+    {id:uid('blk'), jobNumber:j2?j2.jobNumber:'SC-4468', issueDescription:'Bearing bore size mismatch, needs engineering review', responsibleDepartment:'Engineering', dateReported: todayISO(), severity:'High', status:'In Progress'}
+  ];
+}
+function seedNotes(jobs){
+  return [
+    {id:uid('note'), date: todayISO(), jobNumber:'SC-4471', noteType:'Progress', notes:'Trough sections aligned and tack welded, moving into final testing tomorrow.'},
+    {id:uid('note'), date: todayISO(), jobNumber:'SC-4472', noteType:'Issue', notes:'Waiting on gearmotor from vendor, cannot proceed to drive install.'},
+    {id:uid('note'), date: todayISO(), jobNumber:'SC-4472', noteType:'NextSteps', notes:'Follow up with purchasing on gearmotor ETA first thing tomorrow.'}
+  ];
+}
+
+/* ---------------- Storage ----------------
+   Data lives in a Supabase project, in one table (app_data: key text
+   primary key, value jsonb). The "anon" key below is meant to be public
+   -- Supabase's model is that access control happens via database
+   policies, not by hiding this key -- so unlike a GitHub token, there's
+   nothing here for a scanner to find and revoke, and nothing sensitive
+   in this page's source. Set SUPABASE_URL and SUPABASE_ANON_KEY to your
+   project's values (Project Settings -> API). */
+const SUPABASE_URL = 'https://cxzogbtjxcfzgybtquwd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_kSu43otuTKZTtjeLPmuT3g_Kop5RzGz';
+
+function supabaseReady(){
+  return !!(SUPABASE_URL && SUPABASE_URL !== 'SUPABASE_URL_HERE' && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'SUPABASE_ANON_KEY_HERE');
+}
+function supabaseHeaders(extra){
+  return {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json',
+    ...(extra||{})
+  };
+}
+async function storageGet(key){
+  if(!supabaseReady()) return null;
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`, {
+      headers: supabaseHeaders(),
+      cache: 'no-store'
+    });
+    if(!res.ok){
+      const body = await res.json().catch(()=>({}));
+      throw new Error(body.message || `Supabase read failed (${res.status})`);
+    }
+    const rows = await res.json();
+    return (rows && rows[0]) ? rows[0].value : null;
+  }catch(e){
+    console.error('storage get failed', key, e);
+    return null;
+  }
+}
+async function storageSet(key, value){
+  if(!supabaseReady()) return false;
+  try{
+    // Upsert -- Postgres handles this atomically, so unlike the old
+    // GitHub-file approach there's no sha/version to track or retry on.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_data`, {
+      method: 'POST',
+      headers: supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify([{ key, value }])
+    });
+    if(!res.ok){
+      const body = await res.json().catch(()=>({}));
+      throw new Error(body.message || `Supabase save failed (${res.status})`);
+    }
+    return true;
+  }catch(e){
+    console.error('storage set failed', key, e);
+    const detail = (e && e.message) ? e.message : 'unknown error';
+    showToast(`Could not save "${key}": ${detail}`, 6000);
+    return false;
+  }
+}
+
+/* ---------------- Activity log ----------------
+   A separate insert-only table (not the app_data blob) so entries from
+   different people at the same moment can never overwrite each other --
+   every action appends its own row. Logging is fire-and-forget: it must
+   never block or fail the actual work the person is doing. */
+async function logActivity(action, detail){
+  if(!supabaseReady()) return;
+  const who = getUserName() || 'Unknown';
+  try{
+    await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, {
+      method: 'POST',
+      headers: supabaseHeaders({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify([{ who, action, detail: detail || '' }])
+    });
+  }catch(e){
+    console.error('activity log failed', e); // deliberately silent to the user
+  }
+}
+async function fetchActivityLog(limit){
+  if(!supabaseReady()) return [];
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/activity_log?select=*&order=at.desc&limit=${limit||200}`, {
+      headers: supabaseHeaders(),
+      cache: 'no-store'
+    });
+    if(!res.ok) return [];
+    return await res.json();
+  }catch(e){ return []; }
+}
+
+/* ---------------- Blueprint image storage ----------------
+   Reuses the same app_data table -- one image per job, stored as a
+   base64 string under key "blueprint:{jobId}". Used by the Job Detail
+   view to show the real scanned drawing, not just the extracted list. */
+const blueprintImageCache = {}; // jobId -> base64 string once loaded, or false if confirmed missing
+async function saveBlueprintImage(jobId, base64Jpeg){
+  if(!base64Jpeg) return false;
+  return storageSet(`blueprint:${jobId}`, base64Jpeg);
+}
+async function fetchBlueprintImage(jobId){
+  return storageGet(`blueprint:${jobId}`);
+}
+
+async function loadAll(){
+  if(!supabaseReady()){ state.jobs = []; state.blockers = []; state.notes = []; return; }
+  let [jobs, blockers, notes] = await Promise.all([
+    storageGet('jobs'), storageGet('blockers'), storageGet('notes')
+  ]);
+  if(jobs === null){ jobs = seedJobs(); await storageSet('jobs', jobs); }
+  if(blockers === null){ blockers = seedBlockers(jobs); await storageSet('blockers', blockers); }
+  if(notes === null){ notes = seedNotes(jobs); await storageSet('notes', notes); }
+  state.jobs = jobs; state.blockers = blockers; state.notes = notes;
+}
+// Rapid successive edits (e.g. checking off several checklist items in a
+// row) used to fire one GitHub save per tap, which race each other and
+// fail with 409 conflicts. Coalesce them: wait briefly for things to
+// settle, then save once with whatever the latest state is.
+const saveTimers = {};
+function persistKey(key, getValue, delay){
+  return new Promise(resolve=>{
+    clearTimeout(saveTimers[key]);
+    saveTimers[key] = setTimeout(async ()=>{
+      resolve(await storageSet(key, getValue()));
+    }, delay || 500);
+  });
+}
+async function persistJobs(){ return persistKey('jobs', ()=>state.jobs); }
+async function persistBlockers(){ return persistKey('blockers', ()=>state.blockers); }
+async function persistNotes(){ return persistKey('notes', ()=>state.notes); }
+
+/* ---------------- Multi-device sync ----------------
+   Polls the shared GitHub repo periodically so every device converges on
+   the same data. GitHub's API has a rate limit (5,000 requests/hour per
+   token), so this polls modestly -- every 45s -- and pauses while a form
+   is open or someone's typing, so nothing gets overwritten mid-edit. */
+function isFormActive(){
+  const modalOpen = document.getElementById('modalRoot').innerHTML.trim().length>0;
+  const a = document.activeElement;
+  const typing = a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT');
+  return modalOpen || typing;
+}
+async function reloadFromStorage(manual){
+  if(!supabaseReady()) return;
+  if(isFormActive()){
+    if(manual) showToast('Finish editing, then sync');
+    return;
+  }
+  if(manual){
+    const btn = document.getElementById('refreshBtn');
+    if(btn) btn.classList.add('spinning');
+  }
+  const [jobs, blockers, notes] = await Promise.all([storageGet('jobs'), storageGet('blockers'), storageGet('notes')]);
+  if(jobs) state.jobs = jobs;
+  if(blockers) state.blockers = blockers;
+  if(notes) state.notes = notes;
+  render();
+  if(manual){
+    showToast('Synced latest data');
+    const btn = document.getElementById('refreshBtn');
+    if(btn) setTimeout(()=>btn.classList.remove('spinning'), 700);
+  }
+}
+setInterval(()=>reloadFromStorage(false), 45000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) reloadFromStorage(false); });
+
+/* ---------------- Toast ---------------- */
+let toastTimer=null;
+function showToast(msg, duration){
+  const root = document.getElementById('toastRoot');
+  root.innerHTML = `<div class="toast">${escapeHtml(msg)}</div>`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ root.innerHTML=''; }, duration || 2200);
+}
+function copyToClipboard(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>showToast('Copied to clipboard')).catch(()=>showToast('Could not copy'));
+  }else{
+    showToast('Copy not supported on this device');
+  }
+}
+
+/* ---------------- Modal helpers ---------------- */
+// Modals that need to update themselves in place (checklist toggles, a
+// stage advancing while its detail view is open) register a refresher
+// here instead of hardcoding which modal to redraw.
+let modalRefresh = null;
+function closeModal(){
+  disposeModel();
+  refreshOpenModal._job = null;
+  document.getElementById('modalRoot').innerHTML='';
+  modalRefresh = null;
+}
+function openModal(html, refresher){
+  modalRefresh = refresher || null;
+  document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" data-close-overlay>${html}</div>`;
+  setTimeout(()=>{
+    const f = document.querySelector('.modal-sheet input:not([readonly]):not([type=range]), .modal-sheet select, .modal-sheet textarea');
+    if(f) f.focus();
+  }, 50);
+}
+function refreshOpenModal(){
+  const modalRoot = document.getElementById('modalRoot');
+  if(modalRefresh && modalRoot && modalRoot.innerHTML.trim()){
+    // Re-rendering the sheet destroys the 3D canvas, so tear the old
+    // renderer down and rebuild it against the new DOM node.
+    disposeModel();
+    modalRoot.innerHTML = `<div class="modal-overlay" data-close-overlay>${modalRefresh()}</div>`;
+    if(document.getElementById('modelStage') && refreshOpenModal._job){
+      setTimeout(()=>buildModel(refreshOpenModal._job), 60);
+    }
+  }
+}
+document.addEventListener('click', e=>{
+  if(e.target.hasAttribute('data-close-overlay')) closeModal();
+});
+
+/* ---------------- Metrics ---------------- */
+function computeMetrics(){
+  const jobs = state.jobs;
+  const inProgress = jobs.filter(j=>j.assemblyStatus!=='ready' && j.assemblyStatus!=='complete').length;
+  const readyCount = jobs.filter(j=>j.assemblyStatus==='ready').length;
+  const blockedCount = openBlockerJobSet().size;
+  const dueThisWeek = jobs.filter(j=>{
+    if(j.assemblyStatus==='complete') return false;
+    const du = daysUntil(j.dueDate);
+    return du >= 0 && du <= 7;
+  }).length;
+  const overdue = jobs.filter(j=> j.assemblyStatus!=='complete' && daysUntil(j.dueDate) < 0).length;
+  return {inProgress, readyCount, blockedCount, dueThisWeek, overdue};
+}
+function renderMetrics(){
+  const m = computeMetrics();
+  const el = document.getElementById('metricsStrip');
+  el.innerHTML = `
+    <button class="metric-card m-blue" data-action="goto-filter" data-filter="inprogress"><div class="num">${m.inProgress}</div><div class="lbl">In Progress</div></button>
+    <button class="metric-card m-yellow" data-action="goto-filter" data-filter="ready"><div class="num">${m.readyCount}</div><div class="lbl">Ready to Start</div></button>
+    <button class="metric-card m-red" data-action="goto-filter" data-filter="blocked"><div class="num">${m.blockedCount}</div><div class="lbl">Blocked</div></button>
+    <button class="metric-card m-amber" data-action="goto-filter" data-filter="week"><div class="num">${m.dueThisWeek}</div><div class="lbl">Due This Week</div></button>
+    <button class="metric-card m-red" data-action="goto-filter" data-filter="overdue"><div class="num">${m.overdue}</div><div class="lbl">Overdue</div></button>
+  `;
+  const blkTab = document.querySelector('.tab-btn[data-tab="blockers"]');
+  if(blkTab){
+    const existing = blkTab.querySelector('.dot');
+    if(existing) existing.remove();
+    if(m.blockedCount>0){
+      const dot=document.createElement('span'); dot.className='dot'; blkTab.appendChild(dot);
+    }
+  }
+}
+
+/* ================= DASHBOARD ================= */
+function computeFocusJobs(){
+  const blockedSet = openBlockerJobSet();
+  const scored = state.jobs.filter(j=>j.assemblyStatus!=='complete').map(j=>{
+    const du = daysUntil(j.dueDate);
+    let score = 0;
+    if(du<0) score += 500 + Math.min(Math.abs(du),30)*10;
+    else if(du<=3) score += 200 - du*20;
+    else if(du<=7) score += 80 - du*5;
+    score += {High:120, Medium:60, Low:20}[j.priority] || 0;
+    if(blockedSet.has(j.jobNumber)) score += 250;
+    return {job:j, score};
+  }).sort((a,b)=>b.score-a.score);
+  return scored;
+}
+function focusBannerHtml(){
+  const scored = computeFocusJobs();
+  const top = scored.filter(s=>s.score>=80).slice(0,3);
+  if(top.length===0){
+    return `
+    <div class="focus-banner">
+      <div class="focus-banner-head">Today's Focus</div>
+      <div class="focus-calm">&#9989; Nothing urgent -- schedule looks on track.</div>
+      <button class="btn btn-outline btn-sm" data-action="ask-ai-focus">Ask AI for full plan &#9656;</button>
+    </div>`;
+  }
+  const chips = top.map(s=>{
+    const ds = dueStatus(s.job);
+    return `<span class="focus-job-chip">${escapeHtml(s.job.jobNumber)}<span class="fd due-tag due-${ds}">${dueStatusLabel(ds)}</span></span>`;
+  }).join('');
+  return `
+  <div class="focus-banner">
+    <div class="focus-banner-head">Today's Focus</div>
+    <div class="focus-jobs">${chips}</div>
+    <button class="btn btn-primary btn-sm" data-action="ask-ai-focus">Ask AI for full plan &#9656;</button>
+  </div>`;
+}
+
+function renderDashboard(){
+  const filters = getJobFilters();
+  document.getElementById('content').innerHTML = `
+    ${focusBannerHtml()}
+    <div class="sticky-bar">
+      <input type="search" class="search-input" id="dashSearch" placeholder="Search job # or customer..." value="${escapeHtml(state.jobSearch)}">
+      <div class="chip-row" id="jobFilterChips">
+        ${filters.map(f=>`<button class="chip ${state.jobFilter===f.id?'active':''}" data-action="filter-jobs" data-filter="${f.id}">${f.label}</button>`).join('')}
+      </div>
+    </div>
+    <div class="section-title">Jobs <span class="count-badge" id="jobCountBadge">0</span></div>
+    <div id="jobCardsList"></div>
+    <div class="fab-row">
+      <button class="btn btn-primary btn-block" data-action="new-job">+ Add Job</button>
+    </div>
+    <div class="fab-row">
+      <button class="btn btn-outline btn-block" data-action="new-job-from-blueprint">&#128208; New Job from Blueprint</button>
+    </div>
+  `;
+  updateDashboardList();
+}
+function updateDashboardList(){
+  const filters = getJobFilters();
+  const activeFilter = filters.find(f=>f.id===state.jobFilter) || filters[0];
+  const q = state.jobSearch.trim().toLowerCase();
+  let jobs = state.jobs.filter(activeFilter.test);
+  if(q){
+    jobs = jobs.filter(j => j.jobNumber.toLowerCase().includes(q) || j.customer.toLowerCase().includes(q));
+  }
+  jobs = jobs.slice().sort((a,b)=> daysUntil(a.dueDate)-daysUntil(b.dueDate));
+
+  const blockedSet = openBlockerJobSet();
+  const cardsHtml = jobs.length ? jobs.map(j=>{
+    const ds = dueStatus(j);
+    const du = daysUntil(j.dueDate);
+    const dueText = ds==='complete' ? 'Complete' : ds==='overdue' ? `${Math.abs(du)}d overdue` : du===0 ? 'Due today' : `Due in ${du}d`;
+    const isBlocked = blockedSet.has(j.jobNumber);
+    const idx = STAGES.findIndex(s=>s.id===j.assemblyStatus);
+    const nextStage = STAGES[idx+1];
+    const stageProgress = stageChecklistProgress(j, j.assemblyStatus);
+    const advanceLabel = nextStage
+      ? (stageProgress.total>0
+          ? `Advance &#9656; ${escapeHtml(nextStage.label)} (${stageProgress.done}/${stageProgress.total})`
+          : `Advance &#9656; ${escapeHtml(nextStage.label)}`)
+      : '';
+    return `
+    <div class="job-card due-${ds}" data-id="${j.id}" data-action="open-job-detail">
+      <div class="job-card-top">
+        <div>
+          <div class="job-num">${escapeHtml(j.jobNumber)}</div>
+          <div class="job-cust">${escapeHtml(j.customer)}</div>
+        </div>
+        <span class="badge badge-${j.priority.toLowerCase()}">${escapeHtml(j.priority)}</span>
+      </div>
+      <div class="job-desc">${escapeHtml(j.description)}</div>
+      <div class="job-meta-row">
+        <span>Stage: <b>${escapeHtml(stageLabel(j.assemblyStatus))}</b></span>
+        <span>Assembler: <b>${escapeHtml(j.assignedAssembler||'Unassigned')}</b></span>
+        <span>Due: <b>${fmtDate(j.dueDate)}</b></span>
+        ${isBlocked ? `<span style="color:var(--red);font-weight:700;">&#9888; Blocked</span>` : ''}
+      </div>
+      <div class="gauge">
+        <div class="gauge-track"><div class="gauge-fill" style="width:${j.percentComplete}%;"></div></div>
+        <div class="gauge-label"><span class="due-tag due-${ds}">${dueText}</span> &middot; ${j.percentComplete}%</div>
+      </div>
+      <div class="job-card-actions">
+        ${nextStage ? `<button class="btn btn-primary btn-sm" data-action="attempt-advance" data-id="${j.id}">${advanceLabel}</button>` : ''}
+        <button class="btn btn-outline btn-sm" data-action="edit-job" data-id="${j.id}">Edit</button>
+        <button class="btn btn-outline btn-sm" data-action="report-blocker" data-jobnumber="${escapeHtml(j.jobNumber)}">Blocker</button>
+        <button class="btn btn-outline btn-sm" data-action="open-blueprint" data-id="${j.id}">&#128208; Blueprint${j.billOfMaterials && j.billOfMaterials.length ? ` (${j.billOfMaterials.length})` : ''}</button>
+      </div>
+    </div>`;
+  }).join('') : `<div class="empty-state"><div class="big">&#128203;</div>No jobs match this filter.</div>`;
+
+  document.getElementById('jobCardsList').innerHTML = cardsHtml;
+  const badge = document.getElementById('jobCountBadge');
+  if(badge) badge.textContent = jobs.length;
+}
+
+/* ================= BOARD ================= */
+let dragJobId = null;
+function renderBoard(){
+  const cols = STAGES.map(stage=>{
+    const jobs = state.jobs.filter(j=>j.assemblyStatus===stage.id);
+    const cardsHtml = jobs.length ? jobs.map(j=>`
+      <div class="board-card" draggable="true" data-id="${j.id}">
+        <div class="bn" data-action="open-job-detail" data-id="${j.id}">${escapeHtml(j.jobNumber)}</div>
+        <div class="bc" data-action="open-job-detail" data-id="${j.id}">${escapeHtml(j.customer)}</div>
+        <div class="ba" data-action="open-job-detail" data-id="${j.id}">${escapeHtml(j.assignedAssembler||'Unassigned')} &middot; ${j.percentComplete}%</div>
+        <div class="board-card-actions">
+          <button class="icon-btn" data-action="stage-prev" data-id="${j.id}" title="Move back">&#8592;</button>
+          <button class="move-btn" data-action="open-mover" data-id="${j.id}">Move&#8230;</button>
+          <button class="icon-btn" data-action="attempt-advance" data-id="${j.id}" title="Move forward">&#8594;</button>
+        </div>
+      </div>
+    `).join('') : `<div class="empty-col">No jobs</div>`;
+    return `
+    <div class="board-col">
+      <div class="board-col-head"><span class="t">${stage.label}</span><span class="c">${jobs.length}</span></div>
+      <div class="board-col-body" data-stage="${stage.id}">${cardsHtml}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="section-title">Assembly Workflow Board</div>
+    <div class="board-wrap" id="boardWrap">${cols}</div>
+  `;
+  attachBoardDnD();
+}
+function attachBoardDnD(){
+  const cards = document.querySelectorAll('.board-card');
+  cards.forEach(c=>{
+    c.addEventListener('dragstart', e=>{
+      dragJobId = c.getAttribute('data-id');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+  });
+  const cols = document.querySelectorAll('.board-col-body');
+  cols.forEach(col=>{
+    col.addEventListener('dragover', e=>{ e.preventDefault(); col.classList.add('drag-over'); });
+    col.addEventListener('dragleave', ()=> col.classList.remove('drag-over'));
+    col.addEventListener('drop', e=>{
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      if(dragJobId){
+        const targetStage = col.getAttribute('data-stage');
+        const job = state.jobs.find(j=>j.id===dragJobId);
+        if(job){
+          const curIdx = STAGES.findIndex(s=>s.id===job.assemblyStatus);
+          const targetIdx = STAGES.findIndex(s=>s.id===targetStage);
+          if(targetIdx === curIdx+1){
+            // Dragging one stage forward is the same move as the arrow button --
+            // it must respect the same checklist gate, not silently skip it.
+            const prog = stageChecklistProgress(job, job.assemblyStatus);
+            if(prog.total>0 && prog.done<prog.total){
+              showToast(`Complete this stage's checklist first -- tap the card to open it`);
+              dragJobId = null;
+              return;
+            }
+          }
+          moveJobToStage(dragJobId, targetStage);
+        }
+        dragJobId = null;
+      }
+    });
+  });
+}
+function moveJobToStage(jobId, stageId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  const prevStage = job.assemblyStatus;
+  job.assemblyStatus = stageId;
+  // Automation: snap percent-complete to the stage's standard baseline so
+  // the Lead doesn't have to also open the edit form to update progress.
+  job.percentComplete = STAGE_DEFAULT_PERCENT[stageId] !== undefined ? STAGE_DEFAULT_PERCENT[stageId] : job.percentComplete;
+  const who = getUserName();
+  if(who) job.lastMovedBy = who;
+  persistJobs();
+  logActivity('Stage moved', `${job.jobNumber}: ${stageLabel(prevStage)} -> ${stageLabel(stageId)}`);
+  showToast(`${job.jobNumber} \u2192 ${stageLabel(stageId)}${who ? ` (${who})` : ''}`);
+  render();
+  refreshOpenModal();
+}
+function stepStage(jobId, dir){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  const idx = STAGES.findIndex(s=>s.id===job.assemblyStatus);
+  const newIdx = Math.min(STAGES.length-1, Math.max(0, idx+dir));
+  moveJobToStage(jobId, STAGES[newIdx].id);
+}
+function openMover(jobId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  openModal(`
+    <div class="modal-sheet">
+      <div class="modal-title">Move ${escapeHtml(job.jobNumber)} <button class="modal-close" data-close-overlay>&times;</button></div>
+      <div class="stage-picker">
+        ${STAGES.map(s=>`<button class="${s.id===job.assemblyStatus?'current':''}" data-action="pick-stage" data-id="${job.id}" data-stage="${s.id}">${s.label}</button>`).join('')}
+      </div>
+    </div>
+  `);
+}
+
+/* ================= BLOCKERS ================= */
+function renderBlockers(){
+  document.getElementById('content').innerHTML = `
+    <div class="sticky-bar">
+      <div class="chip-row" id="blockerFilterChips">
+        ${BLOCKER_FILTERS.map(f=>`<button class="chip ${state.blockerFilter===f.id?'active':''}" data-action="filter-blockers" data-filter="${f.id}">${f.label}</button>`).join('')}
+      </div>
+    </div>
+    <div class="section-title">Blockers <span class="count-badge" id="blockerCountBadge">0</span></div>
+    <div id="blockerCardsList"></div>
+    <div class="fab-row"><button class="btn btn-primary btn-block" data-action="new-blocker">+ Report Blocker</button></div>
+  `;
+  updateBlockersList();
+}
+function updateBlockersList(){
+  const activeFilter = BLOCKER_FILTERS.find(f=>f.id===state.blockerFilter) || BLOCKER_FILTERS[0];
+  const list = state.blockers.filter(activeFilter.test).slice()
+    .sort((a,b)=> (a.status==='Resolved')-(b.status==='Resolved') || new Date(b.dateReported)-new Date(a.dateReported));
+  const html = list.length ? list.map(b=>`
+    <div class="blocker-card ${b.status==='Resolved'?'resolved':''}" data-id="${b.id}">
+      <div class="blocker-top">
+        <div>
+          <div class="job-num">${escapeHtml(b.jobNumber)}</div>
+          <div class="job-cust">${escapeHtml(b.responsibleDepartment)} &middot; reported ${fmtDate(b.dateReported)}${b.reportedBy ? ` by ${escapeHtml(b.reportedBy)}` : ''}</div>
+        </div>
+        <span class="sev-badge sev-${b.severity.toLowerCase()}">${escapeHtml(b.severity)}</span>
+      </div>
+      <div class="job-desc">${escapeHtml(b.issueDescription)}</div>
+      <div class="job-card-actions" style="align-items:center;">
+        <span class="status-pill status-${b.status.toLowerCase().replace(' ','')}">${escapeHtml(b.status)}</span>
+        <button class="btn btn-outline btn-sm" data-action="cycle-blocker-status" data-id="${b.id}">Update Status</button>
+        <button class="btn btn-outline btn-sm" data-action="delete-blocker" data-id="${b.id}">Delete</button>
+      </div>
+    </div>
+  `).join('') : `<div class="empty-state"><div class="big">&#9989;</div>No blockers in this view.</div>`;
+  document.getElementById('blockerCardsList').innerHTML = html;
+  const badge = document.getElementById('blockerCountBadge');
+  if(badge) badge.textContent = `${state.blockers.filter(b=>b.status!=='Resolved').length} open`;
+}
+
+/* ================= DAILY NOTES ================= */
+function renderNotes(){
+  document.getElementById('content').innerHTML = `
+    <div class="sticky-bar">
+      <input type="search" class="search-input" id="noteSearch" placeholder="Search notes by job # or text..." value="${escapeHtml(state.noteSearch)}">
+    </div>
+    <div class="section-title">Daily Notes</div>
+    <div id="noteCardsList"></div>
+    <div class="fab-row"><button class="btn btn-primary btn-block" data-action="new-note">+ Add Daily Note</button></div>
+  `;
+  updateNotesList();
+}
+function updateNotesList(){
+  const q = state.noteSearch.trim().toLowerCase();
+  let list = state.notes.slice().sort((a,b)=> new Date(b.date)-new Date(a.date));
+  if(q){
+    list = list.filter(n => (n.jobNumber||'').toLowerCase().includes(q) || (n.notes||'').toLowerCase().includes(q));
+  }
+  const typeClass = {Progress:'note-progress', Issue:'note-issue', NextSteps:'note-next'};
+  const typeLabel = {Progress:'Progress', Issue:'Issue', NextSteps:'Next Steps'};
+  const html = list.length ? list.map(n=>`
+    <div class="note-card" data-id="${n.id}">
+      <div class="note-head">
+        <span><span class="note-type-tag ${typeClass[n.noteType]||''}">${typeLabel[n.noteType]||n.noteType}</span>${escapeHtml(n.jobNumber||'General')}</span>
+        <span>${fmtDate(n.date)}</span>
+      </div>
+      <div class="note-body">${escapeHtml(n.notes)}</div>
+      ${n.author ? `<div class="note-author">&mdash; ${escapeHtml(n.author)}</div>` : ''}
+    </div>
+  `).join('') : `<div class="empty-state"><div class="big">&#128221;</div>No notes match.</div>`;
+  document.getElementById('noteCardsList').innerHTML = html;
+}
+
+/* ================= ACTIVITY LOG ================= */
+function renderActivity(){
+  document.getElementById('content').innerHTML = `
+    <div class="sticky-bar">
+      <input type="search" class="search-input" id="actSearch" placeholder="Search by name, job #, or action..." value="${escapeHtml(state.activitySearch)}">
+    </div>
+    <div class="section-title">Activity Log <span class="count-badge" id="actCountBadge">--</span></div>
+    <div id="actList"><div class="empty-state"><div class="big">&#8987;</div>Loading activity...</div></div>
+    <div class="fab-row"><button class="btn btn-outline btn-block" data-action="refresh-activity">Refresh</button></div>
+  `;
+  loadActivity();
+}
+async function loadActivity(){
+  const rows = await fetchActivityLog(300);
+  state.activity = rows;
+  updateActivityList();
+}
+function updateActivityList(){
+  const el = document.getElementById('actList');
+  if(!el) return;
+  const q = state.activitySearch.trim().toLowerCase();
+  let rows = state.activity || [];
+  if(q){
+    rows = rows.filter(r =>
+      (r.who||'').toLowerCase().includes(q) ||
+      (r.action||'').toLowerCase().includes(q) ||
+      (r.detail||'').toLowerCase().includes(q)
+    );
+  }
+  const badge = document.getElementById('actCountBadge');
+  if(badge) badge.textContent = rows.length;
+  if(!rows.length){
+    el.innerHTML = `<div class="empty-state"><div class="big">&#128203;</div>No activity recorded yet.</div>`;
+    return;
+  }
+  el.innerHTML = rows.map(r=>`
+    <div class="act-row">
+      <div class="act-head">
+        <span class="act-who">${escapeHtml(r.who||'Unknown')}</span>
+        <span class="act-when">${fmtWhen(r.at)}</span>
+      </div>
+      <div class="act-action">${escapeHtml(r.action||'')}</div>
+      ${r.detail ? `<div class="act-detail">${escapeHtml(r.detail)}</div>` : ''}
+    </div>`).join('');
+}
+function fmtWhen(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const mins = Math.round((now-d)/60000);
+  if(mins < 1) return 'just now';
+  if(mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins/60);
+  if(hrs < 24) return `${hrs}h ago`;
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' ' +
+         d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+}
+
+/* ================= ASSISTANT ================= */
+const QUICK_PROMPTS = [
+  'What should the team focus on today?',
+  'Which jobs are at risk?',
+  "Create today's shift summary.",
+  'Generate a morning planning report.',
+  'What hardware or components do we need to pull or order?'
+];
+function buildContext(){
+  const jobs = state.jobs.map(j=>{
+    const bom = (j.billOfMaterials && j.billOfMaterials.length)
+      ? ` | hardware needed: ${j.billOfMaterials.map(c=>`${c.quantity?c.quantity+'x ':''}${c.item}${c.specification?' ('+c.specification+')':''}`).join(', ')}`
+      : '';
+    return `- ${j.jobNumber} | ${j.customer} | stage: ${stageLabel(j.assemblyStatus)} | priority: ${j.priority} | ${j.percentComplete}% complete | due: ${j.dueDate} (${dueStatusLabel(dueStatus(j))}) | assembler: ${j.assignedAssembler||'Unassigned'}${bom}`;
+  }).join('\n');
+  const blockers = state.blockers.filter(b=>b.status!=='Resolved').map(b=>`- ${b.jobNumber} | ${b.severity} | ${b.responsibleDepartment} | reported ${b.dateReported} | ${b.issueDescription} | status: ${b.status}`).join('\n') || 'None';
+  const notes = state.notes.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,25)
+    .map(n=>`- [${n.date}] ${n.jobNumber||'General'} (${n.noteType}): ${n.notes}`).join('\n') || 'None';
+  return `Today's date: ${todayISO()}\n\nJOBS:\n${jobs}\n\nOPEN BLOCKERS:\n${blockers}\n\nRECENT DAILY NOTES:\n${notes}`;
+}
+function renderAssistant(){
+  const chatHtml = state.chat.map((m,i)=>{
+    if(m.role==='ai'){
+      return `<div class="chat-msg ai"><div>${escapeHtml(m.text)}</div><button class="copy-btn" data-action="copy-msg" data-index="${i}">Copy</button></div>`;
+    }
+    if(m.role==='ai loading'){
+      return `<div class="chat-msg ai loading">${escapeHtml(m.text)}</div>`;
+    }
+    return `<div class="chat-msg user">${escapeHtml(m.text)}</div>`;
+  }).join('');
+  document.getElementById('content').innerHTML = `
+    <div class="section-title">AI Assistant</div>
+    ${!activeProviderHasKey() ? `<div class="focus-banner"><div class="focus-banner-head">Setup Needed</div><div style="font-size:13px;margin-bottom:10px;">Add an API key for ${getAiProvider()==='openrouter'?'OpenRouter':'Google Gemini'} to turn this on.</div><button class="btn btn-primary btn-sm" data-action="open-settings">Open Settings</button></div>` : ''}
+    <div class="prompt-grid">
+      ${QUICK_PROMPTS.map(p=>`<button data-action="quick-prompt" data-prompt="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('')}
+    </div>
+    <div class="chat-log" id="chatLog">${chatHtml}</div>
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="Ask about jobs, blockers, priorities..." />
+      <button class="btn btn-primary" data-action="send-chat">Send</button>
+    </div>
+  `;
+  const log = document.getElementById('chatLog');
+  if(log) log.scrollTop = log.scrollHeight;
+}
+function goToAssistantWithPrompt(promptText){
+  state.tab = 'assistant';
+  render();
+  window.scrollTo(0,0);
+  sendChat(promptText);
+}
+function getApiKey(){ return (localStorage.getItem('awt_geminiKey') || '').trim(); }
+function setApiKey(key){ localStorage.setItem('awt_geminiKey', (key||'').trim()); }
+function getOpenRouterKey(){ return (localStorage.getItem('awt_openrouterKey') || '').trim(); }
+function setOpenRouterKey(key){ localStorage.setItem('awt_openrouterKey', (key||'').trim()); }
+function getOpenRouterModel(){ return (localStorage.getItem('awt_openrouterModel') || '').trim() || 'google/gemini-2.0-flash-001'; }
+function setOpenRouterModel(model){ localStorage.setItem('awt_openrouterModel', (model||'').trim()); }
+function getAiProvider(){ return localStorage.getItem('awt_aiProvider') || 'gemini'; }
+function setAiProvider(p){ localStorage.setItem('awt_aiProvider', p==='openrouter' ? 'openrouter' : 'gemini'); }
+function activeProviderHasKey(){
+  return getAiProvider()==='openrouter' ? !!getOpenRouterKey() : !!getApiKey();
+}
+// Not a login -- just a display name so notes, blockers, and stage moves
+// show who did what. No password, nothing to verify, easy to skip or change.
+function getUserName(){ return (localStorage.getItem('awt_username') || '').trim(); }
+function setUserName(name){ localStorage.setItem('awt_username', (name||'').trim()); }
+
+const GEMINI_MODEL = 'gemini-3.6-flash';
+
+// Two interchangeable AI backends, picked in Settings -- Google's free
+// Gemini API by default, or OpenRouter as a backup/alternative (useful if
+// Gemini's free-tier rate limit gets hit, or to try a different model for
+// blueprint reading). Both keys are stored only in this browser and sent
+// directly to their respective provider; never to each other or anywhere
+// else. `content` uses the same shape either way: a plain string, or an
+// array of {type:'text', text} / {type:'image', source:{media_type, data}}.
+function toGeminiParts(content){
+  if(typeof content === 'string') return [{ text: content }];
+  return content.map(block=>{
+    if(block.type === 'image'){
+      return { inline_data: { mime_type: block.source.media_type, data: block.source.data } };
+    }
+    return { text: block.text || '' };
+  });
+}
+async function callGeminiAPI(systemPrompt, content){
+  const apiKey = getApiKey();
+  if(!apiKey) throw new Error('NO_API_KEY');
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: toGeminiParts(content) }]
+    })
+  });
+  const raw = await response.text();
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ throw new Error('Unexpected response from Gemini (not JSON). Please try again.'); }
+  if(!response.ok){
+    const apiMsg = (data && data.error && data.error.message) ? data.error.message : `Request failed (${response.status})`;
+    throw new Error(apiMsg);
+  }
+  const candidate = data && data.candidates && data.candidates[0];
+  const parts = candidate && candidate.content && candidate.content.parts;
+  return parts ? parts.map(p=>p.text||'').filter(Boolean).join('\n') : '';
+}
+function toOpenRouterContent(content){
+  if(typeof content === 'string') return content;
+  return content.map(block=>{
+    if(block.type === 'image'){
+      return { type:'image_url', image_url:{ url:`data:${block.source.media_type};base64,${block.source.data}` } };
+    }
+    return { type:'text', text: block.text || '' };
+  });
+}
+async function callOpenRouterAPI(systemPrompt, content){
+  const apiKey = getOpenRouterKey();
+  if(!apiKey) throw new Error('NO_API_KEY');
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'X-Title': 'Assembly Workflow Tracker'
+    },
+    body: JSON.stringify({
+      model: getOpenRouterModel(),
+      messages: [
+        { role:'system', content: systemPrompt },
+        { role:'user', content: toOpenRouterContent(content) }
+      ]
+    })
+  });
+  const raw = await response.text();
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ throw new Error('Unexpected response from OpenRouter (not JSON). Please try again.'); }
+  if(!response.ok || (data && data.error)){
+    let apiMsg = (data && data.error && data.error.message) ? data.error.message : `Request failed (${response.status})`;
+    // OpenRouter often wraps the real reason one level deeper -- e.g. a
+    // generic "Provider returned error" with the actual cause sitting in
+    // error.metadata.raw (sometimes itself JSON from the underlying model).
+    const meta = data && data.error && data.error.metadata;
+    if(meta){
+      if(meta.raw){
+        let rawDetail = meta.raw;
+        try{
+          const parsedRaw = typeof rawDetail === 'string' ? JSON.parse(rawDetail) : rawDetail;
+          rawDetail = (parsedRaw.error && parsedRaw.error.message) || parsedRaw.message || rawDetail;
+        }catch(e){ /* raw wasn't JSON -- use it as-is */ }
+        apiMsg += `: ${rawDetail}`;
+      }else if(meta.provider_name){
+        apiMsg += ` (from ${meta.provider_name})`;
+      }
+    }
+    throw new Error(apiMsg);
+  }
+  const choice = data && data.choices && data.choices[0];
+  if(!choice || !choice.message){
+    throw new Error('OpenRouter returned no response content. The selected model may not support image input -- check Settings.');
+  }
+  return (choice.message.content) || '';
+}
+// Every call site in the app goes through this one function -- it routes
+// to whichever provider is currently selected, so nothing else needs to
+// know or care which backend is active.
+async function callClaudeAPI(systemPrompt, content){
+  return getAiProvider()==='openrouter'
+    ? callOpenRouterAPI(systemPrompt, content)
+    : callGeminiAPI(systemPrompt, content);
+}
+
+async function sendChat(promptText){
+  const inputEl = document.getElementById('chatInput');
+  const text = (promptText || (inputEl ? inputEl.value : '') || '').trim();
+  if(!text) return;
+  state.chat.push({role:'user', text});
+  state.chat.push({role:'ai loading', text:'Thinking...'});
+  renderAssistant();
+  const input = document.getElementById('chatInput');
+  if(input) input.value='';
+
+  const systemPrompt = `You are the AI assistant embedded in the "Assembly Workflow Tracker" app, used by an Assembly Lead and Assemblers in a screw conveyor manufacturing shop. Use the shop data provided below to answer the user's question. Be concise, practical, and shop-floor-focused: use short paragraphs or bullet points, always reference specific job numbers when relevant, and rank priorities by a mix of overdue status, priority level, and open blockers. When asked for a shift summary or planning report, structure the answer with clear short headers and an action list. Avoid filler and avoid repeating the raw data back verbatim.\n\n${buildContext()}`;
+
+  try{
+    const reply = await callClaudeAPI(systemPrompt, text);
+    state.chat.pop();
+    state.chat.push({role:'ai', text: reply || 'No response received. Please try again.'});
+  }catch(e){
+    console.error(e);
+    state.chat.pop();
+    state.chat.push({role:'ai', text: explainFetchError(e)});
+  }
+  renderAssistant();
+}
+
+/* ================= FORMS ================= */
+function jobFormHtml(job, isEdit){
+  job = job || {jobNumber:'', customer:'', description:'', dueDate: todayISO(), priority:'Medium', assignedAssembler:'', assemblyStatus:'ready', percentComplete:0};
+  const customers = distinctValues('customer', state.jobs);
+  const assemblers = distinctValues('assignedAssembler', state.jobs, ['D. Reyes','M. Okafor','J. Whitfield']);
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">${isEdit?'Edit Job':'Add Job'} <button class="modal-close" data-close-overlay>&times;</button></div>
+    ${(!isEdit && job.billOfMaterials && job.billOfMaterials.length) ? `<div class="bp-file-chip">&#128208; ${job.billOfMaterials.length} components read from the blueprint -- review the fields below, then save.</div>` : ''}
+    <form id="jobForm">
+      <div class="field"><label>Job Number</label><input required name="jobNumber" value="${escapeHtml(job.jobNumber)}" ${isEdit?'readonly':''}></div>
+      <div class="field"><label>Customer</label><input required name="customer" list="customerList" value="${escapeHtml(job.customer)}"></div>
+      <div class="field"><label>Description</label><textarea name="description">${escapeHtml(job.description)}</textarea></div>
+      <div class="field"><label>Due Date</label><input required type="date" name="dueDate" value="${job.dueDate}"></div>
+      <div class="field"><label>Priority</label>
+        <select name="priority">
+          ${['High','Medium','Low'].map(p=>`<option value="${p}" ${job.priority===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Assembly Status</label>
+        <select name="assemblyStatus">
+          ${STAGES.map(s=>`<option value="${s.id}" ${job.assemblyStatus===s.id?'selected':''}>${s.label}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Assigned Assembler</label><input name="assignedAssembler" list="assemblerList" value="${escapeHtml(job.assignedAssembler)}" placeholder="Unassigned"></div>
+      <div class="field">
+        <label id="pctLabel">Percent Complete (${job.percentComplete||0}%)</label>
+        <input type="range" min="0" max="100" step="5" name="percentComplete" value="${job.percentComplete||0}"
+          oninput="document.getElementById('pctLabel').textContent='Percent Complete ('+this.value+'%)'">
+        <div class="preset-row">
+          ${[0,25,50,75,100].map(v=>`<button type="button" onclick="const r=this.closest('form').querySelector('[name=percentComplete]'); r.value=${v}; document.getElementById('pctLabel').textContent='Percent Complete (${v}%)';">${v}%</button>`).join('')}
+        </div>
+      </div>
+      <div class="fab-row">
+        <button type="submit" class="btn btn-primary btn-block">${isEdit?'Save Changes':'Add Job'}</button>
+      </div>
+      ${isEdit ? `<div class="fab-row"><button type="button" class="btn btn-danger btn-block" data-action="delete-job" data-id="${job.id}">Delete Job</button></div>` : ''}
+    </form>
+    ${datalistHtml('customerList', customers)}
+    ${datalistHtml('assemblerList', assemblers)}
+  </div>`;
+}
+function openJobForm(jobId, prefill){
+  const job = jobId ? state.jobs.find(j=>j.id===jobId) : null;
+  const formData = job || Object.assign({jobNumber:'', customer:'', description:'', dueDate: todayISO(), priority:'Medium', assignedAssembler:'', assemblyStatus:'ready', percentComplete:0}, prefill||{});
+  openModal(jobFormHtml(formData, !!job));
+  document.getElementById('jobForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const vals = Object.fromEntries(fd.entries());
+    vals.percentComplete = parseInt(vals.percentComplete,10)||0;
+    if(job){
+      Object.assign(job, vals);
+      logActivity('Job edited', `${vals.jobNumber} (${vals.customer})`);
+    }else{
+      if(state.jobs.some(j=>j.jobNumber===vals.jobNumber)){
+        showToast('Job number already exists'); return;
+      }
+      const newJob = {id:(prefill && prefill.id) || uid('job'), ...vals};
+      const hadExtraction = !!(prefill && ((prefill.billOfMaterials && prefill.billOfMaterials.length) || prefill.hasBlueprintImage));
+      if(prefill && prefill.billOfMaterials && prefill.billOfMaterials.length){
+        newJob.billOfMaterials = prefill.billOfMaterials;
+      }
+      if(prefill && prefill.geometry){
+        newJob.geometry = prefill.geometry;
+      }
+      if(prefill && prefill.spec){
+        newJob.spec = prefill.spec;
+        newJob.validation = prefill.validation || null;
+      }
+      if(prefill && prefill.hasBlueprintImage){
+        newJob.hasBlueprintImage = true;
+      }
+      if(hadExtraction){
+        newJob.blueprintExtractedAt = prefill.blueprintExtractedAt || new Date().toISOString();
+      }
+      state.jobs.push(newJob);
+      logActivity('Job created', `${vals.jobNumber} (${vals.customer})`);
+    }
+    persistJobs();
+    closeModal();
+    showToast('Job saved');
+    render();
+  });
+}
+
+function blockerFormHtml(prefillJobNumber){
+  const depts = distinctValues('responsibleDepartment', state.blockers, ['Purchasing','Engineering','QC','Maintenance','Shipping','Production']);
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">Report Blocker <button class="modal-close" data-close-overlay>&times;</button></div>
+    <form id="blockerForm">
+      <div class="field"><label>Job Number</label>
+        <select name="jobNumber" required>
+          ${state.jobs.map(j=>`<option value="${escapeHtml(j.jobNumber)}" ${j.jobNumber===prefillJobNumber?'selected':''}>${escapeHtml(j.jobNumber)} -- ${escapeHtml(j.customer)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Issue Description</label><textarea required name="issueDescription" placeholder="What's blocking this job?"></textarea></div>
+      <div class="field"><label>Responsible Department</label><input required name="responsibleDepartment" list="deptList" placeholder="e.g. Purchasing, Engineering, QC"></div>
+      <div class="field"><label>Date Reported</label><input required type="date" name="dateReported" value="${todayISO()}"></div>
+      <div class="field"><label>Severity</label>
+        <select name="severity">
+          ${['Critical','High','Medium','Low'].map(s=>`<option value="${s}">${s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Status</label>
+        <select name="status">
+          ${['Open','In Progress','Resolved'].map(s=>`<option value="${s}">${s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fab-row"><button type="submit" class="btn btn-primary btn-block">Report Blocker</button></div>
+    </form>
+    ${datalistHtml('deptList', depts)}
+  </div>`;
+}
+function openBlockerForm(prefillJobNumber){
+  openModal(blockerFormHtml(prefillJobNumber));
+  document.getElementById('blockerForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const vals = Object.fromEntries(fd.entries());
+    state.blockers.push({id:uid('blk'), reportedBy:getUserName(), ...vals});
+    persistBlockers();
+    logActivity('Blocker reported', `${vals.jobNumber}: ${vals.severity} -- ${vals.issueDescription}`);
+    closeModal();
+    showToast('Blocker reported');
+    render();
+  });
+}
+
+function noteFormHtml(prefillJobNumber){
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">Add Daily Note <button class="modal-close" data-close-overlay>&times;</button></div>
+    <form id="noteForm">
+      <div class="field"><label>Date</label><input required type="date" name="date" value="${todayISO()}"></div>
+      <div class="field"><label>Job Number</label>
+        <select name="jobNumber">
+          <option value="">General / Shop-wide</option>
+          ${state.jobs.map(j=>`<option value="${escapeHtml(j.jobNumber)}" ${j.jobNumber===prefillJobNumber?'selected':''}>${escapeHtml(j.jobNumber)} -- ${escapeHtml(j.customer)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Progress Notes</label><textarea name="progressNotes" placeholder="What got done?"></textarea></div>
+      <div class="field"><label>Issues</label><textarea name="issues" placeholder="Anything that came up?"></textarea></div>
+      <div class="field"><label>Next Steps</label><textarea name="nextSteps" placeholder="What's next?"></textarea></div>
+      <div class="fab-row"><button type="submit" class="btn btn-primary btn-block">Save Note</button></div>
+    </form>
+  </div>`;
+}
+function openNoteForm(prefillJobNumber){
+  openModal(noteFormHtml(prefillJobNumber));
+  document.getElementById('noteForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const vals = Object.fromEntries(fd.entries());
+    const entries = [];
+    if(vals.progressNotes && vals.progressNotes.trim()) entries.push({noteType:'Progress', notes:vals.progressNotes.trim()});
+    if(vals.issues && vals.issues.trim()) entries.push({noteType:'Issue', notes:vals.issues.trim()});
+    if(vals.nextSteps && vals.nextSteps.trim()) entries.push({noteType:'NextSteps', notes:vals.nextSteps.trim()});
+    if(!entries.length){ showToast('Enter at least one note field'); return; }
+    entries.forEach(en=>{
+      state.notes.push({id:uid('note'), date:vals.date, jobNumber:vals.jobNumber, author:getUserName(), ...en});
+    });
+    persistNotes();
+    logActivity('Note added', `${vals.jobNumber || 'General'}: ${entries.map(e=>e.noteType).join(', ')}`);
+    closeModal();
+    showToast('Note saved');
+    render();
+  });
+}
+
+/* ================= SETTINGS ================= */
+function settingsModalHtml(){
+  const key = getApiKey();
+  const masked = key ? (key.slice(0,7) + '...' + key.slice(-4)) : '';
+  const orKey = getOpenRouterKey();
+  const orMasked = orKey ? (orKey.slice(0,8) + '...' + orKey.slice(-4)) : '';
+  const orModel = getOpenRouterModel();
+  const provider = getAiProvider();
+  const uname = getUserName();
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">Settings <button class="modal-close" data-close-overlay>&times;</button></div>
+
+    <div class="section-title" style="margin-top:0;">Your Name</div>
+    <div class="bp-hint" style="margin-bottom:10px;">
+      Shown on notes, blockers, and stage moves so it's clear who did what. Not a login -- no password, nothing
+      verified.
+    </div>
+    ${uname ? `<div class="bp-file-chip">Currently: ${escapeHtml(uname)}</div>` : ''}
+    <form id="nameFormSettings">
+      <div class="field"><label>Your Name</label><input name="username" placeholder="e.g. D. Reyes" autocomplete="off" value="${escapeHtml(uname)}"></div>
+      <div class="fab-row"><button type="submit" class="btn btn-primary btn-block">Save Name</button></div>
+    </form>
+
+    <div class="section-title">Shared Data</div>
+    <div class="bp-hint" style="margin-bottom:10px;">
+      Jobs, blockers, and notes are stored centrally and shared live across every device automatically -- there's
+      nothing to connect or configure here. ${supabaseReady() ? 'Connected.' : 'Not connected -- if data is not loading, this app needs its server-side connection checked (contact whoever set this up).'}
+    </div>
+
+    <div class="section-title">AI Provider</div>
+    <div class="bp-hint" style="margin-bottom:10px;">
+      Powers the AI Assistant and Blueprint extraction. Google Gemini is free and the default; OpenRouter is a
+      backup you can switch to if Gemini's free-tier limit gets hit, or to try a different model for reading
+      blueprints. Only the selected provider is actually used -- the other key can sit unused.
+    </div>
+    <div class="chip-row" id="providerChips" style="margin-bottom:14px;">
+      <button class="chip ${provider==='gemini'?'active':''}" data-action="set-ai-provider" data-provider="gemini">Google Gemini</button>
+      <button class="chip ${provider==='openrouter'?'active':''}" data-action="set-ai-provider" data-provider="openrouter">OpenRouter</button>
+    </div>
+
+    <div id="geminiSection" ${provider!=='gemini'?'class="hidden"':''}>
+      <div class="section-title" style="margin-top:0;">Google Gemini API Key</div>
+      <div class="bp-hint" style="margin-bottom:10px;">
+        Get one at <b>aistudio.google.com</b> (Get API Key, no credit card needed). The key is stored only in this
+        browser and sent directly to Google with each request. The free tier has a request-per-minute cap, so if
+        you hit a rate-limit error during a busy stretch, just wait a minute and try again -- or switch to
+        OpenRouter above as a backup.
+      </div>
+      ${key ? `<div class="bp-file-chip">Current key: ${escapeHtml(masked)}</div>` : ''}
+      <form id="apiKeyForm">
+        <div class="field">
+          <label>API Key</label>
+          <input type="text" name="apiKey" placeholder="AIzaSy..." autocomplete="off" spellcheck="false" value="">
+        </div>
+        <div class="fab-row">
+          <button type="submit" class="btn btn-primary btn-block">Save Key</button>
+        </div>
+      </form>
+      ${key ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-api-key">Remove Saved Key</button></div>` : ''}
+    </div>
+
+    <div id="openrouterSection" ${provider!=='openrouter'?'class="hidden"':''}>
+      <div class="section-title" style="margin-top:0;">OpenRouter API Key</div>
+      <div class="bp-hint" style="margin-bottom:10px;">
+        Get a key at <b>openrouter.ai/keys</b> (some usage is free; most models are pay-as-you-go, usually cents
+        per scan). The key is stored only in this browser and sent directly to OpenRouter with each request.
+      </div>
+      ${orKey ? `<div class="bp-file-chip">Current key: ${escapeHtml(orMasked)}</div>` : ''}
+      <form id="openrouterKeyForm">
+        <div class="field">
+          <label>API Key</label>
+          <input type="text" name="openrouterKey" placeholder="sk-or-v1-..." autocomplete="off" spellcheck="false" value="">
+        </div>
+        <div class="field">
+          <label>Model</label>
+          <input type="text" name="openrouterModel" placeholder="google/gemini-2.0-flash-001" value="${escapeHtml(orModel)}">
+          <div class="bp-hint">Must support image input for Blueprint extraction to work. Good options: <b>google/gemini-2.0-flash-001</b>, <b>anthropic/claude-3.5-sonnet</b>, <b>openai/gpt-4o</b>. See openrouter.ai/models for more.</div>
+        </div>
+        <div class="fab-row">
+          <button type="submit" class="btn btn-primary btn-block">Save</button>
+        </div>
+      </form>
+      ${orKey ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-openrouter-key">Remove Saved Key</button></div>` : ''}
+    </div>
+  </div>`;
+}
+function openSettingsModal(){
+  openModal(settingsModalHtml());
+  const nameForm = document.getElementById('nameFormSettings');
+  if(nameForm){
+    nameForm.addEventListener('submit', e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const name = (fd.get('username')||'').trim();
+      setUserName(name);
+      closeModal();
+      showToast(name ? `Name saved: ${name}` : 'Name cleared');
+    });
+  }
+  const form = document.getElementById('apiKeyForm');
+  if(form){
+    form.addEventListener('submit', e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const key = (fd.get('apiKey')||'').trim();
+      if(!key){ showToast('Enter a key first'); return; }
+      setApiKey(key);
+      closeModal();
+      showToast('API key saved to this browser');
+    });
+  }
+  const orForm = document.getElementById('openrouterKeyForm');
+  if(orForm){
+    orForm.addEventListener('submit', e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const key = (fd.get('openrouterKey')||'').trim();
+      const model = (fd.get('openrouterModel')||'').trim();
+      if(!key){ showToast('Enter a key first'); return; }
+      setOpenRouterKey(key);
+      if(model) setOpenRouterModel(model);
+      closeModal();
+      showToast('OpenRouter key saved to this browser');
+    });
+  }
+}
+function nameModalHtml(){
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">Who's Using This?</div>
+    <div class="bp-hint" style="margin-bottom:10px;">
+      Enter your name to continue -- it'll be attached to notes, blockers, stage moves, and everything else you do
+      in the app, so there's a clear record of who did what. No password, nothing else to remember. You can correct
+      it later in Settings if needed.
+    </div>
+    <form id="nameForm">
+      <div class="field"><label>Your Name</label><input name="username" placeholder="e.g. D. Reyes" autocomplete="off" required></div>
+      <div class="fab-row"><button type="submit" class="btn btn-primary btn-block">Continue</button></div>
+    </form>
+  </div>`;
+}
+function ensureUserName(){
+  if(getUserName()) return;
+  // Deliberately not using openModal() here -- this overlay has no
+  // data-close-overlay attribute, so tapping outside it can't dismiss it.
+  // Entering a name is a required first step, not a skippable one.
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `<div class="modal-overlay">${nameModalHtml()}</div>`;
+  const form = document.getElementById('nameForm');
+  form.addEventListener('submit', e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const name = (fd.get('username')||'').trim();
+    if(!name){ showToast('Please enter your name to continue'); return; }
+    setUserName(name);
+    root.innerHTML = '';
+    showToast(`Welcome, ${name}`);
+  });
+  setTimeout(()=>{ const f = document.querySelector('#nameForm input'); if(f) f.focus(); }, 50);
+}
+
+/* ================= BLUEPRINT EXTRACTION ================= */
+function fileToBase64Raw(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+// Downscales large photos before sending, so uploads stay fast on shop-floor wifi/cell.
+function fileToImageBase64Resized(file, maxDim, quality){
+  maxDim = maxDim || 1400; quality = quality || 0.78;
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let width = img.width, height = img.height;
+        if(width > maxDim || height > maxDim){
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width*scale); height = Math.round(height*scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,width,height);
+        ctx.drawImage(img,0,0,width,height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve({base64: dataUrl.split(',')[1], mime:'image/jpeg'});
+      };
+      img.onerror = ()=>reject(new Error('Could not read that image file.'));
+      img.src = reader.result;
+    };
+    reader.onerror = ()=>reject(new Error('Could not read that file.'));
+    reader.readAsDataURL(file);
+  });
+}
+// PDFs are rendered to images with pdf.js rather than uploaded raw -- this is
+// far more reliable across drawing exports and keeps the payload small.
+let pdfjsReadyPromise = null;
+function ensurePdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(pdfjsReadyPromise) return pdfjsReadyPromise;
+  pdfjsReadyPromise = new Promise((resolve, reject)=>{
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = ()=>{
+      try{
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(window.pdfjsLib);
+      }catch(e){ reject(e); }
+    };
+    script.onerror = ()=> reject(new Error('Could not load the PDF reader. Check your connection and try again, or upload a photo/image instead.'));
+    document.head.appendChild(script);
+  });
+  return pdfjsReadyPromise;
+}
+async function pdfFileToImages(file, maxPages, maxDim, quality){
+  maxPages = maxPages || 10; maxDim = maxDim || 1700; quality = quality || 0.82;
+  const pdfjsLib = await ensurePdfJs();
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const numPages = Math.min(pdf.numPages, maxPages);
+  const images = [];
+  for(let i=1; i<=numPages; i++){
+    const page = await pdf.getPage(i);
+    const baseViewport = page.getViewport({scale:1});
+    const scale = Math.max(0.5, Math.min(maxDim/baseViewport.width, maxDim/baseViewport.height, 3));
+    const viewport = page.getViewport({scale});
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    await page.render({canvasContext: ctx, viewport}).promise;
+    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+    images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg'});
+  }
+  return images;
+}
+function stageGateModalHtml(job){
+  const stageId = job.assemblyStatus;
+  const stepIdxs = STAGE_PROCEDURE[stageId] || [];
+  const idx = STAGES.findIndex(s=>s.id===stageId);
+  const nextStage = STAGES[idx+1];
+  const checked = job.checklist || {};
+  const { done, total } = stageChecklistProgress(job, stageId);
+  const allDone = total>0 && done===total;
+  const stepsHtml = stepIdxs.map(si=>{
+    const step = PROCEDURE[si];
+    const stepDone = step.items.filter((_,ii)=>checked[si+'-'+ii]).length;
+    const itemsHtml = step.items.map((text, ii)=>{
+      const key = si+'-'+ii;
+      const isDone = !!checked[key];
+      return `
+      <div class="checklist-item ${isDone?'done':''}" data-action="toggle-stage-checklist-item" data-id="${job.id}" data-key="${key}">
+        <div class="checklist-check">${isDone ? '&#10003;' : ''}</div>
+        <div class="checklist-text">${escapeHtml(text)}</div>
+      </div>`;
+    }).join('');
+    return `
+    <div class="checklist-step">
+      <div class="checklist-step-head"><span>${escapeHtml(step.title)}</span><span class="checklist-badge ${stepDone===step.items.length?'complete':''}">${stepDone}/${step.items.length}</span></div>
+      ${itemsHtml}
+    </div>`;
+  }).join('');
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">${escapeHtml(stageLabel(stageId))} -- ${escapeHtml(job.jobNumber)} <button class="modal-close" data-close-overlay>&times;</button></div>
+    <div class="checklist-progress">
+      <div class="cp-label"><span>Before Advancing</span><span>${done}/${total}</span></div>
+      <div class="gauge-track"><div class="gauge-fill" style="width:${total?Math.round(done/total*100):0}%;"></div></div>
+    </div>
+    ${stepsHtml}
+    <div class="fab-row">
+      <button class="btn btn-primary btn-block" data-action="confirm-advance" data-id="${job.id}" ${allDone?'':'disabled'}>
+        ${allDone ? `Confirm &amp; Advance &#9656; ${nextStage?escapeHtml(nextStage.label):''}` : `Complete all steps to advance`}
+      </button>
+    </div>
+  </div>`;
+}
+function openStageGateModal(jobId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  openModal(stageGateModalHtml(job), ()=>{
+    const j = state.jobs.find(x=>x.id===jobId);
+    return j ? stageGateModalHtml(j) : '';
+  });
+}
+function toggleStageChecklistItem(jobId, key){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  if(!job.checklist) job.checklist = {};
+  job.checklist[key] = !job.checklist[key];
+  persistJobs();
+  logActivity(job.checklist[key] ? 'Checklist item done' : 'Checklist item un-done',
+    `${job.jobNumber}: ${checklistItemLabel(key)}`);
+  // Re-render whichever modal is open (stage gate or job detail) so the
+  // checkmark updates in place without closing it.
+  refreshOpenModal();
+}
+// Tapping Advance: if this stage has checklist items and they're not all
+// done yet, open the gate modal instead of moving the job. Stages with no
+// checklist items (or already fully checked) advance immediately.
+function attemptAdvance(jobId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  const idx = STAGES.findIndex(s=>s.id===job.assemblyStatus);
+  const nextStage = STAGES[idx+1];
+  if(!nextStage) return;
+  const { done, total } = stageChecklistProgress(job, job.assemblyStatus);
+  if(total===0 || done===total){
+    moveJobToStage(job.id, nextStage.id);
+  }else{
+    openStageGateModal(job.id);
+  }
+}
+function confirmAdvance(jobId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  const idx = STAGES.findIndex(s=>s.id===job.assemblyStatus);
+  const nextStage = STAGES[idx+1];
+  if(!nextStage) return;
+  closeModal();
+  moveJobToStage(job.id, nextStage.id);
+}
+/* ---------------- Component groups + 3D schematic ----------------
+   The AI classifies each extracted component by where it gets installed
+   ("trough", "screw", "drive", "bearings", "tail"). That drives both the
+   grouped parts list and the colour coding in the 3D view, so a part in
+   the list and the thing on screen are visibly the same subassembly. */
+const STAGE_META = {
+  trough:   { label:'Trough',        color:'#5aa3d8' },
+  screw:    { label:'Screw & Shafts',color:'#f5b400' },
+  bearings: { label:'Hanger Bearings',color:'#4fae57' },
+  drive:    { label:'Drive End',     color:'#e34b3a' },
+  tail:     { label:'Tail End',      color:'#b07fd0' },
+  other:    { label:'Other',         color:'#98a1a9' }
+};
+const STAGE_ORDER = ['trough','screw','bearings','drive','tail','other'];
+
+function bomListHtml(job){
+  if(!job.billOfMaterials || !job.billOfMaterials.length) return '';
+  const groups = {};
+  job.billOfMaterials.forEach(c=>{
+    const s = STAGE_META[c.stage] ? c.stage : 'other';
+    (groups[s] = groups[s] || []).push(c);
+  });
+  const sections = STAGE_ORDER.filter(s=>groups[s] && groups[s].length).map(s=>{
+    const meta = STAGE_META[s];
+    const rows = groups[s].map(c=>`
+      <div class="bom-row">
+        <div class="bom-item">${escapeHtml(c.item)}</div>
+        ${c.specification ? `<div class="bom-spec">${escapeHtml(c.specification)}</div>` : ''}
+        <div class="bom-qty">Qty: ${c.quantity!=null ? escapeHtml(String(c.quantity)) : '--'}</div>
+      </div>`).join('');
+    return `
+      <div class="bom-group-head"><span class="model-swatch" style="background:${meta.color};"></span>${escapeHtml(meta.label)} <span class="checklist-badge">${groups[s].length}</span></div>
+      <div class="bom-list">${rows}</div>`;
+  }).join('');
+  return `
+  <div class="section-title" style="margin-top:16px;">Extracted Hardware &amp; Components <span class="count-badge">${job.billOfMaterials.length}</span></div>
+  ${job.blueprintExtractedAt ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Last extracted ${fmtDate(job.blueprintExtractedAt.slice(0,10))}</div>` : ''}
+  ${sections}`;
+}
+
+// A proportional schematic built from the dimensions read off the drawing --
+// NOT a CAD model. It is accurate to the numbers extracted (diameter,
+// length, incline, hanger count) and nothing more, which is enough to
+// orient someone on the floor without pretending to be engineering data.
+function dimRowHtml(label, d, extra){
+  const flag = confLabel(d);
+  const cls = { 'HIGH':'cf-high','MEDIUM':'cf-med','LOW':'cf-low','INFERRED':'cf-inf','NOT FOUND':'cf-none','CONFLICT':'cf-conflict' }[flag];
+  const val = (d && d.status==='ok' && d.value!=null)
+    ? `${d.value}${d.unit && d.unit!=='in' ? ' '+d.unit : '"'}`
+    : '--';
+  const src = (d && d.status==='ok' && d.source_page!=null)
+    ? `p.${d.source_page}${d.source ? ' &middot; '+escapeHtml(d.source) : ''}`
+    : (d && d.status!=='ok' ? 'not on drawing' : '');
+  return `
+  <div class="eng-row">
+    <div class="eng-label">${escapeHtml(label)}</div>
+    <div class="eng-val">${escapeHtml(val)}${extra?` <span class="eng-extra">${escapeHtml(extra)}</span>`:''}</div>
+    <div class="eng-meta"><span class="cf ${cls}">${flag}</span>${src?`<span class="eng-src">${src}</span>`:''}</div>
+  </div>`;
+}
+
+function engineeringPanelHtml(job){
+  const spec = job.spec;
+  if(!spec) return '';
+  const o = spec.overall||{}, tr = spec.trough||{}, sc = spec.screw||{}, hg = spec.hangers||{}, dr = spec.drive||{}, tl = spec.tail||{}, fr = spec.frame||{};
+  const isScrew = spec.conveyorType !== 'belt';
+  const v = job.validation || validateSpec(spec);
+
+  const pages = (spec.pages_analyzed||[]).map(p=>`p.${p.page} ${escapeHtml(p.view||'')}`).join(' &middot; ');
+
+  const valHtml = v.checks.length ? v.checks.map(ck=>{
+    const cls = ck.level==='error'?'vc-error':ck.level==='conflict'?'vc-conflict':'vc-warn';
+    return `<div class="val-line ${cls}">${escapeHtml(ck.message)}</div>`;
+  }).join('') : `<div class="val-line vc-ok">All validation checks passed.</div>`;
+
+  let sections = `
+    <div class="eng-group">OVERALL</div>
+    ${dimRowHtml('Length', o.overall_length)}
+    ${dimRowHtml('Width', o.overall_width)}
+    ${dimRowHtml('Height', o.overall_height)}
+    ${dimRowHtml('Incline', o.incline_angle)}
+    ${dimRowHtml('Elevation', o.elevation)}`;
+
+  if(isScrew){
+    sections += `
+    <div class="eng-group">TROUGH</div>
+    ${dimRowHtml('Trough width', tr.trough_width)}
+    ${dimRowHtml('Trough depth', tr.trough_depth)}
+    ${dimRowHtml('Gauge', tr.trough_gauge)}
+    ${dimRowHtml('Flange height', tr.flange_height)}
+    ${tr.style?`<div class="eng-row"><div class="eng-label">Style</div><div class="eng-val">${escapeHtml(tr.style)}</div><div class="eng-meta"></div></div>`:''}
+    ${tr.material?`<div class="eng-row"><div class="eng-label">Material</div><div class="eng-val">${escapeHtml(tr.material)}</div><div class="eng-meta"></div></div>`:''}
+
+    <div class="eng-group">SCREW</div>
+    ${dimRowHtml('Diameter', sc.screw_diameter)}
+    ${dimRowHtml('Pitch', sc.screw_pitch)}
+    ${dimRowHtml('Shaft dia', sc.shaft_diameter)}
+    ${dimRowHtml('Flight thk', sc.flight_thickness)}
+    <div class="eng-row"><div class="eng-label">Shaftless</div><div class="eng-val">${sc.shaftless?'Yes':'No'}</div><div class="eng-meta"></div></div>
+
+    <div class="eng-group">HANGER BEARINGS</div>
+    <div class="eng-row"><div class="eng-label">Count</div><div class="eng-val">${hg.count!=null?escapeHtml(String(hg.count)):'--'}</div><div class="eng-meta"><span class="cf ${hg.count!=null?'cf-high':'cf-none'}">${hg.count!=null?'HIGH':'NOT FOUND'}</span></div></div>
+    ${dimRowHtml('Spacing', hg.hanger_spacing)}
+    ${dimRowHtml('Bearing bore', hg.bearing_bore)}
+    ${hg.bearing_type?`<div class="eng-row"><div class="eng-label">Bearing type</div><div class="eng-val">${escapeHtml(hg.bearing_type)}</div><div class="eng-meta"></div></div>`:''}
+
+    <div class="eng-group">DRIVE END</div>
+    <div class="eng-row"><div class="eng-label">Location</div><div class="eng-val">${escapeHtml(dr.location||'--')}</div><div class="eng-meta"></div></div>
+    ${dimRowHtml('Sprocket dia', dr.sprocket_diameter)}
+    ${dimRowHtml('Shaft dia', dr.shaft_diameter)}
+    ${dimRowHtml('Bearing bore', dr.bearing_bore)}
+    ${dr.motor_hp?`<div class="eng-row"><div class="eng-label">Motor</div><div class="eng-val">${escapeHtml(dr.motor_hp)}</div><div class="eng-meta"></div></div>`:''}
+    ${dr.gearbox?`<div class="eng-row"><div class="eng-label">Gearbox</div><div class="eng-val">${escapeHtml(dr.gearbox)}</div><div class="eng-meta"></div></div>`:''}
+
+    <div class="eng-group">TAIL END</div>
+    ${dimRowHtml('Shaft dia', tl.shaft_diameter)}
+    ${dimRowHtml('Shaft length', tl.shaft_length)}
+    ${dimRowHtml('Bearing bore', tl.bearing_bore)}`;
+  }else{
+    const hd = spec.head||{}, be = spec.belt||{}, id = spec.idlers||{};
+    sections += `
+    <div class="eng-group">BELT</div>
+    ${dimRowHtml('Belt width', be.belt_width)}
+    ${dimRowHtml('Belt thickness', be.belt_thickness)}
+    <div class="eng-group">HEAD</div>
+    ${dimRowHtml('Pulley dia', (hd.pulley||{}).pulley_diameter)}
+    ${dimRowHtml('Pulley width', (hd.pulley||{}).pulley_width)}
+    ${dimRowHtml('Shaft dia', hd.shaft_diameter)}
+    <div class="eng-group">IDLERS</div>
+    ${dimRowHtml('Roller dia', id.roller_diameter)}
+    ${dimRowHtml('Roller spacing', id.roller_spacing)}`;
+  }
+
+  sections += `
+    <div class="eng-group">FRAME</div>
+    ${dimRowHtml('Frame height', fr.frame_height)}
+    ${dimRowHtml('Side rail', fr.side_rail_height)}
+    ${dimRowHtml('Leg spacing', fr.leg_spacing)}`;
+
+  return `
+  <div class="section-title" style="margin-top:16px;">Engineering Data <span class="count-badge">${escapeHtml(spec.conveyorType)}</span></div>
+  ${pages?`<div class="bp-hint" style="margin-bottom:8px;">Pages analyzed: ${pages}</div>`:''}
+  <div class="val-box ${v.errors?'val-bad':v.conflicts?'val-conflict':v.warnings?'val-warn':'val-ok'}">
+    <div class="val-head">Validation${v.errors?` -- ${v.errors} error${v.errors>1?'s':''}`:''}${v.conflicts?` -- ${v.conflicts} conflict${v.conflicts>1?'s':''}`:''}${v.warnings?` -- ${v.warnings} warning${v.warnings>1?'s':''}`:''}</div>
+    ${valHtml}
+  </div>
+  <div class="eng-table">${sections}</div>
+  ${spec.notes?`<div class="bp-hint" style="margin-top:8px;">${escapeHtml(spec.notes)}</div>`:''}
+  <div class="fab-row"><button class="btn btn-outline btn-block" data-action="show-verification" data-id="${job.id}">Verification Report</button></div>`;
+}
+
+// Compares what the drawing said against what the generator actually
+// built. Any mismatch means the pipeline is wrong -- not the model.
+function verificationReportHtml(job){
+  const rec = lastBuildRecord;
+  const spec = job.spec;
+  if(!spec) return `<div class="modal-sheet"><div class="modal-title">Verification <button class="modal-close" data-close-overlay>&times;</button></div><div class="bp-hint">No specification.</div></div>`;
+  if(!rec) return `<div class="modal-sheet"><div class="modal-title">Verification <button class="modal-close" data-close-overlay>&times;</button></div><div class="bp-hint">Open the 3D view first so there is a generated model to compare against.</div></div>`;
+  const o = spec.overall||{}, tr = spec.trough||{}, sc = spec.screw||{}, fr = spec.frame||{};
+  const rows = [];
+  const cmp = (label, dim, builtVal) => {
+    const bp = dimIn(dim);
+    if(bp == null && builtVal == null) return;
+    if(bp == null){ rows.push({label, bp:'--', gen:builtVal!=null?builtVal.toFixed(1)+'"':'--', diff:'--', status:'NO SOURCE'}); return; }
+    if(builtVal == null){ rows.push({label, bp:bp.toFixed(1)+'"', gen:'not built', diff:'--', status:'OMITTED'}); return; }
+    const diff = Math.abs(bp-builtVal);
+    rows.push({label, bp:bp.toFixed(1)+'"', gen:builtVal.toFixed(1)+'"', diff:diff.toFixed(2), status: diff<0.01?'PASS':'FAIL'});
+  };
+  cmp('Overall length', o.overall_length, rec.built.overall_length_in);
+  cmp('Trough width', tr.trough_width, rec.built.trough_width_in);
+  cmp('Screw diameter', sc.screw_diameter, rec.built.screw_diameter_in);
+  cmp('Screw pitch', sc.screw_pitch, rec.built.screw_pitch_in);
+  cmp('Frame width', fr.frame_width, rec.built.frame_width_in);
+  const incBp = dimIn(o.incline_angle)!=null ? o.incline_angle.value : null;
+  if(incBp!=null || rec.built.incline_deg!=null){
+    const d = Math.abs((incBp||0)-(rec.built.incline_deg||0));
+    rows.push({label:'Incline angle', bp:(incBp!=null?incBp+'deg':'--'), gen:(rec.built.incline_deg||0)+'deg', diff:d.toFixed(2), status:d<0.01?'PASS':'FAIL'});
+  }
+  const hgCount = (spec.hangers&&spec.hangers.count!=null)?Number(spec.hangers.count):null;
+  if(hgCount!=null || rec.built.hanger_count!=null){
+    const g = rec.built.hanger_count!=null?rec.built.hanger_count:null;
+    const d = (hgCount!=null&&g!=null)?Math.abs(hgCount-g):null;
+    rows.push({label:'Hanger count', bp:hgCount!=null?String(hgCount):'--', gen:g!=null?String(g):'not built',
+               diff:d!=null?String(d):'--', status: d===0?'PASS':(hgCount==null?'NO SOURCE':(g==null?'OMITTED':'FAIL'))});
+  }
+  const body = rows.length ? rows.map(r=>`
+    <div class="ver-row">
+      <div class="ver-label">${escapeHtml(r.label)}</div>
+      <div class="ver-cells">
+        <span title="blueprint">${escapeHtml(r.bp)}</span>
+        <span title="generated">${escapeHtml(r.gen)}</span>
+        <span title="difference">${escapeHtml(r.diff)}</span>
+        <span class="ver-status vs-${r.status.toLowerCase().replace(/ /g,'-')}">${escapeHtml(r.status)}</span>
+      </div>
+    </div>`).join('') : `<div class="bp-hint">Nothing comparable was extracted.</div>`;
+
+  const approxHtml = (rec.approx&&rec.approx.length)
+    ? `<div class="section-title">Approximated / Not Available</div>` +
+      rec.approx.map(a=>`<div class="val-line vc-warn">${escapeHtml(a)}</div>`).join('')
+    : `<div class="val-line vc-ok">Nothing was approximated -- every element traces to a callout.</div>`;
+
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">Verification -- ${escapeHtml(job.jobNumber)} <button class="modal-close" data-close-overlay>&times;</button></div>
+    <div class="bp-hint" style="margin-bottom:10px;">Blueprint value vs. what the geometry generator actually built. A FAIL means the pipeline is wrong -- the fix belongs in extraction or generation, never in nudging the model.</div>
+    <div class="ver-head"><div class="ver-label">Dimension</div><div class="ver-cells"><span>Blueprint</span><span>Generated</span><span>Diff</span><span>Status</span></div></div>
+    ${body}
+    ${approxHtml}
+  </div>`;
+}
+
+function modelSectionHtml(job){
+  const spec = job.spec;
+  if(!spec) return '';
+  const legend = STAGE_ORDER.filter(s=>s!=='other').map(s=>`
+    <button class="model-chip ${hiddenModelParts[s]?'dim':''}" data-action="toggle-model-part" data-part="${s}">
+      <span class="model-swatch" style="background:${STAGE_META[s].color};"></span>${escapeHtml(STAGE_META[s].label)}
+    </button>`).join('');
+  return `
+  <div class="section-title" style="margin-top:16px;">3D Model</div>
+  <div class="chip-row" style="margin-bottom:8px;">
+    <button class="chip ${modelMode==='engineering'?'active':''}" data-action="set-model-mode" data-mode="engineering">Engineering</button>
+    <button class="chip ${modelMode==='assembly'?'active':''}" data-action="set-model-mode" data-mode="assembly">Assembly</button>
+    <button class="chip ${showDimensions?'active':''}" data-action="toggle-dimensions">Dimensions</button>
+  </div>
+  <div class="model-stage" id="modelStage"></div>
+  <div class="model-legend">${legend}</div>
+  <div class="bp-hint" style="margin-bottom:10px;">
+    Drag to rotate, pinch to zoom. Geometry is generated from the extracted dimensions only -- anything the drawing
+    did not specify is omitted or shown as a marked placeholder, never estimated. Check the Verification Report for
+    exactly what was built vs. what the drawing said.
+  </div>`;
+}
+
+let modelState = null; // { renderer, scene, camera, groups, raf }
+const hiddenModelParts = {};
+
+function disposeModel(){
+  if(!modelState) return;
+  cancelAnimationFrame(modelState.raf);
+  if(modelState.renderer){
+    modelState.renderer.dispose();
+    const el = modelState.renderer.domElement;
+    if(el && el.parentNode) el.parentNode.removeChild(el);
+  }
+  modelState = null;
+}
+function ensureThree(){
+  if(window.THREE) return Promise.resolve(window.THREE);
+  if(window.__threePromise) return window.__threePromise;
+  window.__threePromise = new Promise((resolve,reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+    s.onload = ()=> resolve(window.THREE);
+    s.onerror = ()=> reject(new Error('Could not load the 3D library'));
+    document.head.appendChild(s);
+  });
+  return window.__threePromise;
+}
+// Bridges the new spec to the legacy 5-field shape a few older call
+// sites still read. Nothing new should use this.
+function specToLegacyGeometry(spec){
+  if(!spec) return null;
+  const o = spec.overall||{}, s = spec.screw||{}, t = spec.trough||{};
+  const L = dimIn(o.overall_length);
+  const D = dimIn(s.screw_diameter) || dimIn(t.trough_width);
+  return {
+    diameterIn: D,
+    lengthFt: L!=null ? L/12 : null,
+    inclineDeg: dimIn(o.incline_angle)!=null ? o.incline_angle.value : null,
+    hangerCount: (spec.hangers && spec.hangers.count!=null) ? Number(spec.hangers.count) : null,
+    shaftless: !!(s.shaftless)
+  };
+}
+
+/* ================================================================
+   DETERMINISTIC 3D GEOMETRY GENERATOR
+   Consumes ONLY the validated engineering spec. Every dimension used
+   here traces to a blueprint callout. Anything the spec does not
+   supply is either omitted or drawn as an explicitly-marked
+   placeholder -- it is never estimated into existence.
+
+   Model space: 1 unit = 1 inch, matching normalized_in throughout.
+   ================================================================ */
+const MODEL_MODES = { engineering:'engineering', assembly:'assembly' };
+let modelMode = MODEL_MODES.engineering;
+let showDimensions = false;
+// Records what the generator actually built, for the verification report.
+let lastBuildRecord = null;
+
+function makeTextSprite(THREE, text, color){
+  const cv = document.createElement('canvas');
+  const ctx = cv.getContext('2d');
+  const font = 'bold 44px -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.font = font;
+  const w = Math.ceil(ctx.measureText(text).width) + 24;
+  cv.width = w; cv.height = 60;
+  const c2 = cv.getContext('2d');
+  c2.font = font;
+  c2.fillStyle = 'rgba(11,13,15,0.85)';
+  c2.fillRect(0,0,cv.width,cv.height);
+  c2.fillStyle = color || '#f5b400';
+  c2.textBaseline = 'middle';
+  c2.fillText(text, 12, cv.height/2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.minFilter = THREE.LinearFilter;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, depthTest:false, transparent:true }));
+  spr.userData.aspect = cv.width/cv.height;
+  return spr;
+}
+
+async function buildModel(job){
+  const host = document.getElementById('modelStage');
+  if(!host) return;
+  const spec = job.spec;
+  if(!spec){ host.innerHTML = `<div class="empty-state" style="padding:24px;">No engineering specification -- re-scan the blueprint.</div>`; return; }
+
+  let THREE;
+  try{ THREE = await ensureThree(); }
+  catch(e){ host.innerHTML = `<div class="empty-state" style="padding:24px;">3D view unavailable offline.</div>`; return; }
+  if(!document.getElementById('modelStage')) return;
+  disposeModel();
+
+  const o = spec.overall||{}, tr = spec.trough||{}, sc = spec.screw||{}, hg = spec.hangers||{}, dr = spec.drive||{}, tl = spec.tail||{}, fr = spec.frame||{};
+  const isScrew = spec.conveyorType !== 'belt';
+
+  // --- Read the spec. Nulls stay null; no fallback constants. ---
+  const L  = dimIn(o.overall_length);
+  const OW = dimIn(o.overall_width);
+  const D  = isScrew ? (dimIn(sc.screw_diameter) || dimIn(tr.trough_width)) : null;
+  const troughW = dimIn(tr.trough_width) || D;
+  const troughD = dimIn(tr.trough_depth);
+  const shaftD  = dimIn(sc.shaft_diameter);
+  const pitch   = dimIn(sc.screw_pitch) || D; // standard-pitch screw: pitch = diameter
+  const pitchIsDirect = dimIn(sc.screw_pitch) != null;
+  const inclineDeg = dimIn(o.incline_angle)!=null ? o.incline_angle.value : 0;
+  const incline = (inclineDeg||0) * Math.PI/180;
+
+  const approx = [];        // things drawn as explicit placeholders
+  const built = {};         // what we actually built, for verification
+
+  if(L == null){
+    host.innerHTML = `<div class="empty-state" style="padding:24px;">Overall length was not found on the drawing.<br>
+      <span style="font-size:11px;color:var(--text-faint);">The model is not generated rather than guessed. See the Engineering Data panel below.</span></div>`;
+    lastBuildRecord = { built:{}, approx:['entire model -- no overall length'] };
+    return;
+  }
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x181c20);
+  const camera = new THREE.PerspectiveCamera(45, host.clientWidth/host.clientHeight, 0.1, 100000);
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(host.clientWidth, host.clientHeight);
+  host.innerHTML = '';
+  host.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.68));
+  const key = new THREE.DirectionalLight(0xffffff, 0.72);
+  key.position.set(0.6, 1.6, 1.1);
+  scene.add(key);
+
+  const root = new THREE.Group();
+  root.rotation.z = incline;              // exact, from the drawing
+  scene.add(root);
+  const groups = {};
+  STAGE_ORDER.forEach(s=>{ groups[s] = new THREE.Group(); root.add(groups[s]); });
+  const dimGroup = new THREE.Group(); scene.add(dimGroup);
+
+  const mat = (hex, opts) => new THREE.MeshStandardMaterial({ color:hex, metalness:0.35, roughness:0.55, ...(opts||{}) });
+  const ghost = hex => new THREE.MeshStandardMaterial({ color:hex, metalness:0.1, roughness:0.9, transparent:true, opacity:0.32, wireframe:true });
+
+  built.overall_length_in = L;
+  built.incline_deg = inclineDeg || 0;
+
+  if(isScrew){
+    // ---- Trough: exact width/depth when given, half-round otherwise ----
+    if(troughW){
+      const R = troughW/2;
+      const depth = troughD || R;   // U-trough: depth = half width unless stated
+      if(!troughD) approx.push('trough depth (assumed half of trough width)');
+      const tg = new THREE.CylinderGeometry(R, R, L, 32, 1, true, Math.PI, Math.PI);
+      const trough = new THREE.Mesh(tg, mat(STAGE_META.trough.color, {side:THREE.DoubleSide, metalness:0.2}));
+      trough.rotation.z = Math.PI/2;
+      groups.trough.add(trough);
+      // Angle flanges along both top edges
+      const flH = dimIn(tr.flange_height) || Math.max(R*0.18, 1);
+      if(!dimIn(tr.flange_height)) approx.push('flange height');
+      [-1,1].forEach(sgn=>{
+        const fl = new THREE.Mesh(new THREE.BoxGeometry(L, flH*0.25, flH), mat(STAGE_META.trough.color, {metalness:0.3}));
+        fl.position.set(0, 0, sgn*R);
+        groups.trough.add(fl);
+      });
+      built.trough_width_in = troughW;
+      built.trough_depth_in = depth;
+    }else{
+      approx.push('trough (no width found -- omitted)');
+    }
+
+    // ---- Screw: real helix at the drawing's pitch, not decorative rings ----
+    if(D){
+      const R = D/2;
+      const turns = Math.max(1, L/pitch);
+      const segsPerTurn = 24;
+      const total = Math.ceil(turns*segsPerTurn);
+      const inner = shaftD ? shaftD/2 : R*0.12;
+      if(!shaftD && !sc.shaftless) approx.push('shaft diameter');
+      // Build the flight as a ribbon of quads following the true helix.
+      const positions = [];
+      for(let i=0;i<total;i++){
+        const t0 = i/segsPerTurn, t1 = (i+1)/segsPerTurn;
+        const x0 = -L/2 + t0*pitch, x1 = -L/2 + t1*pitch;
+        if(x1 > L/2) break;
+        const a0 = t0*Math.PI*2, a1 = t1*Math.PI*2;
+        const o0 = [x0, Math.sin(a0)*inner, Math.cos(a0)*inner];
+        const i0 = [x0, Math.sin(a0)*R,     Math.cos(a0)*R];
+        const o1 = [x1, Math.sin(a1)*inner, Math.cos(a1)*inner];
+        const i1 = [x1, Math.sin(a1)*R,     Math.cos(a1)*R];
+        positions.push(...o0, ...i0, ...i1);
+        positions.push(...o0, ...i1, ...o1);
+      }
+      const fg = new THREE.BufferGeometry();
+      fg.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      fg.computeVertexNormals();
+      const flight = new THREE.Mesh(fg, mat(STAGE_META.screw.color, {side:THREE.DoubleSide, metalness:0.5}));
+      groups.screw.add(flight);
+      if(!sc.shaftless && shaftD){
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftD/2, shaftD/2, L*0.98, 16), mat(0xcfd4d8, {metalness:0.7, roughness:0.3}));
+        shaft.rotation.z = Math.PI/2;
+        groups.screw.add(shaft);
+      }
+      built.screw_diameter_in = D;
+      built.screw_pitch_in = pitch;
+      if(!pitchIsDirect) approx.push('screw pitch (standard pitch assumed = diameter)');
+    }else{
+      approx.push('screw (no diameter found -- omitted)');
+    }
+
+    // ---- Hanger bearings: at called-out positions when given ----
+    let hangerPositions = Array.isArray(hg.positions_in) ? hg.positions_in.filter(p=>isFinite(Number(p))).map(Number) : [];
+    const hSpacing = dimIn(hg.hanger_spacing);
+    const hCount = (hg.count!=null && isFinite(Number(hg.count))) ? Number(hg.count) : null;
+    if(!hangerPositions.length && hSpacing){
+      for(let x=hSpacing; x < L; x+=hSpacing) hangerPositions.push(x);
+    }else if(!hangerPositions.length && hCount){
+      for(let i=1;i<=hCount;i++) hangerPositions.push(i*(L/(hCount+1)));
+      approx.push('hanger positions (count known, spacing not called out -- evenly distributed)');
+    }
+    if(hangerPositions.length && D){
+      const R = D/2;
+      hangerPositions.forEach(px=>{
+        const hanger = new THREE.Group();
+        const yoke = new THREE.Mesh(new THREE.BoxGeometry(Math.max(R*0.12,0.5), R*2.0, Math.max(R*0.2,0.75)), mat(STAGE_META.bearings.color));
+        yoke.position.y = R*0.5;
+        const bore = dimIn(hg.bearing_bore);
+        const brgR = bore ? bore*0.9 : R*0.26;
+        if(!bore) approx.push('hanger bearing size');
+        const brg = new THREE.Mesh(new THREE.CylinderGeometry(brgR, brgR, Math.max(R*0.3,1), 16), mat(STAGE_META.bearings.color, {metalness:0.6}));
+        brg.rotation.z = Math.PI/2;
+        hanger.add(yoke, brg);
+        hanger.position.x = -L/2 + px;   // measured from tail end, per the spec
+        groups.bearings.add(hanger);
+      });
+      built.hanger_count = hangerPositions.length;
+      built.hanger_positions_in = hangerPositions;
+    }else if(hCount || hSpacing){
+      approx.push('hanger bearings (insufficient dimensions to place)');
+    }
+
+    // ---- Drive end / tail end ----
+    const R = D ? D/2 : (troughW ? troughW/2 : null);
+    if(R){
+      const driveAtHead = (dr.location||'head') !== 'tail';
+      const dx = driveAtHead ? L/2 : -L/2;
+      const sgn = driveAtHead ? 1 : -1;
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(Math.max(R*0.15,0.5), R*2.6, R*2.6), mat(STAGE_META.drive.color));
+      plate.position.x = dx + sgn*Math.max(R*0.08,0.3);
+      groups.drive.add(plate);
+      const sprD = dimIn(dr.sprocket_diameter);
+      if(sprD){
+        const spr = new THREE.Mesh(new THREE.CylinderGeometry(sprD/2, sprD/2, Math.max(R*0.2,0.6), 20), mat(STAGE_META.drive.color, {metalness:0.6}));
+        spr.rotation.z = Math.PI/2;
+        spr.position.x = dx + sgn*Math.max(R*0.5,2);
+        groups.drive.add(spr);
+        built.sprocket_diameter_in = sprD;
+      }else{
+        // Motor/gearbox shown only as an explicitly-approximate block.
+        const motor = new THREE.Mesh(new THREE.BoxGeometry(R*1.4, R*1.4, R*1.2), ghost(STAGE_META.drive.color));
+        motor.position.set(dx + sgn*R*1.0, R*1.2, 0);
+        groups.drive.add(motor);
+        approx.push('drive unit (identified, dimensions unavailable -- shown as placeholder)');
+      }
+      const tsd = dimIn(tl.shaft_diameter) || shaftD;
+      const tailPlate = new THREE.Mesh(new THREE.BoxGeometry(Math.max(R*0.15,0.5), R*2.4, R*2.4), mat(STAGE_META.tail.color));
+      tailPlate.position.x = -dx - sgn*Math.max(R*0.08,0.3);
+      groups.tail.add(tailPlate);
+      if(tsd){
+        const ts = new THREE.Mesh(new THREE.CylinderGeometry(tsd/2, tsd/2, Math.max(R*0.9,3), 14), mat(0xcfd4d8, {metalness:0.7}));
+        ts.rotation.z = Math.PI/2;
+        ts.position.x = -dx - sgn*Math.max(R*0.5,2);
+        groups.tail.add(ts);
+      }else{
+        approx.push('tail shaft (dimensions unavailable)');
+      }
+    }
+  }else{
+    // ---- Belt conveyor path ----
+    const W = OW || dimIn(fr.frame_width);
+    const beltW = dimIn((spec.belt||{}).belt_width);
+    const hpD = dimIn(((spec.head||{}).pulley||{}).pulley_diameter);
+    const hpW = dimIn(((spec.head||{}).pulley||{}).pulley_width);
+    const frH = dimIn(fr.frame_height);
+    if(W){
+      const railH = dimIn(fr.side_rail_height) || Math.max(W*0.12, 2);
+      if(!dimIn(fr.side_rail_height)) approx.push('side rail height');
+      [-1,1].forEach(s=>{
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(L, railH, Math.max(W*0.04,0.5)), mat(STAGE_META.trough.color));
+        rail.position.z = s*W/2;
+        groups.trough.add(rail);
+      });
+      built.frame_width_in = W;
+    }else approx.push('frame (no width found -- omitted)');
+    if(hpD && W){
+      const hp = new THREE.Mesh(new THREE.CylinderGeometry(hpD/2, hpD/2, hpW||W, 24), mat(STAGE_META.drive.color, {metalness:0.6}));
+      hp.rotation.x = Math.PI/2;
+      hp.position.x = L/2 - hpD/2;
+      groups.drive.add(hp);
+      built.head_pulley_diameter_in = hpD;
+      if(!hpW) approx.push('head pulley width (frame width used)');
+    }
+    if(beltW && W){
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(L, Math.max(dimIn((spec.belt||{}).belt_thickness)||0.4,0.25), beltW), mat(0x2c3137, {roughness:0.9}));
+      belt.position.y = (frH? frH/2 : 0);
+      groups.screw.add(belt);
+      built.belt_width_in = beltW;
+    }
+    const rs = dimIn((spec.idlers||{}).roller_spacing), rd = dimIn((spec.idlers||{}).roller_diameter);
+    if(rs && rd && W){
+      for(let x=rs; x<L; x+=rs){
+        const r = new THREE.Mesh(new THREE.CylinderGeometry(rd/2, rd/2, W*0.92, 14), mat(STAGE_META.bearings.color));
+        r.rotation.x = Math.PI/2;
+        r.position.x = -L/2 + x;
+        groups.bearings.add(r);
+      }
+      built.roller_spacing_in = rs;
+    }
+  }
+
+  // ---- Legs at called-out positions ----
+  const legPositions = Array.isArray(fr.leg_positions_in) ? fr.leg_positions_in.filter(p=>isFinite(Number(p))).map(Number) : [];
+  const legSpacing = dimIn(fr.leg_spacing);
+  const frameH = dimIn(fr.frame_height) || dimIn(o.centerline_height) || dimIn(o.elevation);
+  let legs = legPositions;
+  if(!legs.length && legSpacing){ for(let x=legSpacing; x<L; x+=legSpacing) legs.push(x); }
+  if(legs.length && frameH){
+    const halfW = (OW||troughW||12)/2;
+    legs.forEach(px=>{
+      [-1,1].forEach(s=>{
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(Math.max(halfW*0.12,1), frameH, Math.max(halfW*0.12,1)), mat(STAGE_META.other.color));
+        leg.position.set(-L/2+px, -frameH/2, s*halfW*0.85);
+        groups.other.add(leg);
+      });
+    });
+    built.leg_positions_in = legs;
+  }else if(legSpacing || legPositions.length){
+    approx.push('legs (no frame height / elevation found -- omitted)');
+  }
+
+  // ---- Dimension overlays, straight from the spec ----
+  const dimLabels = [];
+  const addDim = (label, pos) => {
+    const spr = makeTextSprite(THREE, label);
+    const s = Math.max(L*0.045, 2);
+    spr.scale.set(s*spr.userData.aspect, s, 1);
+    spr.position.copy(pos);
+    dimGroup.add(spr);
+    dimLabels.push(spr);
+  };
+  const halfH = (troughW||OW||12)/2;
+  addDim(`${L.toFixed(0)}" overall length`, new THREE.Vector3(0, -halfH*2.2, 0));
+  if(troughW) addDim(`${troughW.toFixed(0)}" trough width`, new THREE.Vector3(-L/2, halfH*1.6, 0));
+  if(D) addDim(`${D.toFixed(0)}" screw dia`, new THREE.Vector3(0, halfH*1.9, 0));
+  if(inclineDeg) addDim(`${inclineDeg}deg incline`, new THREE.Vector3(L/2, halfH*1.6, 0));
+  if(built.hanger_count) addDim(`${built.hanger_count} hangers`, new THREE.Vector3(0, -halfH*1.6, 0));
+  dimGroup.visible = showDimensions;
+
+  // Assembly mode hides the detail-heavy groups for a cleaner read.
+  function applyMode(){
+    const eng = modelMode === MODEL_MODES.engineering;
+    groups.bearings.visible = eng && !hiddenModelParts.bearings;
+    groups.other.visible    = eng && !hiddenModelParts.other;
+    STAGE_ORDER.forEach(s=>{
+      if(s!=='bearings' && s!=='other') groups[s].visible = !hiddenModelParts[s];
+    });
+  }
+  applyMode();
+
+  // ---- Framing + orbit ----
+  let theta=-0.6, phi=1.15, dist=L*1.45+24;
+  function applyCamera(){
+    camera.position.set(dist*Math.sin(phi)*Math.cos(theta), dist*Math.cos(phi), dist*Math.sin(phi)*Math.sin(theta));
+    camera.lookAt(0,0,0);
+  }
+  applyCamera();
+  const el = renderer.domElement;
+  let dragging=false,lastX=0,lastY=0,pinchStart=0,distStart=0;
+  el.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    theta -= (e.clientX-lastX)*0.01;
+    phi = Math.max(0.15, Math.min(Math.PI-0.15, phi-(e.clientY-lastY)*0.01));
+    lastX=e.clientX; lastY=e.clientY; applyCamera();
+  });
+  el.addEventListener('pointerup', ()=>{dragging=false;});
+  el.addEventListener('pointercancel', ()=>{dragging=false;});
+  el.addEventListener('wheel', e=>{ e.preventDefault(); dist=Math.max(L*0.15,Math.min(L*6+100, dist*(1+Math.sign(e.deltaY)*0.12))); applyCamera(); }, {passive:false});
+  el.addEventListener('touchstart', e=>{ if(e.touches.length===2){ pinchStart=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); distStart=dist; } }, {passive:true});
+  el.addEventListener('touchmove', e=>{
+    if(e.touches.length===2 && pinchStart){
+      const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      dist=Math.max(L*0.15,Math.min(L*6+100, distStart*(pinchStart/d))); applyCamera();
+    }
+  }, {passive:true});
+
+  modelState = { renderer, scene, camera, groups, dimGroup, applyMode, raf:0 };
+  lastBuildRecord = { built, approx };
+  (function loop(){
+    if(!modelState) return;
+    modelState.raf = requestAnimationFrame(loop);
+    dimLabels.forEach(s=>s.quaternion.copy(camera.quaternion));
+    renderer.render(scene, camera);
+  })();
+}
+
+function toggleModelPart(part){
+  hiddenModelParts[part] = !hiddenModelParts[part];
+  if(modelState && modelState.groups[part]) modelState.groups[part].visible = !hiddenModelParts[part];
+  document.querySelectorAll(`[data-action="toggle-model-part"][data-part="${part}"]`).forEach(el=>{
+    el.classList.toggle('dim', !!hiddenModelParts[part]);
+  });
+}
+
+/* ---------------- Fullscreen blueprint viewer ----------------
+   Pinch/drag to inspect the actual drawing -- the practical everyday
+   need on a shop floor, where the detail you want is usually smaller
+   than a phone screen shows at fit-width. */
+function openBlueprintFullscreen(jobId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  const b64 = blueprintImageCache[jobId];
+  if(!job || !b64) return;
+  const root = document.getElementById('modalRoot');
+  const prevHtml = root.innerHTML;
+  const prevRefresh = modalRefresh;
+
+  const holder = document.createElement('div');
+  holder.className = 'bp-fullscreen';
+  holder.innerHTML = `
+    <div class="bp-fs-bar">
+      <span class="bp-fs-title">${escapeHtml(job.jobNumber)} Blueprint</span>
+      <button class="btn btn-outline btn-sm" id="bpFsClose">Close</button>
+    </div>
+    <div class="bp-fs-stage" id="bpFsStage">
+      <img class="bp-fs-img" id="bpFsImg" src="data:image/jpeg;base64,${b64}" alt="Blueprint">
+      <div class="bp-fs-hint">Pinch to zoom &middot; drag to pan &middot; double-tap to reset</div>
+    </div>`;
+  document.body.appendChild(holder);
+
+  const stage = holder.querySelector('#bpFsStage');
+  const img = holder.querySelector('#bpFsImg');
+  let scale=1, tx=0, ty=0, baseScale=1;
+  function apply(){ img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; }
+  function fit(){
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    const iw = img.naturalWidth || sw, ih = img.naturalHeight || sh;
+    baseScale = Math.min(sw/iw, sh/ih);
+    scale = baseScale;
+    tx = (sw - iw*scale)/2;
+    ty = (sh - ih*scale)/2;
+    apply();
+  }
+  if(img.complete) fit(); else img.onload = fit;
+
+  let dragging=false, lastX=0, lastY=0, pinchStart=0, scaleStart=1, lastTap=0;
+  stage.addEventListener('pointerdown', e=>{
+    dragging=true; lastX=e.clientX; lastY=e.clientY;
+    const now=Date.now();
+    if(now-lastTap < 300){ fit(); dragging=false; }
+    lastTap=now;
+  });
+  stage.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    tx += e.clientX-lastX; ty += e.clientY-lastY;
+    lastX=e.clientX; lastY=e.clientY;
+    apply();
+  });
+  stage.addEventListener('pointerup', ()=>{ dragging=false; });
+  stage.addEventListener('pointercancel', ()=>{ dragging=false; });
+  stage.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const f = 1 - Math.sign(e.deltaY)*0.15;
+    const nx = e.clientX - stage.getBoundingClientRect().left;
+    const ny = e.clientY - stage.getBoundingClientRect().top;
+    tx = nx - (nx-tx)*f; ty = ny - (ny-ty)*f;
+    scale = Math.max(baseScale*0.5, Math.min(baseScale*12, scale*f));
+    apply();
+  }, {passive:false});
+  stage.addEventListener('touchstart', e=>{
+    if(e.touches.length===2){
+      pinchStart = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      scaleStart = scale;
+      dragging = false;
+    }
+  }, {passive:true});
+  stage.addEventListener('touchmove', e=>{
+    if(e.touches.length===2 && pinchStart){
+      const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      const rect = stage.getBoundingClientRect();
+      const cx = (e.touches[0].clientX+e.touches[1].clientX)/2 - rect.left;
+      const cy = (e.touches[0].clientY+e.touches[1].clientY)/2 - rect.top;
+      const ns = Math.max(baseScale*0.5, Math.min(baseScale*12, scaleStart*(d/pinchStart)));
+      const f = ns/scale;
+      tx = cx - (cx-tx)*f; ty = cy - (cy-ty)*f;
+      scale = ns;
+      apply();
+    }
+  }, {passive:true});
+
+  holder.querySelector('#bpFsClose').addEventListener('click', ()=>{
+    document.body.removeChild(holder);
+    root.innerHTML = prevHtml;
+    modalRefresh = prevRefresh;
+  });
+}
+
+function jobDetailModalHtml(job){
+  const ds = dueStatus(job);
+  const du = daysUntil(job.dueDate);
+  const dueText = ds==='complete' ? 'Complete' : ds==='overdue' ? `${Math.abs(du)}d overdue` : du===0 ? 'Due today' : `Due in ${du}d`;
+  const idx = STAGES.findIndex(s=>s.id===job.assemblyStatus);
+  const nextStage = STAGES[idx+1];
+  const stageProgress = stageChecklistProgress(job, job.assemblyStatus);
+  const stepIdxs = STAGE_PROCEDURE[job.assemblyStatus] || [];
+  const checked = job.checklist || {};
+
+  const checklistHtml = stepIdxs.length ? stepIdxs.map(si=>{
+    const step = PROCEDURE[si];
+    const stepDone = step.items.filter((_,ii)=>checked[si+'-'+ii]).length;
+    const itemsHtml = step.items.map((text,ii)=>{
+      const key = si+'-'+ii;
+      const isDone = !!checked[key];
+      return `
+      <div class="checklist-item ${isDone?'done':''}" data-action="toggle-stage-checklist-item" data-id="${job.id}" data-key="${key}">
+        <div class="checklist-check">${isDone?'&#10003;':''}</div>
+        <div class="checklist-text">${escapeHtml(text)}</div>
+      </div>`;
+    }).join('');
+    return `
+    <div class="checklist-step">
+      <div class="checklist-step-head"><span>${escapeHtml(step.title)}</span><span class="checklist-badge ${stepDone===step.items.length?'complete':''}">${stepDone}/${step.items.length}</span></div>
+      ${itemsHtml}
+    </div>`;
+  }).join('') : `<div class="bp-hint" style="margin-bottom:10px;">No checklist steps for this stage -- it's a sign-off stage.</div>`;
+
+  const openBlockers = state.blockers.filter(b=>b.jobNumber===job.jobNumber && b.status!=='Resolved');
+  const blockersHtml = openBlockers.length ? openBlockers.map(b=>`
+    <div class="blocker-card" style="margin-bottom:8px;">
+      <div class="blocker-top">
+        <div class="job-cust">${escapeHtml(b.responsibleDepartment)} &middot; reported ${fmtDate(b.dateReported)}</div>
+        <span class="sev-badge sev-${b.severity.toLowerCase()}">${escapeHtml(b.severity)}</span>
+      </div>
+      <div class="job-desc">${escapeHtml(b.issueDescription)}</div>
+    </div>`).join('') : `<div class="bp-hint" style="margin-bottom:10px;">No open blockers for this job.</div>`;
+
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">${escapeHtml(job.jobNumber)} <button class="modal-close" data-close-overlay>&times;</button></div>
+
+    <div class="job-card due-${ds}" style="margin:0 0 14px 0;">
+      <div class="job-card-top">
+        <div>
+          <div class="job-num">${escapeHtml(job.jobNumber)}</div>
+          <div class="job-cust">${escapeHtml(job.customer)}</div>
+        </div>
+        <span class="badge badge-${job.priority.toLowerCase()}">${escapeHtml(job.priority)}</span>
+      </div>
+      <div class="job-desc">${escapeHtml(job.description)}</div>
+      <div class="job-meta-row">
+        <span>Stage: <b>${escapeHtml(stageLabel(job.assemblyStatus))}</b></span>
+        <span>Assembler: <b>${escapeHtml(job.assignedAssembler||'Unassigned')}</b></span>
+        <span>Due: <b>${fmtDate(job.dueDate)}</b></span>
+        ${job.lastMovedBy ? `<span>Last moved by: <b>${escapeHtml(job.lastMovedBy)}</b></span>` : ''}
+      </div>
+      <div class="gauge">
+        <div class="gauge-track"><div class="gauge-fill" style="width:${job.percentComplete}%;"></div></div>
+        <div class="gauge-label"><span class="due-tag due-${ds}">${dueText}</span> &middot; ${job.percentComplete}%</div>
+      </div>
+    </div>
+
+    ${nextStage ? `<div class="fab-row"><button class="btn btn-primary btn-block" data-action="attempt-advance" data-id="${job.id}">Advance &#9656; ${escapeHtml(nextStage.label)}${stageProgress.total?` (${stageProgress.done}/${stageProgress.total})`:''}</button></div>` : ''}
+    <div class="fab-row">
+      <button class="btn btn-outline btn-sm" data-action="edit-job" data-id="${job.id}">Edit Details</button>
+      <button class="btn btn-outline btn-sm" data-action="report-blocker" data-jobnumber="${escapeHtml(job.jobNumber)}">Report Blocker</button>
+    </div>
+
+    <div class="section-title" style="margin-top:18px;">Current Stage Checklist</div>
+    ${checklistHtml}
+
+    <div class="section-title">Blueprint &amp; Hardware</div>
+    ${blueprintImageSectionHtml(job)}
+    ${modelSectionHtml(job)}
+    ${engineeringPanelHtml(job)}
+    ${bomListHtml(job) || `<div class="bp-hint" style="margin-bottom:10px;">No blueprint scanned yet for this job.</div>`}
+    <div class="fab-row">
+      <button class="btn btn-outline btn-block" data-action="open-blueprint" data-id="${job.id}">&#128208; ${job.billOfMaterials && job.billOfMaterials.length ? 'Re-Scan Blueprint' : 'Scan Blueprint'}</button>
+    </div>
+
+    <div class="section-title">Open Blockers</div>
+    ${blockersHtml}
+  </div>`;
+}
+function blueprintImageSectionHtml(job){
+  if(!job.hasBlueprintImage) return `<div class="bp-hint" style="margin-bottom:10px;">No blueprint image saved for this job yet.</div>`;
+  const cached = blueprintImageCache[job.id];
+  if(cached === undefined) return `<div id="bpImageArea" class="bp-hint" style="margin-bottom:10px;">Loading blueprint image...</div>`;
+  if(cached) return `<img src="data:image/jpeg;base64,${cached}" class="bp-preview-img" style="max-height:340px;margin-bottom:10px;" alt="Blueprint for ${escapeHtml(job.jobNumber)}" data-action="open-blueprint-fullscreen" data-id="${job.id}">
+  <div class="bp-hint" style="margin-top:-4px;margin-bottom:10px;">Tap the drawing to open it full screen and zoom in.</div>`;
+  return `<div class="bp-hint" style="margin-bottom:10px;">Blueprint image not found -- it may not have finished saving. Try Re-Scan.</div>`;
+}
+function openJobDetail(jobId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  openModal(jobDetailModalHtml(job), ()=>{
+    const j = state.jobs.find(x=>x.id===jobId);
+    return j ? jobDetailModalHtml(j) : '';
+  });
+  refreshOpenModal._job = job;
+  if(job.hasBlueprintImage && blueprintImageCache[jobId] === undefined) ensureBlueprintImageLoaded(jobId);
+  if(job.geometry) setTimeout(()=>buildModel(job), 60);
+}
+// Fetches the saved blueprint image once and caches it (see
+// blueprintImageCache above), then refreshes whichever modal is open so
+// the image appears -- this survives any number of re-renders in between
+// (checklist toggles, stage advances) since the cache is what gets read,
+// not a one-shot DOM patch.
+async function ensureBlueprintImageLoaded(jobId){
+  const base64 = await fetchBlueprintImage(jobId);
+  blueprintImageCache[jobId] = base64 || false;
+  refreshOpenModal();
+}
+function blueprintModalHtml(job){
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">Blueprint -- ${escapeHtml(job.jobNumber)} <button class="modal-close" data-close-overlay>&times;</button></div>
+    <div class="field">
+      <label>Upload or Photograph Blueprint</label>
+      <input type="file" id="bpFileInput" accept="image/*,application/pdf" capture="environment">
+      <div class="bp-hint">Take a photo of a paper drawing, or upload a saved image or PDF (first 3 pages are read). Gemini will read the parts list or callouts and pull out the hardware and components.</div>
+    </div>
+    <div id="bpPreviewArea"></div>
+    <div class="fab-row">
+      <button class="btn btn-primary btn-block" id="bpExtractBtn" data-action="extract-bom" data-id="${job.id}" disabled>Extract Components</button>
+    </div>
+    <div id="bpResultArea">${bomListHtml(job)}</div>
+  </div>`;
+}
+function openBlueprintModal(jobId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  selectedBlueprintFile = null;
+  openModal(blueprintModalHtml(job));
+}
+function explainFetchError(err){
+  const msg = (err && err.message) || '';
+  const providerName = getAiProvider()==='openrouter' ? 'OpenRouter' : 'Google Gemini';
+  if(msg === 'NO_API_KEY'){
+    return `Add your ${providerName} API key in Settings (the gear icon, top right) to use AI features.`;
+  }
+  if(/Failed to fetch|NetworkError|Load failed/i.test(msg)){
+    return `Couldn't reach ${providerName}. Check your API key in Settings and your internet connection, then try again.`;
+  }
+  return msg || 'Please try again.';
+}
+const COMPONENT_STAGES = ['trough','screw','drive','bearings','tail','other'];
+function normalizeComponents(parsed){
+  const raw = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.components) ? parsed.components : []);
+  return raw.map(c=>({
+    item: (c && c.item) ? String(c.item) : 'Unspecified item',
+    specification: (c && c.specification) ? String(c.specification) : '',
+    quantity: (c && c.quantity!=null && c.quantity!=='') ? c.quantity : null,
+    stage: (c && COMPONENT_STAGES.includes(c.stage)) ? c.stage : 'other'
+  }));
+}
+/* ================================================================
+   ENGINEERING SPECIFICATION LAYER
+   The AI's only job is to read the drawing and fill this structure in.
+   It never produces geometry. Everything below -- normalization,
+   validation, and the 3D build -- is deterministic application code
+   working from these numbers.
+   ================================================================ */
+
+// Every dimension carries provenance so nothing is silently invented.
+// {value, unit, normalized_in, source_page, source, description,
+//  confidence, method: 'direct'|'inferred', status: 'ok'|'not_found'}
+const UNIT_TO_IN = { in:1, inch:1, inches:1, '"':1, ft:12, foot:12, feet:12, "'":12, mm:1/25.4, cm:1/2.54, m:39.3701 };
+
+function normDim(d){
+  if(d == null) return { value:null, unit:null, normalized_in:null, confidence:0, status:'not_found', method:null, source_page:null, source:null };
+  // Tolerate the AI returning a bare number instead of the full object.
+  if(typeof d === 'number' || typeof d === 'string'){
+    const n = Number(d);
+    return isFinite(n)
+      ? { value:n, unit:'in', normalized_in:n, confidence:0.5, status:'ok', method:'inferred', source_page:null, source:null, description:null }
+      : { value:null, unit:null, normalized_in:null, confidence:0, status:'not_found', method:null, source_page:null, source:null };
+  }
+  const raw = (d.value!=null && d.value!=='' && isFinite(Number(d.value))) ? Number(d.value) : null;
+  if(raw === null) return { value:null, unit:null, normalized_in:null, confidence:0, status:d.status||'not_found', method:null, source_page:d.source_page??null, source:d.source||null, description:d.description||null };
+  const unit = (d.unit || 'in').toString().toLowerCase().trim();
+  const factor = UNIT_TO_IN[unit] != null ? UNIT_TO_IN[unit] : 1;
+  return {
+    value: raw,
+    unit: d.unit || 'in',
+    normalized_in: raw * factor,
+    normalized_mm: raw * factor * 25.4,
+    original_text: d.original_text || `${raw}${d.unit||''}`,
+    source_page: d.source_page ?? null,
+    source: d.source || null,
+    description: d.description || null,
+    confidence: (d.confidence!=null && isFinite(Number(d.confidence))) ? Number(d.confidence) : 0.5,
+    method: d.method === 'direct' ? 'direct' : 'inferred',
+    status: 'ok'
+  };
+}
+const dimIn = d => (d && d.status==='ok' && d.normalized_in!=null) ? d.normalized_in : null;
+function confLabel(d){
+  if(!d || d.status!=='ok' || d.normalized_in==null) return 'NOT FOUND';
+  if(d.conflict) return 'CONFLICT';
+  if(d.method==='inferred') return d.confidence>=0.7 ? 'INFERRED' : 'LOW';
+  if(d.confidence>=0.85) return 'HIGH';
+  if(d.confidence>=0.6) return 'MEDIUM';
+  return 'LOW';
+}
+
+// Walks whatever the AI returned and normalizes every dimension node in
+// place, leaving non-dimension fields untouched.
+const DIM_KEYS = new Set([
+  'overall_length','overall_width','overall_height','elevation','incline_angle',
+  'trough_width','trough_depth','trough_gauge','flange_height','screw_diameter',
+  'screw_pitch','shaft_diameter','shaft_length','coupling_diameter','flight_thickness',
+  'frame_height','frame_width','side_rail_height','side_rail_thickness','leg_spacing',
+  'pulley_diameter','pulley_width','bearing_bore','sprocket_diameter','belt_width',
+  'belt_thickness','roller_diameter','roller_width','roller_spacing','hanger_spacing',
+  'inlet_length','outlet_length','centerline_height','take_up_travel'
+]);
+function normalizeSpecTree(node){
+  if(!node || typeof node !== 'object') return node;
+  if(Array.isArray(node)) return node.map(normalizeSpecTree);
+  const out = {};
+  for(const [k,v] of Object.entries(node)){
+    if(DIM_KEYS.has(k)) out[k] = normDim(v);
+    else if(v && typeof v === 'object') out[k] = normalizeSpecTree(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+function normalizeSpec(parsed){
+  if(!parsed || typeof parsed !== 'object') return null;
+  const spec = normalizeSpecTree(parsed);
+  spec.conveyorType = ['screw','belt'].includes(spec.conveyorType) ? spec.conveyorType : 'screw';
+  spec.pages_analyzed = Array.isArray(spec.pages_analyzed) ? spec.pages_analyzed : [];
+  spec.conflicts = Array.isArray(spec.conflicts) ? spec.conflicts : [];
+  spec.extractedAt = new Date().toISOString();
+  // Usable only if we got at least one primary dimension -- otherwise the
+  // generator would be building from nothing, which is the failure mode
+  // this whole layer exists to prevent.
+  const o = spec.overall || {};
+  const hasPrimary = dimIn(o.overall_length) || dimIn(o.overall_width) ||
+                     dimIn((spec.screw||{}).screw_diameter) || dimIn((spec.trough||{}).trough_width);
+  return hasPrimary ? spec : null;
+}
+
+function buildSpecPrompt(includeJobFields){
+  return `You are a mechanical engineer reading a CONVEYOR SHOP DRAWING SET. Every image provided is a page from ONE drawing set describing ONE machine -- general assembly, side view, top view, end view, section views, and detail sheets. Do NOT treat pages as separate machines. Cross-reference them into a single unified specification.
+
+YOUR ONLY JOB IS TO READ VALUES OFF THE DRAWING. You are not designing anything and not estimating anything visually.
+
+RULES -- these matter more than completeness:
+1. Prefer explicit dimension callouts and dimension/BOM tables. Then detail views. Then known component sizes. Use drawing scale ONLY as a last resort and mark it "inferred".
+2. NEVER measure pixels and report the result as an engineering dimension when an explicit callout exists anywhere in the set.
+3. If a value is not determinable, return {"value": null, "confidence": 0, "status": "not_found"}. DO NOT GUESS. A missing value is correct and useful; an invented one is a defect.
+4. If two pages disagree, record BOTH in "conflicts" rather than picking one.
+5. Do not report components that are not shown on the drawing.
+
+EVERY dimension must be an object of this exact form:
+{"value": <number>, "unit": "in"|"ft"|"mm"|"cm"|"m", "source_page": <1-based page number>, "source": "<which callout/table/view it came from>", "description": "<what it measures>", "confidence": <0..1>, "method": "direct"|"inferred", "status": "ok"}
+or, when absent: {"value": null, "confidence": 0, "status": "not_found"}
+
+Respond with ONLY this JSON object, no markdown fences, no commentary:
+{
+${includeJobFields ? '  "jobNumber": "<from title block, or \\"\\">",\n  "customer": "<from title block, or \\"\\">",\n  "description": "<one-line equipment description from the title block>",\n' : ''}  "conveyorType": "screw" | "belt",
+  "pages_analyzed": [{"page": 1, "view": "general assembly|side view|top view|end view|section|detail|BOM|title block|other"}],
+  "overall": {
+    "overall_length": {...}, "overall_width": {...}, "overall_height": {...},
+    "elevation": {...}, "incline_angle": {...}, "centerline_height": {...}
+  },
+  "trough": { "trough_width": {...}, "trough_depth": {...}, "trough_gauge": {...}, "flange_height": {...}, "material": "<or null>", "style": "<U-trough|tubular|flared|null>" },
+  "screw": { "screw_diameter": {...}, "screw_pitch": {...}, "shaft_diameter": {...}, "shaft_length": {...}, "flight_thickness": {...}, "shaftless": true|false, "hand": "<right|left|null>" },
+  "hangers": { "count": <integer or null>, "hanger_spacing": {...}, "bearing_type": "<or null>", "bearing_bore": {...}, "positions_in": [<distances from tail end, if callouts give them>] },
+  "drive": { "location": "<head|tail|null>", "motor_hp": "<or null>", "gearbox": "<or null>", "sprocket_diameter": {...}, "shaft_diameter": {...}, "bearing_type": "<or null>", "bearing_bore": {...}, "guard": true|false },
+  "tail": { "shaft_diameter": {...}, "shaft_length": {...}, "bearing_type": "<or null>", "bearing_bore": {...}, "take_up_travel": {...} },
+  "inlets_outlets": [{"type": "inlet|outlet", "position_in": <distance from tail end or null>, "inlet_length": {...}, "outlet_length": {...}}],
+  "frame": { "frame_height": {...}, "frame_width": {...}, "side_rail_height": {...}, "side_rail_thickness": {...}, "leg_spacing": {...}, "leg_positions_in": [<distances from tail end>], "supports": "<description or null>" },
+  "belt": { "belt_width": {...}, "belt_thickness": {...} },
+  "head": { "pulley": {"pulley_diameter": {...}, "pulley_width": {...}}, "shaft_diameter": {...}, "bearing_bore": {...} },
+  "idlers": { "roller_diameter": {...}, "roller_width": {...}, "roller_spacing": {...}, "count": <integer or null> },
+  "components": [{"item": "<short name>", "specification": "<size/material/spec or \\"\\">", "quantity": <integer or null>, "stage": "trough"|"screw"|"drive"|"bearings"|"tail"|"other", "source_page": <page>, "confidence": <0..1>}],
+  "conflicts": [{"field": "<dimension name>", "detail": "<page X says A, page Y says B>"}],
+  "notes": "<anything an assembler should know that the fields above don't capture, or \\"\\">"
+}
+
+For a SCREW conveyor, "belt"/"head"/"idlers" will be all not_found -- that is expected; leave them as not_found rather than omitting them. For a BELT conveyor, "trough"/"screw"/"hangers" will be not_found. Fill in whichever applies.`;
+}
+
+/* ---------------- Engineering validation ----------------
+   Runs before any geometry is built. Never silently corrects -- it
+   reports, and the geometry generator then refuses to invent anything
+   that failed. */
+function validateSpec(spec){
+  const checks = [];
+  const add = (level, message) => checks.push({ level, message });
+  if(!spec){ return { checks:[{level:'error', message:'No usable specification extracted.'}], ok:false }; }
+
+  const o = spec.overall || {};
+  const L = dimIn(o.overall_length), W = dimIn(o.overall_width), H = dimIn(o.overall_height);
+
+  if(!L) add('error','Overall length not found -- length-dependent geometry will be shown as approximate.');
+  if(!W && !dimIn((spec.trough||{}).trough_width) && !dimIn((spec.screw||{}).screw_diameter))
+    add('error','No width or diameter found -- cross-section will be approximate.');
+
+  // Conflicts reported by the extractor across views.
+  (spec.conflicts||[]).forEach(cf=>{
+    add('conflict', typeof cf==='string' ? cf : `${cf.field||'Dimension'} conflict: ${cf.detail||JSON.stringify(cf)}`);
+  });
+
+  // Impossible / implausible geometry.
+  if(L != null && L <= 0) add('error','Overall length is zero or negative.');
+  if(W != null && L != null && W > L) add('warning',`Width (${W.toFixed(1)}") exceeds length (${L.toFixed(1)}") -- check units.`);
+
+  const inc = dimIn(o.incline_angle) != null ? o.incline_angle.value : null;
+  if(inc != null && (inc < 0 || inc > 90)) add('error',`Incline angle ${inc}deg is out of range.`);
+
+  if(spec.conveyorType === 'screw'){
+    const sd = dimIn((spec.screw||{}).screw_diameter);
+    const tw = dimIn((spec.trough||{}).trough_width);
+    if(sd && tw && sd > tw) add('warning',`Screw diameter (${sd.toFixed(1)}") is larger than trough width (${tw.toFixed(1)}").`);
+    const shaft = dimIn((spec.screw||{}).shaft_diameter);
+    if(shaft && sd && shaft >= sd) add('error',`Shaft diameter (${shaft.toFixed(1)}") is not smaller than screw diameter (${sd.toFixed(1)}").`);
+    const hangers = (spec.hangers && spec.hangers.count!=null) ? Number(spec.hangers.count) : null;
+    const hs = dimIn((spec.hangers||{}).hanger_spacing);
+    if(hangers != null && L && hs && (hangers+1)*hs > L*1.25)
+      add('warning',`Hanger count (${hangers}) and spacing (${hs.toFixed(1)}") exceed overall length.`);
+  }else{
+    const bw = dimIn((spec.belt||{}).belt_width);
+    const hp = dimIn(((spec.head||{}).pulley||{}).pulley_width);
+    if(bw && hp && bw > hp) add('warning',`Belt width (${bw.toFixed(1)}") exceeds head pulley width (${hp.toFixed(1)}").`);
+    if(bw && W && bw > W) add('warning',`Belt width (${bw.toFixed(1)}") exceeds frame width (${W.toFixed(1)}").`);
+  }
+
+  // Unit sanity: anything absurdly large usually means mm read as inches.
+  [['overall length',L],['overall width',W],['overall height',H]].forEach(([n,v])=>{
+    if(v != null && v > 2400) add('warning',`${n} normalizes to ${v.toFixed(0)}" (>200ft) -- possible unit error.`);
+  });
+
+  const errors = checks.filter(c=>c.level==='error').length;
+  const conflicts = checks.filter(c=>c.level==='conflict').length;
+  return { checks, ok: errors===0 && conflicts===0, errors, conflicts,
+           warnings: checks.filter(c=>c.level==='warning').length };
+}
+async function extractComponents(jobId){
+  const job = state.jobs.find(j=>j.id===jobId);
+  if(!job || !selectedBlueprintFile) return;
+  const file = selectedBlueprintFile;
+  const btn = document.getElementById('bpExtractBtn');
+  const resultArea = document.getElementById('bpResultArea');
+  if(btn){ btn.disabled = true; btn.textContent = 'Reading blueprint...'; }
+  if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#8987;</div>Analyzing drawing...</div>`;
+
+  try{
+    let contentBlocks = [];
+    let primaryImageBase64 = null;
+    if(file.type === 'application/pdf'){
+      const images = await pdfFileToImages(file);
+      if(!images.length) throw new Error('The PDF has no readable pages.');
+      contentBlocks = images.map(img=>({type:'image', source:{type:'base64', media_type:img.mime, data:img.base64}}));
+      primaryImageBase64 = images[0].base64;
+    }else{
+      const {base64, mime} = await fileToImageBase64Resized(file);
+      contentBlocks = [{type:'image', source:{type:'base64', media_type:mime, data:base64}}];
+      primaryImageBase64 = base64;
+    }
+
+    const systemPrompt = buildSpecPrompt(false);
+
+    const content = [...contentBlocks, {type:'text', text:'Read this complete drawing set and return the unified engineering specification JSON.'}];
+    let text = await callClaudeAPI(systemPrompt, content);
+    text = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+    let parsed = {};
+    try{ parsed = JSON.parse(text); }catch(e){ parsed = {}; }
+    const list = normalizeComponents(parsed);
+    const spec = normalizeSpec(parsed);
+    const validation = spec ? validateSpec(spec) : null;
+    if(spec) job.spec = spec;
+    if(validation) job.validation = validation;
+    job.geometry = spec ? specToLegacyGeometry(spec) : job.geometry;
+
+    job.billOfMaterials = list;
+    if(geometry) job.geometry = geometry;
+    job.blueprintExtractedAt = new Date().toISOString();
+    await persistJobs();
+
+    saveBlueprintImage(job.id, primaryImageBase64).then(ok=>{
+      if(ok){ job.hasBlueprintImage = true; delete blueprintImageCache[job.id]; persistJobs(); refreshOpenModal(); }
+    });
+
+    if(resultArea) resultArea.innerHTML = bomListHtml(job);
+    if(btn){ btn.disabled = false; btn.textContent = 'Re-Extract from New Photo'; }
+    logActivity('Blueprint scanned', `${job.jobNumber}: ${list.length} components extracted`);
+    showToast(list.length ? `Extracted ${list.length} components` : 'No components identified -- try a clearer photo');
+    render();
+  }catch(err){
+    console.error(err);
+    const detail = explainFetchError(err);
+    if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#9888;</div>Could not read the blueprint.<br><span style="font-size:11px;color:var(--text-faint);">${escapeHtml(detail)}</span></div>`;
+    if(btn){ btn.disabled = false; btn.textContent = 'Extract Components'; }
+  }
+}
+
+function newJobBlueprintModalHtml(){
+  return `
+  <div class="modal-sheet">
+    <div class="modal-title">New Job from Blueprint <button class="modal-close" data-close-overlay>&times;</button></div>
+    <div class="field">
+      <label>Upload or Photograph Blueprint</label>
+      <input type="file" id="bpFileInput" accept="image/*,application/pdf" capture="environment">
+      <div class="bp-hint">Take a photo of a paper drawing, or upload a saved image or PDF (first 3 pages are read). Gemini will read the title block for the job number, customer, and description, plus pull out the hardware list -- then you review everything before it's saved.</div>
+    </div>
+    <div id="bpPreviewArea"></div>
+    <div class="fab-row">
+      <button class="btn btn-primary btn-block" id="bpExtractBtn" data-action="extract-new-job" disabled>Read Blueprint &amp; Create Job</button>
+    </div>
+    <div id="bpResultArea"></div>
+  </div>`;
+}
+function openNewJobBlueprintModal(){
+  selectedBlueprintFile = null;
+  openModal(newJobBlueprintModalHtml());
+}
+async function extractNewJobFromBlueprint(){
+  if(!selectedBlueprintFile) return;
+  const file = selectedBlueprintFile;
+  const btn = document.getElementById('bpExtractBtn');
+  const resultArea = document.getElementById('bpResultArea');
+  if(btn){ btn.disabled = true; btn.textContent = 'Reading blueprint...'; }
+  if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#8987;</div>Analyzing drawing...</div>`;
+
+  try{
+    let contentBlocks = [];
+    let primaryImageBase64 = null;
+    if(file.type === 'application/pdf'){
+      const images = await pdfFileToImages(file);
+      if(!images.length) throw new Error('The PDF has no readable pages.');
+      contentBlocks = images.map(img=>({type:'image', source:{type:'base64', media_type:img.mime, data:img.base64}}));
+      primaryImageBase64 = images[0].base64;
+    }else{
+      const {base64, mime} = await fileToImageBase64Resized(file);
+      contentBlocks = [{type:'image', source:{type:'base64', media_type:mime, data:base64}}];
+      primaryImageBase64 = base64;
+    }
+
+    const systemPrompt = buildSpecPrompt(true);
+
+    const content = [...contentBlocks, {type:'text', text:'Read this complete drawing set and return the unified engineering specification JSON.'}];
+    let text = await callClaudeAPI(systemPrompt, content);
+    text = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+    let parsed = {};
+    try{ parsed = JSON.parse(text); }catch(e){ parsed = {}; }
+    const components = normalizeComponents(parsed);
+    const spec = normalizeSpec(parsed);
+    const validation = spec ? validateSpec(spec) : null;
+    const geometry = spec ? specToLegacyGeometry(spec) : null;
+
+    // Generate the job's id now (instead of at save time) so the blueprint
+    // image can be uploaded under it right away and be there once the job
+    // itself is saved from the pre-filled form.
+    const pendingId = uid('job');
+    const imageSaved = await saveBlueprintImage(pendingId, primaryImageBase64);
+
+    const prefill = {
+      id: pendingId,
+      jobNumber: parsed.jobNumber ? String(parsed.jobNumber) : '',
+      customer: parsed.customer ? String(parsed.customer) : '',
+      description: parsed.description ? String(parsed.description) : '',
+      billOfMaterials: components,
+      geometry: geometry,
+      spec: spec,
+      validation: validation,
+      blueprintExtractedAt: new Date().toISOString(),
+      hasBlueprintImage: imageSaved
+    };
+
+    closeModal();
+    openJobForm(null, prefill);
+    showToast(components.length ? `Read the blueprint -- found ${components.length} components. Review and save.` : 'Read the blueprint, but found no components -- fill in details manually.');
+  }catch(err){
+    console.error(err);
+    const detail = explainFetchError(err);
+    if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#9888;</div>Could not read the blueprint.<br><span style="font-size:11px;color:var(--text-faint);">${escapeHtml(detail)}</span></div>`;
+    if(btn){ btn.disabled = false; btn.textContent = 'Read Blueprint & Create Job'; }
+  }
+}
+
+/* ================= EVENT DELEGATION ================= */
+document.addEventListener('click', e=>{
+  const btn = e.target.closest('[data-action]');
+  const tabBtn = e.target.closest('.tab-btn');
+  if(tabBtn){
+    state.tab = tabBtn.getAttribute('data-tab');
+    render();
+    window.scrollTo(0,0);
+    return;
+  }
+  if(!btn) return;
+  const action = btn.getAttribute('data-action');
+  const id = btn.getAttribute('data-id');
+
+  switch(action){
+    case 'open-settings':
+      openSettingsModal();
+      break;
+    case 'clear-api-key':
+      setApiKey('');
+      closeModal();
+      showToast('API key removed');
+      break;
+    case 'clear-openrouter-key':
+      setOpenRouterKey('');
+      closeModal();
+      showToast('OpenRouter key removed');
+      break;
+    case 'set-ai-provider':
+      setAiProvider(btn.getAttribute('data-provider'));
+      openSettingsModal(); // re-render so the right key section shows
+      break;
+    case 'refresh-activity':
+      loadActivity();
+      showToast('Activity refreshed');
+      break;
+    case 'manual-sync':
+      reloadFromStorage(true);
+      break;
+    case 'goto-filter':
+      state.tab = 'dashboard';
+      state.jobFilter = btn.getAttribute('data-filter');
+      render();
+      window.scrollTo(0,0);
+      break;
+    case 'filter-jobs':
+      state.jobFilter = btn.getAttribute('data-filter');
+      document.querySelectorAll('#jobFilterChips .chip').forEach(c=>c.classList.toggle('active', c.getAttribute('data-filter')===state.jobFilter));
+      updateDashboardList();
+      break;
+    case 'filter-blockers':
+      state.blockerFilter = btn.getAttribute('data-filter');
+      document.querySelectorAll('#blockerFilterChips .chip').forEach(c=>c.classList.toggle('active', c.getAttribute('data-filter')===state.blockerFilter));
+      updateBlockersList();
+      break;
+    case 'new-job':
+      openJobForm(null);
+      break;
+    case 'new-job-from-blueprint':
+      openNewJobBlueprintModal();
+      break;
+    case 'edit-job':
+      openJobForm(id);
+      break;
+    case 'open-job-detail':
+      openJobDetail(id);
+      break;
+    case 'delete-job': {
+      const job = state.jobs.find(j=>j.id===id);
+      if(job && confirm(`Delete job ${job.jobNumber}? This cannot be undone.`)){
+        state.jobs = state.jobs.filter(j=>j.id!==id);
+        persistJobs();
+        logActivity('Job deleted', `${job.jobNumber} (${job.customer})`);
+        closeModal();
+        showToast('Job deleted');
+        render();
+      }
+      break;
+    }
+    case 'attempt-advance':
+      attemptAdvance(id);
+      break;
+    case 'report-blocker':
+      openBlockerForm(btn.getAttribute('data-jobnumber'));
+      break;
+    case 'new-blocker':
+      openBlockerForm(null);
+      break;
+    case 'delete-blocker': {
+      const delBlk = state.blockers.find(b=>b.id===id);
+      state.blockers = state.blockers.filter(b=>b.id!==id);
+      persistBlockers();
+      if(delBlk) logActivity('Blocker deleted', `${delBlk.jobNumber}: ${delBlk.issueDescription}`);
+      showToast('Blocker deleted');
+      render();
+      break;
+    }
+    case 'cycle-blocker-status': {
+      const b = state.blockers.find(b=>b.id===id);
+      if(b){
+        const order = ['Open','In Progress','Resolved'];
+        const next = order[(order.indexOf(b.status)+1) % order.length];
+        b.status = next;
+        persistBlockers();
+        logActivity('Blocker status changed', `${b.jobNumber}: ${next} -- ${b.issueDescription}`);
+        showToast(`Status: ${next}`);
+        render();
+      }
+      break;
+    }
+    case 'new-note':
+      openNoteForm(null);
+      break;
+    case 'stage-prev':
+      stepStage(id, -1);
+      break;
+    case 'open-mover':
+      openMover(id);
+      break;
+    case 'pick-stage':
+      moveJobToStage(id, btn.getAttribute('data-stage'));
+      closeModal();
+      break;
+    case 'quick-prompt':
+      sendChat(btn.getAttribute('data-prompt'));
+      break;
+    case 'send-chat':
+      sendChat();
+      break;
+    case 'copy-msg': {
+      const idx = parseInt(btn.getAttribute('data-index'),10);
+      const msg = state.chat[idx];
+      if(msg) copyToClipboard(msg.text);
+      break;
+    }
+    case 'ask-ai-focus':
+      goToAssistantWithPrompt('What should the team focus on today?');
+      break;
+    case 'open-blueprint-fullscreen':
+      openBlueprintFullscreen(id);
+      break;
+    case 'set-model-mode':
+      modelMode = btn.getAttribute('data-mode')==='assembly' ? MODEL_MODES.assembly : MODEL_MODES.engineering;
+      if(modelState && modelState.applyMode) modelState.applyMode();
+      document.querySelectorAll('[data-action="set-model-mode"]').forEach(el=>{
+        el.classList.toggle('active', el.getAttribute('data-mode')===modelMode);
+      });
+      break;
+    case 'toggle-dimensions':
+      showDimensions = !showDimensions;
+      if(modelState && modelState.dimGroup) modelState.dimGroup.visible = showDimensions;
+      btn.classList.toggle('active', showDimensions);
+      break;
+    case 'show-verification': {
+      const vjob = state.jobs.find(j=>j.id===id);
+      if(vjob){
+        const prev = modalRefresh, prevHtml = document.getElementById('modalRoot').innerHTML;
+        disposeModel();
+        document.getElementById('modalRoot').innerHTML =
+          `<div class="modal-overlay" data-close-overlay>${verificationReportHtml(vjob)}</div>`;
+        modalRefresh = ()=>verificationReportHtml(vjob);
+      }
+      break;
+    }
+    case 'toggle-model-part':
+      toggleModelPart(btn.getAttribute('data-part'));
+      break;
+    case 'open-blueprint':
+      openBlueprintModal(id);
+      break;
+    case 'extract-bom':
+      extractComponents(id);
+      break;
+    case 'extract-new-job':
+      extractNewJobFromBlueprint();
+      break;
+    case 'toggle-stage-checklist-item':
+      toggleStageChecklistItem(id, btn.getAttribute('data-key'));
+      break;
+    case 'confirm-advance':
+      confirmAdvance(id);
+      break;
+  }
+});
+document.addEventListener('change', e=>{
+  if(e.target.id === 'bpFileInput'){
+    const file = e.target.files[0];
+    selectedBlueprintFile = file || null;
+    const btn = document.getElementById('bpExtractBtn');
+    const preview = document.getElementById('bpPreviewArea');
+    if(!file){
+      if(btn) btn.disabled = true;
+      if(preview) preview.innerHTML = '';
+      return;
+    }
+    if(btn){ btn.disabled = false; btn.textContent = 'Extract Components'; }
+    if(preview){
+      if(file.type === 'application/pdf'){
+        preview.innerHTML = `<div class="bp-file-chip">&#128196; ${escapeHtml(file.name)}</div>`;
+      }else{
+        const url = URL.createObjectURL(file);
+        preview.innerHTML = `<img src="${url}" class="bp-preview-img" alt="Blueprint preview">`;
+      }
+    }
+  }
+});
+document.addEventListener('input', e=>{
+  if(e.target.id==='dashSearch'){
+    state.jobSearch = e.target.value;
+    updateDashboardList();
+  }else if(e.target.id==='noteSearch'){
+    state.noteSearch = e.target.value;
+    updateNotesList();
+  }else if(e.target.id==='actSearch'){
+    state.activitySearch = e.target.value;
+    updateActivityList();
+  }
+});
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.id==='chatInput'){
+    e.preventDefault();
+    sendChat();
+  }
+});
+
+/* ================= RENDER ROUTER ================= */
+function render(){
+  document.querySelectorAll('.tab-btn').forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('data-tab')===state.tab);
+  });
+  if(!supabaseReady()){
+    document.getElementById('metricsStrip').innerHTML = '';
+    document.getElementById('content').innerHTML = `
+      <div class="focus-banner" style="margin-top:20px;">
+        <div class="focus-banner-head">Setup Needed</div>
+        <div style="font-size:13px;line-height:1.5;">
+          This app isn't connected to its data store yet. If you're setting this up: create a Supabase project,
+          set SUPABASE_URL and SUPABASE_ANON_KEY near the top of this file, then republish. If you're
+          not the one who set this up, let them know this message is showing.
+        </div>
+      </div>`;
+    return;
+  }
+  renderMetrics();
+  if(state.tab==='dashboard') renderDashboard();
+  else if(state.tab==='board') renderBoard();
+  else if(state.tab==='blockers') renderBlockers();
+  else if(state.tab==='notes') renderNotes();
+  else if(state.tab==='assistant') renderAssistant();
+  else if(state.tab==='activity') renderActivity();
+}
+
+function updateDateSub(){
+  const el = document.getElementById('dateSub');
+  const now = new Date();
+  const hr = now.getHours();
+  const shift = hr < 14 ? 'Day Shift' : hr < 22 ? 'Afternoon Shift' : 'Night Shift';
+  el.textContent = `${shift} \u2014 ${now.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}`;
+}
+
+/* ================= INIT ================= */
+(async function init(){
+  updateDateSub();
+  document.getElementById('content').innerHTML = `<div class="empty-state"><div class="big">&#8987;</div>Loading shop data...</div>`;
+  await loadAll();
+  render();
+  ensureUserName();
+})();
+</script>
+</body>
+</html>
