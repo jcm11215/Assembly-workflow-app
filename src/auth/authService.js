@@ -20,7 +20,11 @@ import { getUserName } from './identity.js';   // legacy fallback only, while AU
  * the team, then republish. It is intentionally not a runtime toggle in
  * Settings -- half-authenticated is not a state worth supporting.
  */
+<<<<<<< HEAD
 export const AUTH_ENABLED = true;
+=======
+export const AUTH_ENABLED = false;
+>>>>>>> db48dc20230f1294f6d23dbafbfaa176e2b7be0c
 
 const AUTH_URL = `${SUPABASE_URL}/auth/v1`;
 
