@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Assembly Workflow Tracker</title>
+<link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="appbar">
+    <div class="brand">
+      <div class="name">Assembly Workflow Tracker</div>
+      <div class="sub" id="dateSub">Loading shift...</div>
+    </div>
+    <div class="right">
+      <div class="stamp">Screw Conveyor Mfg</div>
+      <button class="refresh-btn" id="refreshBtn" data-action="manual-sync" title="Sync latest data">&#8635;</button>
+      <button class="refresh-btn" id="settingsBtn" data-action="open-settings" title="Settings">&#9881;</button>
+    </div>
+  </header>
+
+  <div class="metrics-strip" id="metricsStrip"></div>
+
+  <main id="content"></main>
+
+  <nav class="tabbar">
+    <button class="tab-btn" data-tab="dashboard"><span class="ic">&#128203;</span>Dashboard</button>
+    <button class="tab-btn" data-tab="board"><span class="ic">&#128736;</span>Board</button>
+    <button class="tab-btn" data-tab="blockers"><span class="ic">&#9888;</span>Blockers</button>
+    <button class="tab-btn" data-tab="notes"><span class="ic">&#128221;</span>Notes</button>
+    <button class="tab-btn" data-tab="assistant"><span class="ic">&#129302;</span>Assistant</button>
+    <button class="tab-btn" data-tab="activity"><span class="ic">&#128203;</span>Activity</button>
+  </nav>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<script type="module" src="./src/app/app.js"></script>
+</body>
+</html>
