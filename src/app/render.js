@@ -12,7 +12,45 @@ import { renderDashboard, renderMetrics } from '../jobs/dashboard.js';
 import { renderNotes } from '../notes/index.js';
 import { state } from '../state/store.js';
 
+/**
+ * A render replaces all of #content, which is the scroll container
+ * (`main{overflow-y:auto}`) and holds the search inputs. Without this,
+ * any realtime event from another device scrolled you back to the top and
+ * dropped your cursor mid-word.
+ */
+let renderedTab = null;
+
+function captureUiState(){
+  const content = document.getElementById('content');
+  const active = document.activeElement;
+  const focused = active && active.id && content && content.contains(active) ? active : null;
+  let selStart = null, selEnd = null;
+  if(focused){
+    // Reading selectionStart throws on input types that don't support it.
+    try { selStart = focused.selectionStart; selEnd = focused.selectionEnd; } catch { /* not a text field */ }
+  }
+  return { scrollTop: content ? content.scrollTop : 0, focusId: focused ? focused.id : null, selStart, selEnd };
+}
+
+function restoreUiState(snap){
+  // Only carry position across a re-render of the *same* view. Switching
+  // tabs is a fresh view and should start at the top, as it did before.
+  const sameTab = renderedTab === state.tab;
+  renderedTab = state.tab;
+  if(!sameTab) return;
+  const content = document.getElementById('content');
+  if(content && snap.scrollTop) content.scrollTop = snap.scrollTop;
+  if(!snap.focusId) return;
+  const el = document.getElementById(snap.focusId);
+  if(!el) return;
+  el.focus({ preventScroll: true });
+  if(snap.selStart != null && el.setSelectionRange){
+    try { el.setSelectionRange(snap.selStart, snap.selEnd); } catch { /* not a text field */ }
+  }
+}
+
 export function render(){
+  const ui = captureUiState();
   document.querySelectorAll('.tab-btn').forEach(b=>{
     b.classList.toggle('active', b.getAttribute('data-tab')===state.tab);
   });
@@ -36,6 +74,7 @@ export function render(){
   else if(state.tab==='notes') renderNotes();
   else if(state.tab==='assistant') renderAssistant();
   else if(state.tab==='activity') renderActivity();
+  restoreUiState(ui);
 }
 
 export function updateDateSub(){

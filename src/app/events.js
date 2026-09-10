@@ -21,6 +21,7 @@ import { toggleStageChecklistItem } from '../jobs/stageGate.js';
 import { openNoteForm, updateNotesList } from '../notes/index.js';
 import { setSelectedBlueprintFile, state } from '../state/store.js';
 import { closeModal, currentJobId, modalRefresh, openModal, refreshOpenModal, setModalRefresh } from '../ui/components/modal.js';
+import { acceptConfirm, confirmAction, dismissConfirm } from '../ui/components/confirm.js';
 import { copyToClipboard, showToast } from '../ui/components/toast.js';
 import { openSettingsModal } from '../ui/settings.js';
 import { escapeHtml } from '../utils/dom.js';
@@ -254,16 +255,28 @@ export function initEventRouter(){
         break;
       case 'delete-job': {
         const job = state.jobs.find(j=>j.id===id);
-        if(job && confirm(`Delete job ${job.jobNumber}? This cannot be undone.`)){
-          state.jobs = state.jobs.filter(j=>j.id!==id);
-          persistJobs();
-          logActivity('Job deleted', `${job.jobNumber} (${job.customer})`);
-          closeModal();
-          showToast('Job deleted');
-          render();
-        }
+        if(!job) break;
+        confirmAction({
+          title: 'Delete Job',
+          message: `Delete job ${job.jobNumber} (${job.customer})? This cannot be undone.`,
+          confirmLabel: 'Delete Job',
+          onConfirm(){
+            state.jobs = state.jobs.filter(j=>j.id!==id);
+            persistJobs();
+            logActivity('Job deleted', `${job.jobNumber} (${job.customer})`);
+            closeModal();
+            showToast('Job deleted');
+            render();
+          }
+        });
         break;
       }
+      case 'confirm-yes':
+        acceptConfirm();
+        break;
+      case 'confirm-no':
+        dismissConfirm();
+        break;
       case 'attempt-advance':
         attemptAdvance(id);
         break;
@@ -275,11 +288,21 @@ export function initEventRouter(){
         break;
       case 'delete-blocker': {
         const delBlk = state.blockers.find(b=>b.id===id);
-        state.blockers = state.blockers.filter(b=>b.id!==id);
-        persistBlockers();
-        if(delBlk) logActivity('Blocker deleted', `${delBlk.jobNumber}: ${delBlk.issueDescription}`);
-        showToast('Blocker deleted');
-        render();
+        if(!delBlk) break;
+        // Previously deleted on the first tap with no confirmation at all --
+        // one mis-tap with gloves on and the blocker was gone for everyone.
+        confirmAction({
+          title: 'Delete Blocker',
+          message: `Delete "${delBlk.issueDescription}" on ${delBlk.jobNumber || 'this job'}? This cannot be undone.`,
+          confirmLabel: 'Delete Blocker',
+          onConfirm(){
+            state.blockers = state.blockers.filter(b=>b.id!==id);
+            persistBlockers();
+            logActivity('Blocker deleted', `${delBlk.jobNumber}: ${delBlk.issueDescription}`);
+            showToast('Blocker deleted');
+            render();
+          }
+        });
         break;
       }
       case 'cycle-blocker-status': {
