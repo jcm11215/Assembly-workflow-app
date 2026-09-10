@@ -1,0 +1,7 @@
+﻿
+# SSH keys - never commit these
+save
+save.pub
+*.pem
+id_ed25519
+id_rsa
