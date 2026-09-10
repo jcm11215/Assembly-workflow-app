@@ -158,6 +158,7 @@ export async function persistJobs(){
 
 function jobsRowPatch(job){
   return {
+    job_number: job.jobNumber || '',
     customer: job.customer || '',
     description: job.description || '',
     due_date: job.dueDate || null,

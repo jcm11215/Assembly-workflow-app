@@ -96,7 +96,15 @@ export async function updateJob(job, patch){
   const expected = job.version ?? 1;
   const body = patch ? { ...patch } : jobToRow(job);
   const filter = `id=eq.${job.id}&version=eq.${expected}`;
-  const updated = await db.update('jobs', filter, body);
+  let updated;
+  try {
+    updated = await db.update('jobs', filter, body);
+  } catch (e) {
+    if(e instanceof DbError && e.isConflict){
+      throw new DbError(`Job number "${body.job_number ?? job.jobNumber}" already exists.`, e.status, e.code);
+    }
+    throw e;
+  }
   if(!updated || !updated.length) throw new StaleWriteError(job.jobNumber);
   return updated[0];
 }

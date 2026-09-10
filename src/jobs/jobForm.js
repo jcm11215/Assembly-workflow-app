@@ -68,6 +68,9 @@ export function openJobForm(jobId, prefill){
     vals.percentComplete = parseInt(vals.percentComplete,10)||0;
     let pendingBlueprint = null;
     if(job){
+      if(state.jobs.some(j=>j.id!==job.id && j.jobNumber===vals.jobNumber)){
+        showToast('Job number already exists'); return;
+      }
       Object.assign(job, vals);
       logActivity('Job edited', `${vals.jobNumber} (${vals.customer})`);
     }else{
