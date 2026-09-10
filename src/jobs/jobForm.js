@@ -24,7 +24,7 @@ export function jobFormHtml(job, isEdit){
     <div class="modal-title">${isEdit?'Edit Job':'Add Job'} <button class="modal-close" data-close-overlay>&times;</button></div>
     ${(!isEdit && job.billOfMaterials && job.billOfMaterials.length) ? `<div class="bp-file-chip">&#128208; ${job.billOfMaterials.length} components read from the blueprint -- review the fields below, then save.</div>` : ''}
     <form id="jobForm">
-      <div class="field"><label>Job Number</label><input required name="jobNumber" value="${escapeHtml(job.jobNumber)}" ${isEdit?'readonly':''}></div>
+      <div class="field"><label>Job Number</label><input required name="jobNumber" value="${escapeHtml(job.jobNumber)}"></div>
       <div class="field"><label>Customer</label><input required name="customer" list="customerList" value="${escapeHtml(job.customer)}"></div>
       <div class="field"><label>Description</label><textarea name="description">${escapeHtml(job.description)}</textarea></div>
       <div class="field"><label>Due Date</label><input required type="date" name="dueDate" value="${job.dueDate}"></div>
