@@ -4,8 +4,6 @@
  * Handlers here only orchestrate; every mutation lives in a feature module.
  */
 import { loadActivity, updateActivityList } from '../activity/index.js';
-import { sendChat } from '../ai/assistant.js';
-import { goToAssistantWithPrompt, sendActionRequest, confirmProposedAction, cancelProposedAction } from '../ai/assistantView.js';
 import { setAiProvider, setApiKey, setOpenRouterKey } from '../ai/keys.js';
 import { render } from './render.js';
 import { openBlockerForm, updateBlockersList } from '../blockers/index.js';
@@ -25,7 +23,6 @@ import { acceptConfirm, confirmAction, dismissConfirm } from '../ui/components/c
 import { copyToClipboard, showToast } from '../ui/components/toast.js';
 import { openSettingsModal } from '../ui/settings.js';
 import { escapeHtml } from '../utils/dom.js';
-import { openMigrationDashboard, handleMigrationAction } from '../admin/migrationDashboard.js';
 import { handleLoginAction } from '../auth/loginView.js';
 import { signOut } from '../auth/authService.js';
 import { stopJobsRealtime } from '../realtime/jobsRealtime.js';
@@ -36,8 +33,35 @@ import { disconnectAll } from '../realtime/realtimeClient.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { BUCKET_TO_STAGE, bomBucketFor } from '../models/stageMeta.js';
 import { openVersionHistory, toggleCompareSelection, compareModalHtml } from '../blueprints/ui.js';
-import { openHealthDashboard, refreshHealthDashboard } from '../admin/healthDashboard.js';
 
+
+/* ---------------- Lazily-loaded features ----------------
+ * The AI action layer and the admin dashboards are ~69 KB across 11
+ * modules that nothing on the dashboard needs, and every one of them sat
+ * on the boot critical path. They're fetched on first use instead.
+ * import() caches its result, so each is fetched at most once.
+ */
+const loadAssistant     = () => import('../ai/assistant.js');
+const loadAssistantView = () => import('../ai/assistantView.js');
+const loadMigration     = () => import('../admin/migrationDashboard.js');
+const loadHealth        = () => import('../admin/healthDashboard.js');
+
+/**
+ * Calls `use(module)` once the chunk arrives. A failed fetch (dropped shop
+ * wifi mid-tap) is reported rather than swallowed as a dead button.
+ */
+function withModule(loader, use){
+  loader().then(use).catch(e => {
+    console.error('feature failed to load', e);
+    showToast('Could not load that feature -- check the connection and try again', 5000);
+  });
+}
+
+/** Reads the chat box now, so the text survives the chunk fetch. */
+function chatInputValue(){
+  const el = document.getElementById('chatInput');
+  return el ? el.value : '';
+}
 
 export function initEventRouter(){
   document.addEventListener('submit', e=>{
@@ -103,10 +127,10 @@ export function initEventRouter(){
     const action = btn.getAttribute('data-action');
 
   // Migration diagnostics own their own action namespace.
-  if(action.startsWith('mig-')){ handleMigrationAction(action, btn); return; }
-  if(action === 'open-migration'){ openMigrationDashboard(); return; }
-  if(action === 'open-health'){ openHealthDashboard(); return; }
-  if(action === 'health-refresh'){ refreshHealthDashboard(); return; }
+  if(action.startsWith('mig-')){ withModule(loadMigration, m=>m.handleMigrationAction(action, btn)); return; }
+  if(action === 'open-migration'){ withModule(loadMigration, m=>m.openMigrationDashboard()); return; }
+  if(action === 'open-health'){ withModule(loadHealth, m=>m.openHealthDashboard()); return; }
+  if(action === 'health-refresh'){ withModule(loadHealth, m=>m.refreshHealthDashboard()); return; }
 
   // Login screen owns its own namespace too.
   if(action.startsWith('login-')){ handleLoginAction(action); return; }
@@ -335,21 +359,33 @@ export function initEventRouter(){
         if(verdict.allowed) closeModal();
         break;
       }
-      case 'quick-prompt':
-        sendChat(btn.getAttribute('data-prompt'));
+      // Each of these reads from the DOM before awaiting the chunk -- the
+      // button or input could be re-rendered away while it's in flight.
+      case 'quick-prompt': {
+        const prompt = btn.getAttribute('data-prompt');
+        withModule(loadAssistant, m=>m.sendChat(prompt));
         break;
-      case 'send-chat':
-        sendChat();
+      }
+      case 'send-chat': {
+        const typed = chatInputValue();
+        withModule(loadAssistant, m=>m.sendChat(typed));
         break;
-      case 'send-ai-action':
-        sendActionRequest();
+      }
+      case 'send-ai-action': {
+        const typed = chatInputValue();
+        withModule(loadAssistantView, m=>m.sendActionRequest(typed));
         break;
-      case 'confirm-ai-action':
-        confirmProposedAction(btn.getAttribute('data-proposal-id'));
+      }
+      case 'confirm-ai-action': {
+        const pid = btn.getAttribute('data-proposal-id');
+        withModule(loadAssistantView, m=>m.confirmProposedAction(pid));
         break;
-      case 'cancel-ai-action':
-        cancelProposedAction(btn.getAttribute('data-proposal-id'));
+      }
+      case 'cancel-ai-action': {
+        const pid = btn.getAttribute('data-proposal-id');
+        withModule(loadAssistantView, m=>m.cancelProposedAction(pid));
         break;
+      }
       case 'copy-msg': {
         const idx = parseInt(btn.getAttribute('data-index'),10);
         const msg = state.chat[idx];
@@ -357,7 +393,7 @@ export function initEventRouter(){
         break;
       }
       case 'ask-ai-focus':
-        goToAssistantWithPrompt('What should the team focus on today?');
+        withModule(loadAssistantView, m=>m.goToAssistantWithPrompt('What should the team focus on today?'));
         break;
       case 'open-blueprint-thumb': {
         // Clicked from the job card, where the full file has almost
@@ -430,7 +466,8 @@ export function initEventRouter(){
   document.addEventListener('keydown', e=>{
     if(e.key==='Enter' && e.target.id==='chatInput'){
       e.preventDefault();
-      sendChat();
+      const typed = e.target.value;
+      withModule(loadAssistant, m=>m.sendChat(typed));
     }
   });
 

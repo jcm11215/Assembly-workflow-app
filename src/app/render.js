@@ -3,7 +3,6 @@
 
 /* ================= RENDER ROUTER ================= */
 import { renderActivity } from '../activity/index.js';
-import { renderAssistant } from '../ai/assistantView.js';
 import { renderBlockers } from '../blockers/index.js';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabaseReady } from '../db/config.js';
 import { loadAll } from '../db/repository.js';
@@ -72,9 +71,33 @@ export function render(){
   else if(state.tab==='board') renderBoard();
   else if(state.tab==='blockers') renderBlockers();
   else if(state.tab==='notes') renderNotes();
-  else if(state.tab==='assistant') renderAssistant();
+  else if(state.tab==='assistant') renderAssistantLazy();
   else if(state.tab==='activity') renderActivity();
   restoreUiState(ui);
+}
+
+/**
+ * The assistant tab pulls in the whole AI action layer (~47 KB across 8
+ * modules) that the dashboard never needs, so it's fetched on first use
+ * rather than at boot. import() caches, so this costs one fetch.
+ */
+let assistantView = null;
+
+function renderAssistantLazy(){
+  if(assistantView){ assistantView.renderAssistant(); return; }
+  document.getElementById('content').innerHTML =
+    `<div class="empty-state"><div class="big">&#8987;</div>Loading assistant...</div>`;
+  import('../ai/assistantView.js').then(mod => {
+    assistantView = mod;
+    // They may have tabbed away while this was in flight -- painting the
+    // assistant over whatever they switched to would be worse than nothing.
+    if(state.tab === 'assistant') mod.renderAssistant();
+  }).catch(e => {
+    console.error('assistant failed to load', e);
+    if(state.tab !== 'assistant') return;
+    document.getElementById('content').innerHTML =
+      `<div class="empty-state"><div class="big">&#9888;</div>Could not load the assistant.<br>Check the connection and tap the tab again.</div>`;
+  });
 }
 
 export function updateDateSub(){
