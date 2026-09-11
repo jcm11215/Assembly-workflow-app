@@ -6,15 +6,32 @@
 
 -- ---------- helper: current user's role ----------
 -- SECURITY DEFINER so it can read profiles without RLS recursion.
+-- An inactive profile reports no role at all, which is what turns
+-- every is_admin()/is_lead_or_admin() check false for someone who has
+-- been switched off in the Team screen.
 create or replace function auth_role()
 returns user_role
 language sql stable security definer set search_path = public
-as $$ select role from profiles where id = auth.uid() $$;
+as $$ select role from profiles where id = auth.uid() and active $$;
+
+create or replace function is_active() returns boolean
+language sql stable security definer set search_path = public
+as $$ select coalesce((select active from profiles where id = auth.uid()), false) $$;
 
 create or replace function is_admin() returns boolean
 language sql stable as $$ select auth_role() = 'admin' $$;
 create or replace function is_lead_or_admin() returns boolean
 language sql stable as $$ select auth_role() in ('lead','admin') $$;
+
+-- The policies call these as the authenticated role, so it needs
+-- EXECUTE. Without it a policy referencing one fails the whole request
+-- with "permission denied for function ..." rather than filtering rows.
+-- Postgres grants EXECUTE to PUBLIC by default, which would expose
+-- these to anon via /rest/v1/rpc/<name>.
+revoke execute on function auth_role() from public, anon;
+revoke execute on function is_active() from public, anon;
+grant execute on function auth_role() to authenticated;
+grant execute on function is_active() to authenticated;
 
 -- ---------- stage order + checklist mapping ----------
 -- Mirrors STAGES / STAGE_PROCEDURE in src/jobs/procedure.js.

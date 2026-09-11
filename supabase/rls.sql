@@ -17,7 +17,7 @@ alter table activity_log         enable row level security;
 -- =====================  profiles  =====================
 drop policy if exists profiles_select on profiles;
 create policy profiles_select on profiles
-  for select to authenticated using (true);          -- everyone sees the roster
+  for select to authenticated using (is_active());   -- every active user sees the roster
 
 drop policy if exists profiles_update_self on profiles;
 create policy profiles_update_self on profiles
@@ -30,6 +30,14 @@ create policy profiles_admin_all on profiles
   for all to authenticated using (is_admin()) with check (is_admin());
 
 -- A user may edit their own row but NOT their own role.
+--
+-- This is strict on purpose: auth.uid() is null in the SQL editor and
+-- in any server-side context, so those cannot change roles either --
+-- there is no back door. The admin Team screen (src/admin/
+-- teamDashboard.js) is the only way, and it works because the admin
+-- driving it is a real signed-in session. The one role assigned
+-- outside this rule is the owner's, set at INSERT time by
+-- handle_new_user (see signup.sql), because INSERT is not guarded.
 create or replace function block_self_promote()
 returns trigger language plpgsql as $$
 begin
@@ -46,7 +54,7 @@ create trigger trg_no_self_promote before update on profiles
 -- =====================  jobs  =====================
 drop policy if exists jobs_select on jobs;
 create policy jobs_select on jobs
-  for select to authenticated using (true);          -- whole shop is visible
+  for select to authenticated using (is_active());   -- whole shop is visible
 
 drop policy if exists jobs_update_assigned on jobs;
 create policy jobs_update_assigned on jobs
@@ -73,7 +81,7 @@ create policy jobs_delete_admin on jobs
 -- =====================  job_checklist  =====================
 drop policy if exists checklist_select on job_checklist;
 create policy checklist_select on job_checklist
-  for select to authenticated using (true);
+  for select to authenticated using (is_active());
 
 drop policy if exists checklist_write on job_checklist;
 create policy checklist_write on job_checklist
@@ -105,13 +113,13 @@ create policy checklist_delete_admin on job_checklist
 -- =====================  blockers  =====================
 drop policy if exists blockers_select on blockers;
 create policy blockers_select on blockers
-  for select to authenticated using (true);
+  for select to authenticated using (is_active());
 
 -- Anyone on the floor may raise a blocker -- surfacing problems must
 -- never be gated.
 drop policy if exists blockers_insert on blockers;
 create policy blockers_insert on blockers
-  for insert to authenticated with check (true);
+  for insert to authenticated with check (is_active());
 
 drop policy if exists blockers_update_lead on blockers;
 create policy blockers_update_lead on blockers
@@ -125,11 +133,12 @@ create policy blockers_delete_admin on blockers
 -- =====================  notes  =====================
 drop policy if exists notes_select on notes;
 create policy notes_select on notes
-  for select to authenticated using (true);
+  for select to authenticated using (is_active());
 
 drop policy if exists notes_insert on notes;
 create policy notes_insert on notes
-  for insert to authenticated with check (author = auth.uid() or is_lead_or_admin());
+  for insert to authenticated
+  with check (is_active() and (author = auth.uid() or is_lead_or_admin()));
 
 -- Authors get a 15-minute correction window; leads may always edit.
 drop policy if exists notes_update on notes;
@@ -151,7 +160,7 @@ create policy notes_delete_lead on notes
 -- =====================  blueprints  =====================
 drop policy if exists blueprints_select on blueprints;
 create policy blueprints_select on blueprints
-  for select to authenticated using (true);
+  for select to authenticated using (is_active());
 
 drop policy if exists blueprints_insert on blueprints;
 create policy blueprints_insert on blueprints
@@ -171,7 +180,7 @@ create policy blueprints_delete_admin on blueprints
 -- =====================  blueprint_components  =====================
 drop policy if exists bpc_select on blueprint_components;
 create policy bpc_select on blueprint_components
-  for select to authenticated using (true);
+  for select to authenticated using (is_active());
 
 drop policy if exists bpc_write_lead on blueprint_components;
 create policy bpc_write_lead on blueprint_components
@@ -184,12 +193,12 @@ create policy bpc_write_lead on blueprint_components
 -- audit trail. Corrections are new rows.
 drop policy if exists activity_insert on activity_log;
 create policy activity_insert on activity_log
-  for insert to authenticated with check (true);   -- actor forced by trigger
+  for insert to authenticated with check (is_active());   -- actor forced by trigger
 
 drop policy if exists activity_select_own on activity_log;
 create policy activity_select_own on activity_log
   for select to authenticated
-  using (is_lead_or_admin() or actor = auth.uid());
+  using (is_active() and (is_lead_or_admin() or actor = auth.uid()));
 
 -- =====================  role verification harness  =====================
 -- Run as each role on a branch DB before applying to production.

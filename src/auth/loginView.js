@@ -4,7 +4,8 @@
  * data-close-overlay, so there is no way to interact with the app before
  * authenticating.
  */
-import { signIn, requestPasswordReset } from './authService.js';
+import { signIn, requestPasswordReset, toLoginEmail } from './authService.js';
+import { showSignup, handleSignupAction } from './signupView.js';
 import { showToast } from '../ui/components/toast.js';
 
 let onSuccess = null;
@@ -14,7 +15,10 @@ function loginHtml(mode){
     return `
     <div class="modal-sheet">
       <div class="modal-title">Reset Password</div>
-      <div class="bp-hint" style="margin-bottom:10px;">Enter your email and we will send a reset link.</div>
+      <div class="bp-hint" style="margin-bottom:10px;">
+        Enter your email and we will send a reset link. If you sign in with a username rather than an
+        email, ask a supervisor to reset it for you &mdash; there's no inbox to send a link to.
+      </div>
       <form id="resetForm">
         <div class="field"><label>Email</label><input type="email" name="email" required autocomplete="email"></div>
         <div class="fab-row"><button type="submit" class="btn btn-primary btn-block">Send Reset Link</button></div>
@@ -27,10 +31,12 @@ function loginHtml(mode){
     <div class="modal-title">Sign In</div>
     <div class="bp-hint" style="margin-bottom:10px;">Sign in to Assembly Workflow Tracker.</div>
     <form id="loginForm">
-      <div class="field"><label>Email</label><input type="email" name="email" required autocomplete="username"></div>
+      <div class="field"><label>Username or Email</label>
+        <input name="email" required autocomplete="username" autocapitalize="off" spellcheck="false"></div>
       <div class="field"><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>
       <div class="fab-row"><button type="submit" class="btn btn-primary btn-block">Sign In</button></div>
     </form>
+    <div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="login-signup">Create Account</button></div>
     <div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="login-forgot">Forgot Password?</button></div>
   </div>`;
 }
@@ -54,7 +60,7 @@ async function handleLogin(e){
   const btn = e.target.querySelector('button[type=submit]');
   btn.disabled = true; btn.textContent = 'Signing in...';
   try {
-    await signIn(email, password);
+    await signIn(toLoginEmail(email), password);
     document.getElementById('modalRoot').innerHTML = '';
     if(onSuccess) onSuccess();
   } catch (err) {
@@ -83,7 +89,15 @@ async function handleReset(e){
 export function handleLoginAction(action){
   if(action === 'login-forgot'){ paint('reset'); return true; }
   if(action === 'login-back'){ paint('login'); return true; }
+  if(action === 'login-signup'){ showSignup(onSuccess); return true; }
   return false;
+}
+
+/** The signup screen lives inside the same overlay, so the login router owns its actions too. */
+export function handleAuthScreenAction(action){
+  if(action === 'signup-back'){ paint('login'); return true; }
+  if(action.startsWith('signup-')) return handleSignupAction(action);
+  return handleLoginAction(action);
 }
 
 /** callback runs once sign-in succeeds. */

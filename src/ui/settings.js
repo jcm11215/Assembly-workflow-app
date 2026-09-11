@@ -4,6 +4,7 @@ import { getAiProvider, getApiKey, getOpenRouterKey, getOpenRouterModel, setApiK
 import { getUserName, setUserName } from '../auth/identity.js';
 import { AUTH_ENABLED, currentUser, signOut } from '../auth/authService.js';
 import { getCachedProfile } from '../auth/profileService.js';
+import { isAdmin } from '../auth/permissions.js';
 import { supabaseReady } from '../db/config.js';
 import { closeModal, openModal } from './components/modal.js';
 import { showToast } from './components/toast.js';
@@ -121,6 +122,15 @@ export function settingsModalHtml(){
       </form>
       ${hasPersonalOpenRouterKey() ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-openrouter-key">Remove Key</button></div>` : ''}
     </div>
+
+    ${AUTH_ENABLED && isAdmin() ? `
+    <div class="section-title">Team</div>
+    <div class="bp-hint" style="margin-bottom:10px;">
+      Set what each person can do, and switch off accounts for people who have left.
+    </div>
+    <div class="fab-row">
+      <button type="button" class="btn btn-outline btn-block" data-action="open-team">Manage Team</button>
+    </div>` : ''}
 
     <div class="section-title">Data Migration</div>
     <div class="bp-hint" style="margin-bottom:10px;">

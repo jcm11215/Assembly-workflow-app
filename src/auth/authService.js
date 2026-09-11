@@ -20,9 +20,24 @@ import { getUserName } from './identity.js';   // legacy fallback only, while AU
  * the team, then republish. It is intentionally not a runtime toggle in
  * Settings -- half-authenticated is not a state worth supporting.
  */
-export const AUTH_ENABLED = false;
+export const AUTH_ENABLED = true;
 
 const AUTH_URL = `${SUPABASE_URL}/auth/v1`;
+
+/**
+ * Employees without a work email sign in with a plain username. GoTrue
+ * only knows email addresses, so a username is stored as
+ * `<username>@assembly.local` -- a reserved TLD that can never receive
+ * mail, which is the point: those accounts can't self-serve a password
+ * reset, an admin resets it for them.
+ */
+const LOGIN_DOMAIN = 'assembly.local';
+
+/** Accepts either form from one login box: "dana" or "dana@shop.com". */
+export function toLoginEmail(identifier){
+  const v = String(identifier || '').trim().toLowerCase();
+  return v.includes('@') ? v : `${v}@${LOGIN_DOMAIN}`;
+}
 
 function authHeaders(extra){
   return { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json', ...(extra || {}) };
@@ -61,8 +76,44 @@ export async function signIn(email, password){
   const session = toSession(data);
   setSession(session);
   scheduleRefresh(session);
-  await ensureProfile(session.user);
+
+  // A deactivated account still authenticates -- GoTrue knows nothing
+  // about profiles.active -- but its profile row becomes invisible
+  // under RLS. Rather than dropping the person into an app with no
+  // data in it, refuse the sign-in and say why.
+  const profile = await ensureProfile(session.user).catch(() => null);
+  if(!profile){
+    clearTimeout(refreshTimer);
+    clearSession();
+    clearCachedProfile();
+    throw new Error('This account is not active. Check with your supervisor.');
+  }
   return session;
+}
+
+/**
+ * Self-service account creation, via the create-account Edge Function.
+ *
+ * Not GoTrue's own /signup: that endpoint is disabled on the project on
+ * purpose. The app URL is public, so an open signup endpoint would let
+ * anyone on the internet into the shop's job data. The function checks a
+ * shop access code and forces the 'assembler' role before creating
+ * anything. Signs the new user in on success.
+ */
+export async function createAccount({ fullName, loginId, password, accessCode }){
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/create-account`, {
+    method: 'POST',
+    headers: authHeaders({ Authorization: `Bearer ${SUPABASE_ANON_KEY}` }),
+    body: JSON.stringify({
+      full_name: fullName,
+      email: toLoginEmail(loginId),
+      password,
+      access_code: accessCode
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(data.error || 'Could not create the account.');
+  return signIn(toLoginEmail(loginId), password);
 }
 
 export async function signOut(){
@@ -106,7 +157,12 @@ export async function restoreSession(){
   if(!s) return null;
   if(!isExpired(s)){
     scheduleRefresh(s);
-    if(!getCachedProfile()) await ensureProfile(s.user).catch(() => null);
+    if(!getCachedProfile()){
+      const profile = await ensureProfile(s.user).catch(() => null);
+      // Deactivated (or deleted) since this session was stored: send
+      // them back to the login screen instead of an empty app.
+      if(!profile){ clearSession(); clearCachedProfile(); return null; }
+    }
     return s;
   }
   try { return await refreshSession(); }

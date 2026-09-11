@@ -27,15 +27,21 @@ export class DbError extends Error {
 }
 
 /**
- * Phase 5 replaces the anon-key header with the user's JWT. Kept as a
- * single function so that change touches one place.
+ * The user's JWT once signed in, falling back to the anon key. Under RLS
+ * every policy is `to authenticated`, so sending the anon key here would
+ * reject every request -- the token has to be the signed-in user's.
  */
 export function getAuthHeaders(){
+  const token = accessTokenProvider() || SUPABASE_ANON_KEY;
   return {
     apikey: SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+    Authorization: `Bearer ${token}`
   };
 }
+
+/** Injected at boot, same seam as setCurrentUserIdProvider below. */
+let accessTokenProvider = () => null;
+export function setAccessTokenProvider(fn){ accessTokenProvider = fn; }
 
 /**
  * Current authenticated user id. Supplied via injection, not a direct

@@ -15,7 +15,8 @@ import { initEventRouter } from './events.js';
 import { render, updateDateSub } from './render.js';
 import { setRenderer } from './bus.js';
 import { flushPendingSaves, loadAll } from '../db/repository.js';
-import { setCurrentUserIdProvider } from '../db/supabaseClient.js';
+import { setCurrentUserIdProvider, setAccessTokenProvider } from '../db/supabaseClient.js';
+import { getAccessToken } from '../auth/sessionStore.js';
 import { ensureUserName } from '../auth/nameGate.js';
 import { AUTH_ENABLED, restoreSession, currentActorId } from '../auth/authService.js';
 import { showLogin } from '../auth/loginView.js';
@@ -31,6 +32,7 @@ import { initConnectionMonitor } from '../monitoring/connectionMonitor.js';
 export async function boot(){
   setRenderer(render);                              // wire the bus before anything can request a render
   setCurrentUserIdProvider(currentActorId);          // db layer asks auth, never the other way around
+  setAccessTokenProvider(() => AUTH_ENABLED ? getAccessToken() : null);
   initErrorHandlers();                               // observational only -- catches, never suppresses
 
   updateDateSub();
@@ -40,6 +42,7 @@ export async function boot(){
   if(AUTH_ENABLED){
     const session = await restoreSession();
     if(!session){
+      initEventRouter();                             // the login/signup screens need their buttons live
       showLogin(() => continueBoot());               // blocks here until sign-in succeeds
       return;
     }

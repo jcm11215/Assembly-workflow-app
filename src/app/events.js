@@ -23,7 +23,7 @@ import { acceptConfirm, confirmAction, dismissConfirm } from '../ui/components/c
 import { copyToClipboard, showToast } from '../ui/components/toast.js';
 import { openSettingsModal } from '../ui/settings.js';
 import { escapeHtml } from '../utils/dom.js';
-import { handleLoginAction } from '../auth/loginView.js';
+import { handleAuthScreenAction } from '../auth/loginView.js';
 import { signOut } from '../auth/authService.js';
 import { stopJobsRealtime } from '../realtime/jobsRealtime.js';
 import { stopBlockersRealtime } from '../realtime/blockersRealtime.js';
@@ -46,6 +46,7 @@ const loadAssistant     = () => import('../ai/assistant.js');
 const loadAssistantView = () => import('../ai/assistantView.js');
 const loadMigration     = () => import('../admin/migrationDashboard.js');
 const loadHealth        = () => import('../admin/healthDashboard.js');
+const loadTeam          = () => import('../admin/teamDashboard.js');
 
 /**
  * Calls `use(module)` once the chunk arrives. A failed fetch (dropped shop
@@ -64,7 +65,15 @@ function chatInputValue(){
   return el ? el.value : '';
 }
 
+let routerBound = false;
+
 export function initEventRouter(){
+  // Bound twice on purpose: once before the login gate so the login and
+  // signup screens respond, then again by continueBoot for the normal
+  // path. Second call is a no-op rather than a duplicate listener.
+  if(routerBound) return;
+  routerBound = true;
+
   document.addEventListener('submit', e=>{
     const form = e.target.closest('[data-action="bom-add-component-form"]');
     if(!form) return;
@@ -132,9 +141,11 @@ export function initEventRouter(){
   if(action === 'open-migration'){ withModule(loadMigration, m=>m.openMigrationDashboard()); return; }
   if(action === 'open-health'){ withModule(loadHealth, m=>m.openHealthDashboard()); return; }
   if(action === 'health-refresh'){ withModule(loadHealth, m=>m.refreshHealthDashboard()); return; }
+  if(action === 'open-team'){ withModule(loadTeam, m=>m.openTeamDashboard()); return; }
+  if(action.startsWith('team-')){ withModule(loadTeam, m=>m.handleTeamAction(action, btn)); return; }
 
-  // Login screen owns its own namespace too.
-  if(action.startsWith('login-')){ handleLoginAction(action); return; }
+  // The login/signup screens own their own namespaces too.
+  if(action.startsWith('login-') || action.startsWith('signup-')){ handleAuthScreenAction(action); return; }
   if(action === 'account-sign-out'){
     stopJobsRealtime(); stopBlockersRealtime(); stopNotesRealtime(); stopActivityRealtime();
     disconnectAll();
