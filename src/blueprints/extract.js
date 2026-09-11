@@ -71,7 +71,11 @@ async function contentBlocksFor(file){
   const originalBase64 = await fileToBase64Raw(file);
   const originalFile = { base64: originalBase64, mimeType: file.type, filename: file.name };
   if(file.type === 'application/pdf'){
-    const images = await pdfFileToImages(file, 1);   // page 1 only, for the AI call
+    // Every page, not just page 1 -- a fab set's hardware is spread across
+    // its sheets, and reading only the first one is why scans kept coming
+    // back empty. Rendered a little smaller/softer than a single page would
+    // be so a 20-sheet set stays a reasonable upload for the AI provider.
+    const images = await pdfFileToImages(file, MAX_PDF_PAGES, 1600, 0.75);
     if(!images.length) throw new Error('The PDF has no readable pages.');
     const thumbnail = await shrinkBase64Image(images[0].base64, images[0].mime).catch(()=>null);
     return {
@@ -87,9 +91,13 @@ async function contentBlocksFor(file){
   };
 }
 
+// Upper bound on PDF pages sent to the AI -- well above a normal fab set
+// (10-20 sheets), there only so a stray 200-page PDF can't hang a phone.
+const MAX_PDF_PAGES = 40;
+
 function statusToast(componentCount){
   if(componentCount === 0){
-    return 'Scan finished but found no matching components. Only seals, bearings, shafts, augers, motors and reducers are pulled in -- check the browser console for what was skipped, or add parts by hand via Blueprint > Edit.';
+    return 'Scan finished but found no matching components. Only drives, motors, reducers, seals, gaskets, bearings, hangers, coupling/tail/drive shafts, augers, coupling bolts and UHMW are pulled in -- check the browser console for what was skipped, or add parts by hand via Blueprint > Edit.';
   }
   return `Extracted ${componentCount} component${componentCount===1?'':'s'} from the drawing.`;
 }

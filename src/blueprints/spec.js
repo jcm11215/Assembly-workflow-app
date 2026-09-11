@@ -128,23 +128,44 @@ export function stageForLocation(location){
 
 const EXTRACTION_METHODS = ['bom_table', 'callout', 'detail_view', 'general_assembly', 'inferred'];
 
-// Only these part types are wanted as components -- everything else
-// (shafts, plates, weldments, couplings, sprockets, keys, guards,
-// fasteners, screw/auger flighting, troughs, discharge parts) is
-// excluded, matched against the item name. A whitelist here rather than
-// a growing exclusion list: it stays correct automatically as new
-// unwanted part types show up on a drawing, instead of needing a new
-// exclusion rule added every time.
-// Matches the whitelisted part types as they actually appear on shop
-// drawings, including standard abbreviations. Deliberately does NOT
-// match bare "screw" (that would pull in every cap screw and set screw
-// on the drawing) -- auger flighting is caught via auger/flight/
-// flighting, or "screw" only when followed by assembly/conveyor.
-const WANTED_COMPONENT_RE =
-  /\b(seal|bearing|brg|bearings|motor|reducer|gear ?box|gear ?motor|shaft|auger|flight|flighting|pillow ?block)s?\b|\bscrew\s+(assembly|assy|conveyor)\b/i;
+// The shop's component list -- the only part types a scan keeps: drive,
+// motor, reducer, seal, gasket, bearing, hanger, coupling shaft, tail
+// shaft, drive shaft, auger, coupling bolts, UHMW. Everything else
+// (plates, weldments, sprockets, guards, other fasteners, troughs,
+// covers, shrouds, spouts) is dropped, matched against the item name.
+// A whitelist rather than a growing exclusion list: it stays correct as
+// new unwanted part types show up on a drawing.
+// Includes the names these parts actually go by on drawings (brg, pillow
+// block, gearbox, waste pack, gland, flighting). "Drive" means the drive
+// unit, so drive end plates/guards/bases don't sneak in on the word.
+// Deliberately never matches bare "screw" -- that would pull in every
+// cap screw and set screw on the drawing.
+const WANTED_COMPONENT_RE = new RegExp([
+  String.raw`\bdrives?\b(?!\s*(end|plate|guard|base|shaft))`,
+  String.raw`\b(gear\s*)?motors?\b`,
+  String.raw`\b(reducers?|gear\s*box(es)?)\b`,
+  String.raw`\b(seals?|waste\s*packs?|glands?)\b`,
+  String.raw`\bgaskets?\b`,
+  String.raw`\b(bearings?|brgs?|pillow\s*blocks?)\b`,
+  String.raw`\bhangers?\b`,
+  String.raw`\b(coupling|tail|drive|end)\s*shafts?\b`,
+  String.raw`\b(augers?|flight(ing)?s?|screw\s*(assembly|assy|section)s?)\b`,
+  String.raw`\bcoupling\s*bolts?\b`,
+  String.raw`\buhmw\b`
+].join('|'), 'i');
+
+// A bare "Shaft" doesn't say which one it is -- where it sits does, so
+// it's renamed to the specific shaft before the filter sees it.
+const SHAFT_NAME_BY_LOCATION = { drive_end:'Drive Shaft', tail_end:'Tail Shaft', hanger:'Coupling Shaft', screw:'Coupling Shaft' };
+function nameBareShaft(c){
+  if(!c || !/^\s*shafts?\s*$/i.test(c.item || '')) return c;
+  const name = SHAFT_NAME_BY_LOCATION[c.installation_location];
+  return name ? { ...c, item: name } : c;
+}
 
 export function normalizeComponents(parsed){
-  const raw = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.components) ? parsed.components : []);
+  const raw = (Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.components) ? parsed.components : []))
+    .map(nameBareShaft);
   // Visibility into the filter: an empty component list is ambiguous
   // between "the AI found nothing" and "the whitelist rejected
   // everything it found", and those need completely different fixes.
