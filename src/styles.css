@@ -580,3 +580,41 @@ main > *{max-width:1100px;margin-left:auto;margin-right:auto;}
   -webkit-appearance:none;appearance:none;
 }
 
+/* ---------- Part tips (help for new assemblers) ---------- */
+/* Blue is the info colour here, so a tip never reads as a warning
+   (amber/red) or an action (yellow). Tap targets stay 40px+ for gloves. */
+.tip-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+.tip-chip{
+  background:var(--steel-800);border:1px solid var(--line);color:var(--blue);
+  border-radius:20px;padding:0 12px;min-height:40px;font-size:12px;font-weight:700;
+  -webkit-appearance:none;
+}
+.tip-chip.active,.tip-btn.active{background:var(--blue-bg);border-color:var(--blue);}
+.tip-card{
+  background:var(--blue-bg);border:1px solid var(--line);border-left:3px solid var(--blue);
+  border-radius:8px;padding:10px 12px;margin-bottom:10px;
+}
+.tip-name{font-size:13px;font-weight:800;margin-bottom:4px;}
+.tip-aka{font-size:11px;font-weight:600;color:var(--text-dim);}
+.tip-line{display:grid;grid-template-columns:64px 1fr;gap:8px;font-size:13px;line-height:1.4;margin-top:4px;}
+.tip-line b{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--blue);padding-top:2px;}
+/* Hardware row with a tip: info button on the right, card drops in below. */
+.bom-row-tip{display:flex;flex-wrap:wrap;align-items:flex-start;column-gap:10px;}
+.bom-row-tip .tip-slot{flex-basis:100%;}
+.bom-row-tip .tip-card{margin:10px 0 0 0;}
+.tip-btn{
+  width:40px;height:40px;border-radius:8px;flex-shrink:0;
+  background:var(--steel-700);border:1px solid var(--steel-600);color:var(--blue);
+  font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;
+  -webkit-appearance:none;
+}
+/* "Look up a part" -- for parts no checklist step names. 16px avoids iOS zoom-on-focus. */
+.tip-guide{margin:0 0 16px 0;}
+.tip-guide-select{
+  width:100%;background:var(--steel-800);border:1px solid var(--steel-600);color:var(--blue);
+  border-radius:8px;padding:9px 10px;font-size:16px;font-weight:700;min-height:44px;
+  -webkit-appearance:none;appearance:none;
+}
+.tip-guide-select option{color:var(--text);background:var(--steel-800);}
+.tip-guide .tip-card{margin:8px 0 0 0;}
+

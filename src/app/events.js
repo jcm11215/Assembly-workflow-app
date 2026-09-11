@@ -33,6 +33,7 @@ import { disconnectAll } from '../realtime/realtimeClient.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { BUCKET_TO_STAGE, bomBucketFor } from '../models/stageMeta.js';
 import { openVersionHistory, toggleCompareSelection, compareModalHtml } from '../blueprints/ui.js';
+import { showGuideTip, toggleTip } from '../tips/partTips.js';
 
 
 /* ---------------- Lazily-loaded features ----------------
@@ -424,12 +425,19 @@ export function initEventRouter(){
       case 'toggle-stage-checklist-item':
         toggleStageChecklistItem(id, btn.getAttribute('data-key'));
         break;
+      case 'toggle-tip':
+        toggleTip(btn.getAttribute('data-group'), btn.getAttribute('data-tip'));
+        break;
       case 'confirm-advance':
         confirmAdvance(id);
         break;
     }
   });
   document.addEventListener('change', e=>{
+    if(e.target.getAttribute && e.target.getAttribute('data-action') === 'tip-lookup'){
+      showGuideTip(e.target.value);
+      return;
+    }
     if(e.target.id === 'bpFileInput'){
       const file = e.target.files[0];
       setSelectedBlueprintFile(file || null);

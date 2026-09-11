@@ -7,6 +7,7 @@ import { blueprintImageSectionHtml, engineeringPanelHtml, reviewPanelHtml } from
 import { PROCEDURE, STAGES, STAGE_PROCEDURE, stageChecklistProgress, stageLabel } from './procedure.js';
 import { dueStatus } from './selectors.js';
 import { state } from '../state/store.js';
+import { partGuideHtml, resetTips, stepTipsHtml } from '../tips/partTips.js';
 import { currentJobId, openModal, setCurrentJobId } from '../ui/components/modal.js';
 import { daysUntil, fmtDate } from '../utils/date.js';
 import { escapeHtml } from '../utils/dom.js';
@@ -36,6 +37,7 @@ export function jobDetailModalHtml(job){
     return `
     <div class="checklist-step">
       <div class="checklist-step-head"><span>${escapeHtml(step.title)}</span><span class="checklist-badge ${stepDone===step.items.length?'complete':''}">${stepDone}/${step.items.length}</span></div>
+      ${stepTipsHtml(si, step.title)}
       ${itemsHtml}
     </div>`;
   }).join('') : `<div class="bp-hint" style="margin-bottom:10px;">No checklist steps for this stage -- it's a sign-off stage.</div>`;
@@ -83,6 +85,7 @@ export function jobDetailModalHtml(job){
 
     <div class="section-title" style="margin-top:18px;">Current Stage Checklist</div>
     ${checklistHtml}
+    ${partGuideHtml()}
 
     <div class="section-title">Blueprint &amp; Hardware</div>
     ${blueprintImageSectionHtml(job)}
@@ -102,6 +105,7 @@ export function openJobDetail(jobId){
   const job = state.jobs.find(j=>j.id===jobId);
   if(!job) return;
   state.bomEditing = false;
+  resetTips();
   openModal(jobDetailModalHtml(job), ()=>{
     const j = state.jobs.find(x=>x.id===jobId);
     return j ? jobDetailModalHtml(j) : '';
