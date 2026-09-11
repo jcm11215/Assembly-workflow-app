@@ -31,7 +31,7 @@ export function openModal(html, refresher){
   modalRefresh = refresher || null;
   document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" data-close-overlay>${html}</div>`;
   setTimeout(()=>{
-    const f = document.querySelector('.modal-sheet input:not([readonly]):not([type=range]), .modal-sheet select, .modal-sheet textarea');
+    const f = document.querySelector('.modal-sheet input:not([readonly]):not([type=range]), .modal-sheet select:not([data-no-autofocus]), .modal-sheet textarea');
     if(f) f.focus();
   }, 50);
 }

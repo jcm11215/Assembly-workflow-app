@@ -11,6 +11,7 @@ import { BOM_BUCKET_META, BOM_BUCKET_ORDER, BUCKET_TO_STAGE, bomBucketFor } from
 import { fmtDate } from '../utils/date.js';
 import { escapeHtml } from '../utils/dom.js';
 import { state } from '../state/store.js';
+import { tipButtonHtml, tipForComponent, tipSlotHtml } from '../tips/partTips.js';
 
 function componentRowHtml(c, bucket, idx, total, editing){
   const editControls = editing ? `
@@ -28,8 +29,11 @@ function componentRowHtml(c, bucket, idx, total, editing){
       ${BOM_BUCKET_ORDER.map(b=>`<option value="${b}"${b===bucket?' selected':''}>${escapeHtml(BOM_BUCKET_META[b].label)}</option>`).join('')}
     </select>` : '';
   const manualTag = c.extraction_method === 'manual' ? `<span class="chip-tiny">added manually</span>` : '';
+  // Read-only rows only -- edit mode is for fixing the list, not learning it.
+  const tip = editing ? null : tipForComponent(c);
+  const tipGroup = `bom-${c.id || `${bucket}-${idx}-${c.item}`}`;
   return `
-    <div class="bom-row${editing?' bom-row-editing':''}">
+    <div class="bom-row${editing?' bom-row-editing':''}${tip?' bom-row-tip':''}"${tip?` data-tip-group="${escapeHtml(tipGroup)}"`:''}>
       <div class="bom-row-main">
         <div class="bom-item">${escapeHtml(c.item)} ${manualTag}</div>
         ${c.specification ? `<div class="bom-spec">${escapeHtml(c.specification)}</div>` : ''}
@@ -37,6 +41,7 @@ function componentRowHtml(c, bucket, idx, total, editing){
         ${categorySelect}
       </div>
       ${editControls}
+      ${tip ? tipButtonHtml(tipGroup, tip) + tipSlotHtml(tipGroup) : ''}
     </div>`;
 }
 
