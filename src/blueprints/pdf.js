@@ -65,14 +65,58 @@ export function ensurePdfJs(){
   return pdfjsReadyPromise;
 }
 
-export async function pdfFileToImages(file, maxPages, maxDim, quality){
+// Upper bound on pages sent to the AI -- well above a normal fab set
+// (10-20 sheets), there only so a stray 200-page PDF can't hang a phone.
+export const MAX_PDF_PAGES = 40;
+
+/** Page count, for the "Pages to scan" hint -- parses the file, renders nothing. */
+export async function pdfPageCount(file){
+  const pdfjsLib = await ensurePdfJs();
+  const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+  return pdf.numPages;
+}
+
+/**
+ * Reads the "Pages to scan" box. Blank or "all" -> every page (the first
+ * maxPages of them). Otherwise a list like "1-3, 7, 10-12". Returns
+ * {pages} or {error} and never throws, so the form can say exactly
+ * what's wrong before anything is sent to the AI.
+ */
+export function parsePageSelection(text, numPages, maxPages){
+  const s = String(text || '').trim().toLowerCase();
+  if(!s || s === 'all'){
+    return { pages: Array.from({ length: Math.min(numPages, maxPages) }, (_, i) => i + 1) };
+  }
+  const pages = new Set();
+  for(const part of s.split(',').map(p => p.trim()).filter(Boolean)){
+    // Accepts an en dash too -- phone keyboards love to "fix" 1-3 into 1–3.
+    const m = part.match(/^(\d+)(?:\s*[-–]\s*(\d+))?$/);
+    if(!m) return { error: `"${part}" isn't a page or range -- use something like 1-3, 7.` };
+    const a = Number(m[1]), b = m[2] ? Number(m[2]) : a;
+    if(a < 1 || b < a) return { error: `"${part}" isn't a valid page range.` };
+    if(b > numPages) return { error: `This PDF only has ${numPages} page${numPages === 1 ? '' : 's'}.` };
+    for(let p = a; p <= b; p++) pages.add(p);
+  }
+  if(!pages.size) return { error: 'Enter at least one page, or leave it blank for all.' };
+  if(pages.size > maxPages) return { error: `Pick ${maxPages} pages or fewer.` };
+  return { pages: [...pages].sort((x, y) => x - y) };
+}
+
+/** Renders the given 1-based pages (default: every page, up to maxPages).
+ *  Each image carries its real page number, so the AI can be told which
+ *  sheet it's looking at even when pages are skipped. */
+export async function pdfFileToImages(file, maxPages, maxDim, quality, pageNumbers){
   maxPages = maxPages || 10; maxDim = maxDim || 1700; quality = quality || 0.82;
   const pdfjsLib = await ensurePdfJs();
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-  const numPages = Math.min(pdf.numPages, maxPages);
+  const wanted = (pageNumbers && pageNumbers.length
+      ? pageNumbers
+      : Array.from({ length: pdf.numPages }, (_, i) => i + 1))
+    .filter(n => n >= 1 && n <= pdf.numPages)
+    .slice(0, maxPages);
   const images = [];
-  for(let i=1; i<=numPages; i++){
+  for(const i of wanted){
     const page = await pdf.getPage(i);
     const baseViewport = page.getViewport({scale:1});
     const scale = Math.max(0.5, Math.min(maxDim/baseViewport.width, maxDim/baseViewport.height, 3));
@@ -84,7 +128,7 @@ export async function pdfFileToImages(file, maxPages, maxDim, quality){
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
     await page.render({canvasContext: ctx, viewport}).promise;
     const dataUrl = canvas.toDataURL('image/jpeg', quality);
-    images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg'});
+    images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg', page: i});
   }
   return images;
 }

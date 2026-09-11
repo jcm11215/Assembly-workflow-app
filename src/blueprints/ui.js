@@ -12,7 +12,8 @@ import { confLabel, dimIn, validateSpec } from './spec.js';
 import { state } from '../state/store.js';
 import { modalRefresh, openModal, setCurrentJobId, setModalRefresh } from '../ui/components/modal.js';
 import { escapeHtml } from '../utils/dom.js';
-import { setSelectedBlueprintFile } from '../state/store.js';
+import { getSelectedBlueprintFile, setSelectedBlueprintFile } from '../state/store.js';
+import { MAX_PDF_PAGES, parsePageSelection, pdfPageCount } from './pdf.js';
 
 export function dimRowHtml(label, d, extra){
   const flag = confLabel(d);
@@ -137,6 +138,15 @@ export function blueprintImageSectionHtml(job){
   <div class="bp-hint" style="margin-top:-4px;margin-bottom:10px;">Tap the drawing to open it full screen and zoom in.</div>`;
 }
 
+// "Pages to scan" -- hidden until a PDF is picked; showPdfPagesField()
+// (called from the file input's change handler) reveals and fills it.
+const PDF_PAGES_FIELD = `
+    <div class="field" id="bpPagesField" hidden>
+      <label for="bpPages">Pages to scan</label>
+      <input type="text" id="bpPages" placeholder="All pages" autocomplete="off">
+      <div class="bp-hint" id="bpPagesHint"></div>
+    </div>`;
+
 export function blueprintModalHtml(job){
   return `
   <div class="modal-sheet">
@@ -144,8 +154,9 @@ export function blueprintModalHtml(job){
     <div class="field">
       <label>Upload or Photograph Blueprint</label>
       <input type="file" id="bpFileInput" accept="image/*,application/pdf" capture="environment">
-      <div class="bp-hint">Take a photo of a paper drawing, or upload a saved image or PDF (only the first page is read). Gemini will read the parts list or callouts and pull out the hardware and components.</div>
+      <div class="bp-hint">Take a photo of a paper drawing, or upload a saved image or PDF. The AI reads the parts list or callouts and pulls out the hardware and components.</div>
     </div>
+    ${PDF_PAGES_FIELD}
     <div id="bpPreviewArea"></div>
     <div class="fab-row">
       <button class="btn btn-primary btn-block" id="bpExtractBtn" data-action="extract-bom" data-id="${job.id}" disabled>Extract Components</button>
@@ -181,8 +192,9 @@ export function newJobBlueprintModalHtml(){
     <div class="field">
       <label>Upload or Photograph Blueprint</label>
       <input type="file" id="bpFileInput" accept="image/*,application/pdf" capture="environment">
-      <div class="bp-hint">Take a photo of a paper drawing, or upload a saved image or PDF (only the first page is read). Gemini will read the title block for the job number, customer, and description, plus pull out the hardware list -- then you review everything before it's saved.</div>
+      <div class="bp-hint">Take a photo of a paper drawing, or upload a saved image or PDF. The AI reads the title block for the job number, customer, and description, plus pulls out the hardware list -- then you review everything before it's saved.</div>
     </div>
+    ${PDF_PAGES_FIELD}
     <div id="bpPreviewArea"></div>
     <div class="fab-row">
       <button class="btn btn-primary btn-block" id="bpExtractBtn" data-action="extract-new-job" disabled>Read Blueprint &amp; Create Job</button>
@@ -196,6 +208,49 @@ export function openNewJobBlueprintModal(){
   // Refresher needed for the same reason as openBlueprintModal above --
   // this modal renders a BOM after a scan, and editing it must redraw.
   openModal(newJobBlueprintModalHtml(), newJobBlueprintModalHtml);
+}
+
+/** Reveals "Pages to scan" for a PDF (hides it for photos) and fills in
+ *  the page count once pdf.js has it. */
+export function showPdfPagesField(file){
+  const field = document.getElementById('bpPagesField');
+  const input = document.getElementById('bpPages');
+  if(!field || !input) return;
+  const isPdf = !!file && file.type === 'application/pdf';
+  field.hidden = !isPdf;
+  input.value = '';
+  delete input.dataset.pageCount;
+  if(!isPdf) return;
+  setPagesHint('Counting pages...');
+  pdfPageCount(file).then(n => {
+    if(getSelectedBlueprintFile() !== file) return;   // a different file was picked meanwhile
+    input.dataset.pageCount = String(n);
+    updatePdfPagesHint();
+  }).catch(() => setPagesHint('Could not count the pages -- every page will be scanned.'));
+}
+
+/** Live summary under the box: what will be scanned, or what's wrong. */
+export function updatePdfPagesHint(){
+  const input = document.getElementById('bpPages');
+  const total = Number(input && input.dataset.pageCount) || 0;
+  if(!total) return;
+  const sel = parsePageSelection(input.value, total, MAX_PDF_PAGES);
+  if(sel.error){ setPagesHint(`⚠ ${sel.error}`, true); return; }
+  const plural = total === 1 ? '' : 's';
+  if(input.value.trim()){
+    setPagesHint(`Scanning ${sel.pages.length} of ${total} page${plural}.`);
+  }else if(total > MAX_PDF_PAGES){
+    setPagesHint(`${total} pages -- the first ${MAX_PDF_PAGES} will be scanned. Enter pages like 1-3, 7 to choose.`);
+  }else{
+    setPagesHint(`${total} page${plural} -- all will be scanned. To scan fewer, enter pages like 1-3, 7.`);
+  }
+}
+
+function setPagesHint(text, isError){
+  const hint = document.getElementById('bpPagesHint');
+  if(!hint) return;
+  hint.textContent = text;
+  hint.style.color = isError ? 'var(--amber)' : '';
 }
 
 /** Decodes a base64 string to a Blob, entirely client-side -- used to
