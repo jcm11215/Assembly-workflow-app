@@ -81,7 +81,15 @@ function paint(){
   const kept = prev ? Object.fromEntries(new FormData(prev)) : {};
   delete kept.loginId;
 
-  root.innerHTML = `<div class="modal-overlay">${signupHtml()}</div>`;
+  root.innerHTML = `
+    <div class="modal-overlay auth-screen"><div class="auth-stack">
+      <div class="auth-brand">
+        <img class="auth-logo" src="./src/assets/isc-mfg-logo.webp" alt="ISC Manufacturing" width="88" height="88">
+        <div class="auth-name">Assembly Workflow Tracker</div>
+        <div class="auth-sub">Industrial Screw Conveyors</div>
+      </div>
+      ${signupHtml()}
+    </div></div>`;
   const form = document.getElementById('signupForm');
   form.addEventListener('submit', handleSignup);
   for(const [name, value] of Object.entries(kept)){

@@ -4,20 +4,44 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Assembly Workflow Tracker</title>
+<meta name="theme-color" content="#0b0c0d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Assembly">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
+<div class="conveyor-bg" aria-hidden="true">
+  <div class="cv cv-incline"><div class="cv-screw"></div></div>
+  <div class="cv cv-main"><div class="cv-screw"></div></div>
+</div>
+
 <div id="app">
   <header class="appbar">
     <div class="brand">
-      <div class="name">Assembly Workflow Tracker</div>
-      <div class="sub" id="dateSub">Loading shift...</div>
+      <img class="brand-mark" src="./src/assets/isc-mfg-logo.webp" alt="ISC Manufacturing" width="38" height="38">
+      <div class="brand-text">
+        <div class="name">Assembly Workflow Tracker</div>
+        <div class="sub" id="dateSub">Loading shift...</div>
+      </div>
     </div>
     <div class="right">
-      <div class="stamp">Screw Conveyor Mfg</div>
-      <button class="refresh-btn" id="refreshBtn" data-action="manual-sync" title="Sync latest data">&#8635;</button>
-      <button class="refresh-btn" id="settingsBtn" data-action="open-settings" title="Settings">&#9881;</button>
+      <div class="stamp">Industrial Screw Conveyors</div>
+      <button class="refresh-btn" id="refreshBtn" data-action="manual-sync" title="Sync latest data" aria-label="Sync latest data">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3.5V8h-4.5"/></svg>
+      </button>
+      <button class="refresh-btn" id="settingsBtn" data-action="open-settings" title="Settings" aria-label="Settings">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.6 10.25 21.9 10.61 21.9 13.39 19.6 13.75 18.61 16.13 19.99 18.02 18.02 19.99 16.13 18.61 13.75 19.6 13.39 21.9 10.61 21.9 10.25 19.6 7.87 18.61 5.98 19.99 4.01 18.02 5.39 16.13 4.4 13.75 2.1 13.39 2.1 10.61 4.4 10.25 5.39 7.87 4.01 5.98 5.98 4.01 7.87 5.39 10.25 4.4 10.61 2.1 13.39 2.1 13.75 4.4 16.13 5.39 18.02 4.01 19.99 5.98 18.61 7.87Z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
     </div>
+    <div class="belt" aria-hidden="true"></div>
   </header>
 
   <div class="metrics-strip" id="metricsStrip"></div>
@@ -25,12 +49,18 @@
   <main id="content"></main>
 
   <nav class="tabbar">
-    <button class="tab-btn" data-tab="dashboard"><span class="ic">&#128203;</span>Dashboard</button>
-    <button class="tab-btn" data-tab="board"><span class="ic">&#128736;</span>Board</button>
-    <button class="tab-btn" data-tab="blockers"><span class="ic">&#9888;</span>Blockers</button>
-    <button class="tab-btn" data-tab="notes"><span class="ic">&#128221;</span>Notes</button>
-    <button class="tab-btn" data-tab="assistant"><span class="ic">&#129302;</span>Assistant</button>
-    <button class="tab-btn" data-tab="activity"><span class="ic">&#128203;</span>Activity</button>
+    <button class="tab-btn" data-tab="dashboard">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 15.5a8.5 8.5 0 1 1 17 0"/><path d="M12 15.5l4.5-5"/><circle cx="12" cy="15.5" r="1.2"/></svg>Dashboard</button>
+    <button class="tab-btn" data-tab="board">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6.5" width="7" height="7" rx="1"/><rect x="13.5" y="9" width="5.5" height="4.5" rx="1"/><path d="M6 15.5h12a2.5 2.5 0 0 1 0 5H6a2.5 2.5 0 0 1 0-5z"/><path d="M6 18h.01M12 18h.01M18 18h.01"/></svg>Board</button>
+    <button class="tab-btn" data-tab="blockers">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4.2 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5V14"/><path d="M12 17.2h.01"/></svg>Blockers</button>
+    <button class="tab-btn" data-tab="notes">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4.5" width="14" height="16.5" rx="2"/><rect x="9" y="2.5" width="6" height="3.5" rx="1"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>Notes</button>
+    <button class="tab-btn" data-tab="assistant">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="8" width="15" height="11.5" rx="3"/><path d="M12 4.5V8"/><circle cx="12" cy="3.5" r="1"/><path d="M9.5 13v1M14.5 13v1"/><path d="M2.5 12.5v3M21.5 12.5v3"/></svg>Assistant</button>
+    <button class="tab-btn" data-tab="activity">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6.5 5 13 2.5-6.5h4"/></svg>Activity</button>
   </nav>
 </div>
 
