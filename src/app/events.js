@@ -8,7 +8,7 @@ import { setAiProvider, setApiKey, setOpenRouterKey } from '../ai/keys.js';
 import { render } from './render.js';
 import { openBlockerForm, updateBlockersList } from '../blockers/index.js';
 import { extractComponents, extractNewJobFromBlueprint } from '../blueprints/extract.js';
-import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal } from '../blueprints/ui.js';
+import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal, showPdfPagesField, updatePdfPagesHint } from '../blueprints/ui.js';
 import { blueprintImageCache, fetchBlueprintImage } from '../blueprints/images.js';
 import { logActivity, persistBlockers, persistJobs, reloadFromStorage } from '../db/repository.js';
 import { attemptAdvance, confirmAdvance, moveJobToStage, openMover, stepStage } from '../jobs/actions.js';
@@ -441,6 +441,7 @@ export function initEventRouter(){
     if(e.target.id === 'bpFileInput'){
       const file = e.target.files[0];
       setSelectedBlueprintFile(file || null);
+      showPdfPagesField(file || null);
       const btn = document.getElementById('bpExtractBtn');
       const preview = document.getElementById('bpPreviewArea');
       if(!file){
@@ -460,7 +461,9 @@ export function initEventRouter(){
     }
   });
   document.addEventListener('input', e=>{
-    if(e.target.id==='dashSearch'){
+    if(e.target.id==='bpPages'){
+      updatePdfPagesHint();
+    }else if(e.target.id==='dashSearch'){
       state.jobSearch = e.target.value;
       updateDashboardList();
     }else if(e.target.id==='noteSearch'){

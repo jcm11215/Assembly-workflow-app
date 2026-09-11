@@ -13,7 +13,7 @@ import { requestRender as render } from '../app/bus.js';
 import { bomListHtml } from './bom.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { blueprintImageCache } from './images.js';
-import { fileToBase64Raw, fileToImageBase64Resized, pdfFileToImages, shrinkBase64Image } from './pdf.js';
+import { MAX_PDF_PAGES, fileToBase64Raw, fileToImageBase64Resized, parsePageSelection, pdfFileToImages, shrinkBase64Image } from './pdf.js';
 import { buildPageClassificationPrompt, buildSpecPrompt } from './prompt.js';
 import {
   normalizeComponents, normalizeSpec, validateExtraction,
@@ -67,19 +67,24 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
   };
 }
 
-async function contentBlocksFor(file){
+async function contentBlocksFor(file, pageNumbers){
   const originalBase64 = await fileToBase64Raw(file);
   const originalFile = { base64: originalBase64, mimeType: file.type, filename: file.name };
   if(file.type === 'application/pdf'){
-    // Every page, not just page 1 -- a fab set's hardware is spread across
-    // its sheets, and reading only the first one is why scans kept coming
-    // back empty. Rendered a little smaller/softer than a single page would
-    // be so a 20-sheet set stays a reasonable upload for the AI provider.
-    const images = await pdfFileToImages(file, MAX_PDF_PAGES, 1600, 0.75);
+    // The pages picked in "Pages to scan" (default: every page, up to the
+    // cap). Rendered a little smaller/softer than a single page would be
+    // so a 20-sheet set stays a reasonable upload for the AI provider.
+    const images = await pdfFileToImages(file, MAX_PDF_PAGES, 1600, 0.75, pageNumbers);
     if(!images.length) throw new Error('The PDF has no readable pages.');
     const thumbnail = await shrinkBase64Image(images[0].base64, images[0].mime).catch(()=>null);
     return {
-      contentBlocks: images.map(img=>({type:'image', source:{type:'base64', media_type:img.mime, data:img.base64}})),
+      // Each image is labeled with its real sheet number, so page
+      // references stay right when pages are skipped (scanning 3, 7, 12
+      // would otherwise read back as pages 1, 2, 3).
+      contentBlocks: images.flatMap(img=>[
+        {type:'text', text:`PDF page ${img.page}:`},
+        {type:'image', source:{type:'base64', media_type:img.mime, data:img.base64}}
+      ]),
       originalFile, thumbnail
     };
   }
@@ -91,9 +96,15 @@ async function contentBlocksFor(file){
   };
 }
 
-// Upper bound on PDF pages sent to the AI -- well above a normal fab set
-// (10-20 sheets), there only so a stray 200-page PDF can't hang a phone.
-const MAX_PDF_PAGES = 40;
+/** The PDF pages to scan, from the "Pages to scan" box on the scan screen.
+ *  {pages: null} means every page -- not a PDF, or the count isn't in yet. */
+function pagesToScan(file){
+  if(file.type !== 'application/pdf') return { pages: null };
+  const input = document.getElementById('bpPages');
+  const total = Number(input && input.dataset.pageCount) || 0;
+  if(!total) return { pages: null };
+  return parsePageSelection(input.value, total, MAX_PDF_PAGES);
+}
 
 function statusToast(componentCount){
   if(componentCount === 0){
@@ -108,13 +119,15 @@ export async function extractComponents(jobId){
   const job = state.jobs.find(j=>j.id===jobId);
   const file = getSelectedBlueprintFile();
   if(!job || !file) return;
+  const selection = pagesToScan(file);
+  if(selection.error){ showToast(selection.error, 5000); return; }
   const btn = document.getElementById('bpExtractBtn');
   const resultArea = document.getElementById('bpResultArea');
   if(btn){ btn.disabled = true; btn.textContent = 'Reading blueprint...'; }
   if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#8987;</div>Analyzing drawing...</div>`;
 
   try{
-    const { contentBlocks, originalFile, thumbnail } = await contentBlocksFor(file);
+    const { contentBlocks, originalFile, thumbnail } = await contentBlocksFor(file, selection.pages);
     const { spec, components, validation } = await runExtractionPipeline(contentBlocks, false);
     // spec/validation are used ABOVE (inside runExtractionPipeline, via
     // normalizeComponents/validateExtraction) to classify and cross-check
@@ -168,13 +181,15 @@ export async function extractComponents(jobId){
 export async function extractNewJobFromBlueprint(){
   const file = getSelectedBlueprintFile();
   if(!file) return;
+  const selection = pagesToScan(file);
+  if(selection.error){ showToast(selection.error, 5000); return; }
   const btn = document.getElementById('bpExtractBtn');
   const resultArea = document.getElementById('bpResultArea');
   if(btn){ btn.disabled = true; btn.textContent = 'Reading blueprint...'; }
   if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#8987;</div>Analyzing drawing...</div>`;
 
   try{
-    const { contentBlocks, originalFile, thumbnail } = await contentBlocksFor(file);
+    const { contentBlocks, originalFile, thumbnail } = await contentBlocksFor(file, selection.pages);
     const { parsed, components } = await runExtractionPipeline(contentBlocks, true);
     // spec/validation (used inside runExtractionPipeline for classification
     // quality) are deliberately not kept here -- see extractComponents'
