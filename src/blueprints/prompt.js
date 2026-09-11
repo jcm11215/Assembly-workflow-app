@@ -104,17 +104,24 @@ A shaft, bearing, coupling, or sprocket physically located on the drive-end side
 
 If a drawing has no motor/gearbox visible on any page (e.g. a driveless assembly, or the drive is on a separate sheet not provided), say so honestly in "notes" and mark drive-related fields not_found rather than guessing which end would have been the drive end.
 
-COMPONENTS LIST -- ONLY include these part types, nothing else:
-- Seals
-- Bearings (including hanger bearings along the trough span)
-- The motor
-- The gearbox/reducer
-- Shafts (drive shaft, tail shaft, and any other shaft segments shown)
-- Auger/screw flighting
+COMPONENTS LIST -- ONLY include these part types, nothing else. Use the name shown as the start of "item" (put sizes and model numbers in "specification"):
+- Drive (the drive unit itself, e.g. a shaft-mount or screw conveyor drive)
+- Motor
+- Reducer (gearbox)
+- Seal (including waste pack seals and flange glands)
+- Gasket
+- Bearing (end bearings, flange bearings, pillow blocks)
+- Hanger Bearing (hangers and bearings along the trough span)
+- Coupling Shaft
+- Tail Shaft
+- Drive Shaft
+- Auger (screw/flighting sections)
+- Coupling Bolts
+- UHMW (liners, wear strips, or other UHMW parts)
 
-Do NOT include plates, weldments, couplings, sprockets, keys, guards, fasteners, trough sections, or discharge spouts/chutes -- even if clearly visible and labeled on the drawing. If a drawing shows other hardware, leave it off the list; this is a fixed whitelist, not a completeness target.
+Check EVERY page for these -- BOM tables, callouts, and detail views on any sheet. Do NOT include plates, weldments, sprockets, keys, guards, other fasteners, trough sections, covers, shrouds, or discharge spouts/chutes -- even if clearly visible and labeled on the drawing. This is a fixed whitelist, not a completeness target.
 
-For each of those 6 part types, still assign installation_location per the two-pass procedure above (drive_end/tail_end/hanger/unknown) -- the motor and gearbox are always drive_end. Auger/screw flighting that runs the length of the conveyor (not confined to one end) is "unknown" rather than forced into drive_end or tail_end.
+For each of those part types, still assign installation_location per the two-pass procedure above -- the drive, motor, and reducer are always drive_end. Augers, coupling shafts, and coupling bolts along the run of the conveyor are "screw"; hanger bearings are "hanger".
 
 For a SCREW conveyor, "belt"/"head"/"idlers" will be all not_found -- that is expected; leave them as not_found rather than omitting them. For a BELT conveyor, "trough"/"screw"/"hangers" will be not_found. Fill in whichever applies. (These "not_found" spec fields are separate from the components whitelist above -- the trough dimension fields should still be filled in when known, even though trough hardware itself is never a listed component.)`;
 }

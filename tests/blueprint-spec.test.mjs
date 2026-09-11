@@ -32,6 +32,16 @@ const specSwap = { drive: { bearing_bore: mkDim(2.0) }, tail: { bearing_bore: mk
 const swapped = M.normalizeComponents([{ item: 'Bearing', specification: '3.5" bore', installation_location: 'drive_end', confidence: 0.9 }]);
 t('drive/tail bearing swap detected', M.validateComponents(specSwap, swapped).conflicts > 0);
 
+// component whitelist -- the shop's list, and nothing else
+const loc = item => ({ item, installation_location: 'unknown' });
+const kept = M.normalizeComponents(['Drive', 'Gear Motor', 'Reducer', 'Waste Pack Seal', 'Gasket', 'Flange Bearing',
+  'Hanger Bearing', 'Coupling Shaft', 'Tail Shaft', 'Drive Shaft', 'Auger', 'Coupling Bolts', 'UHMW Liner'].map(loc));
+t('every listed part type is kept', kept.length === 13);
+const dropped = M.normalizeComponents(['Drive End Plate', 'Drive Guard', 'Trough', 'Cap Screw', 'Shroud', 'Coupling', 'Sprocket'].map(loc));
+t('unlisted parts are dropped', dropped.length === 0);
+const bare = M.normalizeComponents([{ item: 'Shaft', installation_location: 'tail_end' }, { item: 'Shaft', installation_location: 'unknown' }]);
+t('bare "Shaft" is named from its location, dropped when it has none', bare.length === 1 && bare[0].item === 'Tail Shaft');
+
 // confidence thresholds + safety override
 const clean = { errors: 0, conflicts: 0, warnings: 0 };
 t('>=0.9 clean auto-approves', M.determineExtractionStatus(0.95, clean).status === 'approved');
