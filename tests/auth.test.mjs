@@ -44,10 +44,10 @@ globalThis.fetch=async(url,opt={})=>{
   return ok([]);
 };
 
-const authService = await import('./src/auth/authService.mjs');
-const sessionStore = await import('./src/auth/sessionStore.mjs');
-const profileService = await import('./src/auth/profileService.mjs');
-const permissions = await import('./src/auth/permissions.mjs');
+const authService = await import('../src/auth/authService.js');
+const sessionStore = await import('../src/auth/sessionStore.js');
+const profileService = await import('../src/auth/profileService.js');
+const permissions = await import('../src/auth/permissions.js');
 
 let pass=0,fail=0; const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};
 

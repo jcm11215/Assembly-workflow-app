@@ -39,7 +39,7 @@ globalThis.fetch=async(url,opt={})=>{
   return ok([]);
 };
 
-const repo = await import('./src/db/blueprintsRepo.mjs');
+const repo = await import('../src/db/blueprintsRepo.js');
 
 let pass=0,fail=0; const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};
 

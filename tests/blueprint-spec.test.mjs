@@ -1,9 +1,9 @@
 // Tests src/blueprints/spec.js -- installation_location -> stage mapping,
-// drive/tail swap detection, confidence thresholds. Run via the same
-// .js -> .mjs conversion used elsewhere in tests/, or adapt the requires
-// below to your test runner.
-const fs = require('fs');
-const script = fs.readFileSync(__dirname + '/../src/blueprints/spec.js', 'utf8')
+// drive/tail swap detection, confidence thresholds. Loaded as source text
+// and evaluated directly (rather than imported) since spec.js's ESM
+// import/export statements aren't valid inside `new Function`.
+import fs from 'fs';
+const script = fs.readFileSync(new URL('../src/blueprints/spec.js', import.meta.url), 'utf8')
   .replace(/^import.*$/gm, '')
   .replace(/^export /gm, '');
 const M = new Function(script + `

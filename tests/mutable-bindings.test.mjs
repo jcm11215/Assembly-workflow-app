@@ -1,7 +1,7 @@
 import './stub.mjs';
-const geo = await import('./src/models/geometry.mjs');
-const modal = await import('./src/ui/components/modal.mjs');
-const store = await import('./src/state/store.mjs');
+const geo = await import('../src/models/geometry.js');
+const modal = await import('../src/ui/components/modal.js');
+const store = await import('../src/state/store.js');
 
 let pass=0, fail=0;
 const t=(n,fn)=>{

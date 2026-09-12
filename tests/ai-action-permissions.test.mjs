@@ -1,10 +1,10 @@
 import './stub.mjs';
 globalThis.fetch = async()=>({ok:true,status:200,text:async()=>'[]',json:async()=>[]});
 
-const { checkActionPermission, PERMISSION } = await import('./src/ai/permissionAdapter.mjs');
-const authService = await import('./src/auth/authService.mjs');
-const sessionStore = await import('./src/auth/sessionStore.mjs');
-const profileService = await import('./src/auth/profileService.mjs');
+const { checkActionPermission, PERMISSION } = await import('../src/ai/permissionAdapter.js');
+const authService = await import('../src/auth/authService.js');
+const sessionStore = await import('../src/auth/sessionStore.js');
+const profileService = await import('../src/auth/profileService.js');
 
 let pass=0, fail=0;
 const t = (n,c) => { c ? (pass++, console.log('  PASS '+n)) : (fail++, console.log('  FAIL '+n)); };

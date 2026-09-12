@@ -1,5 +1,10 @@
 import './stub.mjs';
 globalThis.localStorage.setItem('awt_geminiKey', 'test-key-123');
+// The app defaults to OpenRouter (see ai/keys.js) since this repo is public
+// and an embedded default key gets scraped/disabled within days -- this
+// test's mock fetch and canned-response queue are Gemini-shaped, so pin
+// the provider explicitly rather than drift with whatever the default is.
+globalThis.localStorage.setItem('awt_aiProvider', 'gemini');
 
 // ---- Mock DB (PostgREST) + Gemini responses ----
 let JOBS = [
@@ -76,15 +81,24 @@ globalThis.fetch = async (url, opt={}) => {
   return ok([]);
 };
 
-const { proposeActions, confirmAndExecute, cancelProposal } = await import('./src/ai/workflowExecutor.mjs');
-const { parseUserIntent } = await import('./src/ai/actionParser.mjs');
-const { checkActionPermission, PERMISSION } = await import('./src/ai/permissionAdapter.mjs');
-const { getTool, ACTION_NAMES } = await import('./src/ai/toolRegistry.mjs');
-const { state } = await import('./src/state/store.mjs');
+const { proposeActions, confirmAndExecute, cancelProposal } = await import('../src/ai/workflowExecutor.js');
+const { parseUserIntent } = await import('../src/ai/actionParser.js');
+const { checkActionPermission, PERMISSION } = await import('../src/ai/permissionAdapter.js');
+const { getTool, ACTION_NAMES } = await import('../src/ai/toolRegistry.js');
+const { state } = await import('../src/state/store.js');
+const sessionStore = await import('../src/auth/sessionStore.js');
+const profileService = await import('../src/auth/profileService.js');
 
 state.jobs = [{ id:'j1', jobNumber:'SC-4472', customer:'Acme', description:'', dueDate:'2026-09-10',
   priority:'Medium', assemblyStatus:'ready', percentComplete:0, version:1, checklist:{}, assignedTo:null, blueprintId:null }];
 state.blockers = []; state.notes = []; state.activity = [];
+
+// AUTH_ENABLED is true now (real-auth mode), so permission checks read a
+// real signed-in session/profile rather than the old legacy "everyone is
+// a lead" default. Sign in as the one profile already seeded above (see
+// the ai-action-permissions.test.mjs pattern this mirrors).
+sessionStore.setSession({ access_token:'t', refresh_token:'r', expires_at: Math.floor(Date.now()/1000)+3600, user:{id:'u-justin', email:'justin@shop.com'} });
+profileService.setCachedProfile({ id:'u-justin', full_name:'Justin McKinney', role:'lead' });
 
 let pass=0, fail=0;
 const t = (n,c) => { c ? (pass++, console.log('  PASS '+n)) : (fail++, console.log('  FAIL '+n)); };
@@ -116,8 +130,7 @@ ACTION_NAMES.forEach(name=>{
 });
 
 console.log('\n=== permissionAdapter: role enforcement ===');
-// legacy mode: AUTH_ENABLED=false -> currentRole()==='lead' always (see permissions.js comment)
-t('lead-or-admin action allowed in legacy mode', checkActionPermission(PERMISSION.LEAD_OR_ADMIN,{}).allowed===true);
+t('lead-or-admin action allowed for the signed-in lead', checkActionPermission(PERMISSION.LEAD_OR_ADMIN,{}).allowed===true);
 t('any-signed-in allowed', checkActionPermission(PERMISSION.ANY_SIGNED_IN,{}).allowed===true);
 
 console.log('\n=== workflowExecutor: review mode -- proposal does NOT execute ===');

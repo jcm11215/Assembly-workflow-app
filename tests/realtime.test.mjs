@@ -1,10 +1,10 @@
 import './stub.mjs';
 
-const { state } = await import('./src/state/store.mjs');
-const { handleJobEvent, patchJobFromRow } = await import('./src/realtime/jobsRealtime.mjs');
-const { handleBlockerEvent } = await import('./src/realtime/blockersRealtime.mjs');
-const { handleNoteEvent } = await import('./src/realtime/notesRealtime.mjs');
-const { handleActivityEvent } = await import('./src/realtime/activityRealtime.mjs');
+const { state } = await import('../src/state/store.js');
+const { handleJobEvent, patchJobFromRow } = await import('../src/realtime/jobsRealtime.js');
+const { handleBlockerEvent } = await import('../src/realtime/blockersRealtime.js');
+const { handleNoteEvent } = await import('../src/realtime/notesRealtime.js');
+const { handleActivityEvent } = await import('../src/realtime/activityRealtime.js');
 
 let pass=0,fail=0; const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};
 

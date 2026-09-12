@@ -11,7 +11,7 @@ globalThis.fetch = async(url,opt={})=>{
   return ok([]);
 };
 
-const { initErrorHandlers, reportError, getErrorLog, clearErrorLog } = await import('./src/monitoring/errorHandler.mjs');
+const { initErrorHandlers, reportError, getErrorLog, clearErrorLog } = await import('../src/monitoring/errorHandler.js');
 
 let pass=0, fail=0;
 const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};

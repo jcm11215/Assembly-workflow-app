@@ -16,8 +16,8 @@ globalThis.fetch = async(url,opt={})=>{
   return ok([]);
 };
 
-const { loadAll, persistJobs } = await import('./src/db/repository.mjs');
-const { state } = await import('./src/state/store.mjs');
+const { loadAll, persistJobs } = await import('../src/db/repository.js');
+const { state } = await import('../src/state/store.js');
 
 let pass=0, fail=0;
 const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};

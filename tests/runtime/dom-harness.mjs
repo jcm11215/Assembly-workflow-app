@@ -54,7 +54,11 @@ globalThis.document = {
   activeElement: null, hidden: false
 };
 globalThis.window = {
-  addEventListener(){}, removeEventListener(){}, devicePixelRatio:1,
+  _listeners:{},
+  addEventListener(t,f){ (this._listeners[t]=this._listeners[t]||[]).push(f); },
+  removeEventListener(t,f){ if(this._listeners[t]) this._listeners[t]=this._listeners[t].filter(x=>x!==f); },
+  dispatch(t,detail){ (this._listeners[t]||[]).forEach(f=>f(detail)); },
+  devicePixelRatio:1,
   scrollTo(){}, location:{ reload(){}, href:'http://localhost/' }, __threePromise:undefined
 };
 globalThis.localStorage = { _d:{}, getItem(k){return this._d[k]??null}, setItem(k,v){this._d[k]=String(v)}, removeItem(k){delete this._d[k]}, clear(){this._d={}} };

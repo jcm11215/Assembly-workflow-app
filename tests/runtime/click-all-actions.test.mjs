@@ -1,5 +1,5 @@
-import './dom.mjs';
-import { DB } from './backend.mjs';
+import './dom-harness.mjs';
+import { DB } from './mock-backend.mjs';
 
 const errors = [];
 console.error = (...a)=>errors.push(a.map(String).join(' '));
@@ -13,10 +13,10 @@ DB.blueprints.push({ id:'bp1', job_id:'j1', status:'review_required', version:1,
   spec:{conveyorType:'screw', overall:{}}, validation:{checks:[],ok:true,errors:0,conflicts:0,warnings:0},
   storage_path:null, extracted_at:'t', reviewed_at:null, review_urgency:'suggested', auto_approved:false });
 
-await import('./src/app/app.mjs');
+await import('../../src/app/app.js');
 await new Promise(r=>setTimeout(r,150));
-const { state } = await import('./src/state/store.mjs');
-const { loadAll } = await import('./src/db/repository.mjs');
+const { state } = await import('../../src/state/store.js');
+const { loadAll } = await import('../../src/db/repository.js');
 await loadAll();
 state.jobs.forEach(j=>{ if(!j.blueprintId && j.id==='j1') j.blueprintId='bp1'; });
 
@@ -25,7 +25,7 @@ import fs from 'fs';
 function walk(d){ let o=[]; for(const f of fs.readdirSync(d,{withFileTypes:true})){ const p=d+'/'+f.name; o = f.isDirectory()? o.concat(walk(p)) : o.concat([p]); } return o; }
 const actions = new Set();
 for(const f of walk('./src')){
-  if(!f.endsWith('.mjs')) continue;
+  if(!f.endsWith('.js')) continue;
   for(const m of fs.readFileSync(f,'utf8').matchAll(/data-action="([a-z-]+)"/g)) actions.add(m[1]);
 }
 
