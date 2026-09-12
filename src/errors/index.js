@@ -71,9 +71,19 @@ function errorCardHtml(e, showJob){
 
 /* ================= a job's own errors ================= */
 
-/** The section for a job's page. Rendered even when empty: a job with no
- *  errors is worth saying out loud, and the button to log one has to
- *  live somewhere. */
+/**
+ * The section for a job's page: what has gone wrong on this job, listed.
+ *
+ * Read-only on purpose -- logging one is a "Log Error" button in the
+ * action row at the top of the page, next to Report Blocker, where the
+ * other things you DO to a job live. A second button down here would be
+ * two entry points to one form, and this section is six deep on the
+ * page: reporting a problem should not depend on scrolling to find it.
+ *
+ * Rendered even when empty, because "nothing has gone wrong on this job"
+ * is worth saying rather than leaving the reader to infer it from a
+ * missing section.
+ */
 export function jobErrorsSectionHtml(job){
   const list = errorsForJob(job.jobNumber);
   const open = list.filter(e => e.status !== 'Corrected').length;
@@ -85,12 +95,7 @@ export function jobErrorsSectionHtml(job){
     <span>Engineering &amp; Purchasing Errors ${list.length ? `<span class="count-badge">${list.length}</span>` : ''}</span>
     ${open ? `<span class="chip-tiny">${open} still open</span>` : ''}
   </div>
-  ${rows}
-  ${canLogErrors() ? `<div class="fab-row">
-    <button class="btn btn-outline btn-block" data-action="log-error" data-jobnumber="${escapeHtml(job.jobNumber)}">
-      &#9873; Log an Error
-    </button>
-  </div>` : ''}`;
+  ${rows}`;
 }
 
 /* ================= the log form ================= */
