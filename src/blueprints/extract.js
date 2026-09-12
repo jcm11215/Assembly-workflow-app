@@ -16,6 +16,7 @@ import { blueprintImageCache } from './images.js';
 import { MAX_PDF_PAGES, fileToBase64Raw, fileToImageBase64Resized, parsePageSelection, pdfFileToImages, shrinkBase64Image } from './pdf.js';
 import { buildCalloutPrompt, buildPageClassificationPrompt, buildPartsListPrompt, buildSpecPrompt, pagesByRole } from './prompt.js';
 import { parseJsonLenient } from './jsonRepair.js';
+import { cachedPasses, fingerprint, forgetDrawing, rememberPass } from './passCache.js';
 import { joinPartsAndCallouts, resolveLocations } from './scanJoin.js';
 import {
   normalizeComponentsDetailed, normalizeSpec, validateExtraction,
@@ -74,14 +75,25 @@ function parseJsonReply(text, label){
  * this drawing's problem, while a call that never completed is usually
  * the key or the connection, and the caller has to be able to tell.
  */
-async function runPass(label, systemPrompt, blocks, instruction){
+async function runPass(label, systemPrompt, blocks, instruction, cacheKey){
+  // Already read on an earlier attempt at this same drawing. Re-reading
+  // it would spend a request from the very quota that refused the pass
+  // we are retrying.
+  const done = cachedPasses(cacheKey)[label];
+  if(done !== undefined){
+    return { label, parsed: done, callError: null, parseError: null, repairs: [], reused: true };
+  }
   try {
     const text = await callClaudeAPI(systemPrompt, [...blocks, {type:'text', text:instruction}]);
-    return { label, callError: null, ...parseJsonReply(text, label) };
+    const result = parseJsonReply(text, label);
+    // Only a pass that produced something usable is worth keeping; a
+    // reply that would not parse has to be asked for again.
+    if(!result.parseError) rememberPass(cacheKey, label, result.parsed);
+    return { label, callError: null, reused: false, ...result };
   } catch (e) {
     console.error(`${label}: the call itself failed`, e);
     return {
-      label, parsed: {}, callError: e,
+      label, parsed: {}, callError: e, reused: false,
       parseError: { pass: label, message: String(e && e.message || e), failed: true }
     };
   }
@@ -164,6 +176,9 @@ export function blocksForPages(pairs, pages){
 async function runExtractionPipeline(contentBlocks, includeJobFields){
   const pairs = pageOfBlocks(contentBlocks);
   const allPages = pairs.map(p => p.page);
+  // Identifies this drawing, so a retry can pick up the passes that
+  // already succeeded instead of paying for them again.
+  const cacheKey = fingerprint(contentBlocks, includeJobFields);
 
   // Preliminary pass: what kind of page is each one? Its answer decides
   // which pages the other three passes are shown, so on a multi-sheet set
@@ -176,24 +191,21 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
   // that trips the cap waits rather than finishing.
   let pageClassification = null;
   if(allPages.length > 1){
-    try {
-      const classifyText = await callClaudeAPI(buildPageClassificationPrompt(),
-        [...contentBlocks, {type:'text', text:'Classify each page.'}]);
-      pageClassification = parseJsonReply(classifyText, 'page classification').parsed;
-    } catch (e) {
-      console.error('page classification failed -- continuing without it', e);
-      pageClassification = null;   // pagesByRole/buildSpecPrompt both tolerate null
-    }
+    const classify = await runPass('page classification', buildPageClassificationPrompt(),
+      contentBlocks, 'Classify each page.', cacheKey);
+    // pagesByRole and buildSpecPrompt both tolerate null, so a failure
+    // here costs targeting, not the scan.
+    pageClassification = classify.parseError ? null : classify.parsed;
   }
   const roles = pagesByRole(pageClassification, allPages);
 
   const [partsPass, calloutPass, dimsPass] = await Promise.all([
     runPass('parts list', buildPartsListPrompt(includeJobFields), blocksForPages(pairs, roles.bom),
-      'Transcribe the parts list from these pages.'),
+      'Transcribe the parts list from these pages.', cacheKey),
     runPass('callouts', buildCalloutPrompt(), blocksForPages(pairs, roles.views),
-      'Report every balloon callout on these views and where its leader points.'),
+      'Report every balloon callout on these views and where its leader points.', cacheKey),
     runPass('dimensions', buildSpecPrompt(includeJobFields, pageClassification), contentBlocks,
-      'Read this complete drawing set and return the engineering specification JSON.')
+      'Read this complete drawing set and return the engineering specification JSON.', cacheKey)
   ]);
 
   // Every pass failing to complete is not a thin scan -- it is a scan
@@ -204,7 +216,15 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
   // returning nothing would open a blank job form off a drawing the AI
   // never even saw, and send them looking for a fault in the drawing.
   const passes = [partsPass, calloutPass, dimsPass];
-  if(passes.every(p => p.callError)) throw passes[0].callError;
+  if(passes.every(p => p.callError)){
+    // Whatever did land is kept, so say so on the way out -- "retrying
+    // costs one request, not four" is the difference between trying
+    // again now and waiting out a quota.
+    const banked = Object.keys(cachedPasses(cacheKey));
+    const err = passes[0].callError;
+    err.passesAlreadyRead = banked;
+    throw err;
+  }
 
   // Whitelisted and normalized first, so the join only ever has to add
   // location to parts that were going to be kept anyway.
@@ -227,6 +247,9 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
     ? determineExtractionStatus(confidence, validation)
     : { status:'review_required', urgency:'required', autoApproved:false, reason:'No usable specification extracted.' };
 
+  const failed = passes.filter(p => p.parseError);
+  if(!failed.length) forgetDrawing(cacheKey);
+
   return {
     parsed, spec, components, validation, confidence, decision,
     pageCount: contentBlocks.filter(b => b.type === 'image').length,
@@ -244,7 +267,10 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
       // costing a whole pass.
       repairedPasses: passes
         .filter(p => p.repairs && p.repairs.length)
-        .map(p => `${p.label}: ${p.repairs.join('; ')}`)
+        .map(p => `${p.label}: ${p.repairs.join('; ')}`),
+      // Passes carried over from a previous attempt at this drawing --
+      // requests a retry did not have to spend.
+      reusedPasses: passes.filter(p => p.reused).map(p => p.label)
     }
   };
 }
@@ -333,9 +359,25 @@ function recordScanDiagnostics(jobNumber, components, d){
  * AI that listed nothing means there was nothing there to find. The
  * diagnostics already know which -- so say it.
  */
+/**
+ * What a retry will actually cost, for someone deciding whether to hit
+ * it now or wait out a rate limit.
+ */
+function retryCostLine(err){
+  const banked = (err && err.passesAlreadyRead) || [];
+  const TOTAL = 4;                       // classify, parts, callouts, dimensions
+  if(!banked.length) return '';
+  const left = Math.max(1, TOTAL - banked.length);
+  return ` ${banked.length} of the ${TOTAL} readings of this drawing are already saved, so trying again re-reads only the other ${left}.`;
+}
+
 function statusToast(componentCount, d){
+  const reused = (d && d.reusedPasses) || [];
+  const carried = reused.length
+    ? ` (${reused.length} section${reused.length===1?'':'s'} carried over from the last attempt, so this retry re-read only what failed)`
+    : '';
   if(componentCount > 0){
-    return `Extracted ${componentCount} component${componentCount===1?'':'s'} from the drawing.`;
+    return `Extracted ${componentCount} component${componentCount===1?'':'s'} from the drawing${carried}.`;
   }
   const failed = ((d && d.parseError) || []).map(f => f.pass);
   if(failed.includes('parts list')){
@@ -399,7 +441,7 @@ export async function extractComponents(jobId){
     refreshOpenModal();
   }catch(err){
     console.error(err);
-    const detail = explainFetchError(err);
+    const detail = explainFetchError(err) + retryCostLine(err);
     reportError('blueprint scan failed', err, { jobId, jobNumber: job && job.jobNumber });
     logActivity('Blueprint scan failed', { jobNumber: job && job.jobNumber, error: detail }, job ? {type:'job', id:job.id} : null).catch(()=>{});
     if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#9888;</div>Could not read the blueprint.<br><span style="font-size:11px;color:var(--text-faint);">${escapeHtml(detail)}</span></div>`;
@@ -450,7 +492,7 @@ export async function extractNewJobFromBlueprint(){
       : statusToast(0, diagnostics), components.length ? 5000 : 8000);
   }catch(err){
     console.error(err);
-    const detail = explainFetchError(err);
+    const detail = explainFetchError(err) + retryCostLine(err);
     reportError('blueprint scan failed (new job)', err, {});
     logActivity('Blueprint scan failed', { jobNumber:'(new job)', error: detail }, null).catch(()=>{});
     if(resultArea) resultArea.innerHTML = `<div class="empty-state"><div class="big">&#9888;</div>Could not read the blueprint.<br><span style="font-size:11px;color:var(--text-faint);">${escapeHtml(detail)}</span></div>`;
