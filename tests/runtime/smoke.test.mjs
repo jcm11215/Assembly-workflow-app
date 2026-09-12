@@ -70,7 +70,7 @@ const probes = [
   ['ui/settings: openSettingsModal', async()=>{ const m=await import('../../src/ui/settings.js'); m.openSettingsModal(); }],
   ['blueprints/ui: openBlueprintModal', async()=>{ const m=await import('../../src/blueprints/ui.js'); m.openBlueprintModal('j1'); }],
   ['blueprints/ui: openNewJobBlueprintModal', async()=>{ const m=await import('../../src/blueprints/ui.js'); m.openNewJobBlueprintModal(); }],
-  ['blueprints/ui: componentMapHtml', async()=>{ const m=await import('../../src/blueprints/ui.js'); m.componentMapHtml(state.jobs[0]); }],
+  ['blueprints/calloutDiagram: calloutDiagramHtml', async()=>{ const m=await import('../../src/blueprints/calloutDiagram.js'); m.calloutDiagramHtml(state.jobs[0]); }],
   ['blueprints/bom: bomListHtml', async()=>{ const m=await import('../../src/blueprints/bom.js'); m.bomListHtml(state.jobs[0]); }],
   ['admin/migrationDashboard: open', async()=>{ const m=await import('../../src/admin/migrationDashboard.js'); m.openMigrationDashboard(); }],
   ['admin/healthDashboard: open', async()=>{ const m=await import('../../src/admin/healthDashboard.js'); await m.openHealthDashboard(); }],

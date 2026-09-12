@@ -1,0 +1,123 @@
+// Geometry for the job page's callout diagram: numbered balloons on the
+// drawing with leader lines out to labels in the gutters. The failure
+// modes worth pinning down are overlapping labels, leader lines dragged
+// across the whole sheet, and numbering that doesn't match how a person
+// reads a drawing.
+const { layoutCallouts, GUTTER, IMAGE_LEFT, IMAGE_WIDTH, MIN_LABEL_GAP } =
+  await import('../src/blueprints/calloutLayout.js');
+
+let pass = 0, fail = 0;
+const t = (n, fn) => {
+  try { fn(); pass++; console.log('  PASS ' + n); }
+  catch (e) { fail++; console.log('  FAIL ' + n + ' -> ' + e.constructor.name + ': ' + e.message); }
+};
+const at = (x, y, item) => ({ item: item || 'Part', position: { x, y } });
+
+console.log('=== sides: a part is labelled on its own side of the drawing ===');
+{
+  const { callouts } = layoutCallouts([at(0.1, 0.5, 'Tail'), at(0.9, 0.5, 'Drive')]);
+  const tail = callouts.find(c => c.component.item === 'Tail');
+  const drive = callouts.find(c => c.component.item === 'Drive');
+  t('left-hand part gets a left-hand label', () => {
+    if (tail.side !== 'left') throw new Error('got ' + tail.side);
+  });
+  t('right-hand part gets a right-hand label', () => {
+    if (drive.side !== 'right') throw new Error('got ' + drive.side);
+  });
+  t('a leader line never crosses the drawing to reach its label', () => {
+    for (const c of callouts) {
+      const crosses = c.side === 'left' ? c.anchorX > c.pointX : c.anchorX < c.pointX;
+      if (crosses) throw new Error(`${c.component.item} anchor ${c.anchorX} vs point ${c.pointX}`);
+    }
+  });
+}
+
+console.log('\n=== labels never overlap, however many land on one side ===');
+for (const n of [2, 5, 12, 30]) {
+  t(`${n} parts stacked on the same side stay ${MIN_LABEL_GAP}% apart`, () => {
+    const comps = Array.from({ length: n }, (_, i) => at(0.2, (i + 0.5) / n, 'P' + i));
+    const { callouts } = layoutCallouts(comps);
+    const ys = callouts.map(c => c.labelY).sort((a, b) => a - b);
+    for (let i = 1; i < ys.length; i++) {
+      const gap = ys[i] - ys[i - 1];
+      if (gap < MIN_LABEL_GAP - 1e-9) throw new Error(`gap ${gap.toFixed(2)} at ${i}`);
+    }
+  });
+}
+
+console.log('\n=== label order follows the parts down the sheet ===');
+t('labels on a side keep the parts\' top-to-bottom order', () => {
+  const { callouts } = layoutCallouts([
+    at(0.2, 0.9, 'bottom'), at(0.2, 0.1, 'top'), at(0.2, 0.5, 'middle')
+  ]);
+  const bySide = callouts.filter(c => c.side === 'left').sort((a, b) => a.labelY - b.labelY);
+  const order = bySide.map(c => c.component.item).join(',');
+  if (order !== 'top,middle,bottom') throw new Error('got ' + order);
+});
+
+console.log('\n=== numbering reads like a drawing: left-to-right, top-to-bottom ===');
+t('same row numbers left to right', () => {
+  const { callouts } = layoutCallouts([at(0.8, 0.20, 'right'), at(0.2, 0.22, 'left')]);
+  const n = Object.fromEntries(callouts.map(c => [c.component.item, c.number]));
+  if (n.left !== 1 || n.right !== 2) throw new Error(JSON.stringify(n));
+});
+t('a clearly lower part numbers after a higher one, whatever its x', () => {
+  const { callouts } = layoutCallouts([at(0.1, 0.80, 'low'), at(0.9, 0.10, 'high')]);
+  const n = Object.fromEntries(callouts.map(c => [c.component.item, c.number]));
+  if (n.high !== 1 || n.low !== 2) throw new Error(JSON.stringify(n));
+});
+t('numbers are 1..n with no gaps or repeats', () => {
+  const comps = Array.from({ length: 9 }, (_, i) => at((i % 3) / 3 + 0.1, Math.floor(i / 3) / 3 + 0.1, 'P' + i));
+  const nums = layoutCallouts(comps).callouts.map(c => c.number).sort((a, b) => a - b);
+  if (nums.join(',') !== '1,2,3,4,5,6,7,8,9') throw new Error(nums.join(','));
+});
+
+console.log('\n=== points land on the drawing, not in the gutters ===');
+t('a part at the drawing\'s left edge maps to the image band, not x=0', () => {
+  const { callouts } = layoutCallouts([at(0, 0.5)]);
+  if (Math.abs(callouts[0].pointX - IMAGE_LEFT) > 1e-9) throw new Error('got ' + callouts[0].pointX);
+});
+t('a part at the right edge maps to the far side of the image band', () => {
+  const { callouts } = layoutCallouts([at(1, 0.5)]);
+  if (Math.abs(callouts[0].pointX - (IMAGE_LEFT + IMAGE_WIDTH)) > 1e-9) throw new Error('got ' + callouts[0].pointX);
+});
+t('every point stays within the image band', () => {
+  const comps = Array.from({ length: 20 }, (_, i) => at(i / 19, (i % 5) / 5));
+  for (const c of layoutCallouts(comps).callouts) {
+    if (c.pointX < IMAGE_LEFT - 1e-9 || c.pointX > IMAGE_LEFT + IMAGE_WIDTH + 1e-9) {
+      throw new Error('pointX ' + c.pointX + ' outside band');
+    }
+  }
+});
+t('the image band leaves a gutter on both sides', () => {
+  const { image } = layoutCallouts([at(0.5, 0.5)]);
+  if (image.left !== GUTTER || image.width !== 100 - GUTTER * 2) throw new Error(JSON.stringify(image));
+});
+
+console.log('\n=== degenerate input ===');
+t('no components -> no callouts, no crash', () => {
+  if (layoutCallouts([]).callouts.length !== 0) throw new Error('expected none');
+});
+t('null/undefined input is tolerated', () => {
+  if (layoutCallouts(null).callouts.length !== 0) throw new Error('expected none');
+  if (layoutCallouts(undefined).callouts.length !== 0) throw new Error('expected none');
+});
+t('components without a position are ignored, not placed at 0,0', () => {
+  const { callouts } = layoutCallouts([at(0.3, 0.3, 'placed'), { item: 'unplaced' }, { item: 'null', position: null }]);
+  if (callouts.length !== 1 || callouts[0].component.item !== 'placed') throw new Error('got ' + callouts.length);
+});
+t('a single part is centred vertically', () => {
+  const { callouts } = layoutCallouts([at(0.3, 0.9)]);
+  if (callouts[0].labelY !== 50) throw new Error('got ' + callouts[0].labelY);
+});
+t('layout does not leave scratch fields on the caller\'s components', () => {
+  const comps = [at(0.2, 0.2), at(0.8, 0.8)];
+  layoutCallouts(comps);
+  for (const c of comps) {
+    const extra = Object.keys(c).filter(k => k !== 'item' && k !== 'position');
+    if (extra.length) throw new Error('mutated input with: ' + extra.join(','));
+  }
+});
+
+console.log(`\n=== ${pass} passed, ${fail} failed ===`);
+process.exit(fail ? 1 : 0);

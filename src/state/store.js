@@ -6,6 +6,10 @@
 
 export const state = {
   tab: 'dashboard',
+  // Set while a job's own page is open; returnTab is the list it was
+  // opened from, so Back goes where they came from.
+  openJobId: null,
+  returnTab: 'dashboard',
   jobs: [],
   blockers: [],
   notes: [],

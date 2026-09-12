@@ -686,6 +686,77 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
 .bp-hint{font-size:12px;color:var(--text-faint);margin-top:6px;line-height:1.4;}
 .bp-preview-img{cursor:zoom-in;}
 
+/* ---------- A job's own page ---------- */
+.job-page{padding-bottom:8px;}
+.job-page-bar{
+  display:flex;align-items:center;gap:10px;margin:0 0 12px 0;padding-bottom:10px;
+  border-bottom:1px solid var(--line);
+}
+.job-page-title{
+  font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:.02em;
+  text-transform:uppercase;margin-right:auto;
+}
+
+/* ---------- Callout diagram: the real drawing, ballooned ----------
+   The sheet keeps a gutter either side for labels; leader lines are an
+   SVG stretched over the whole box, so its user units are percentages
+   and the line ends line up with the absolutely-positioned labels. */
+.cv-diagram{position:relative;margin-bottom:10px;}
+.cv-sheet-wrap{position:relative;display:block;}
+.cv-sheet{
+  display:block;width:100%;height:auto;border-radius:6px;
+  background:var(--steel-950);border:1px solid var(--line);
+}
+.cv-leaders{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.9;}
+.cv-balloon{
+  position:absolute;transform:translate(-50%,-50%);
+  min-width:19px;height:19px;padding:0 4px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-size:12px;font-weight:800;color:#0d0f11;
+  box-shadow:0 0 0 2px rgba(0,0,0,.55),0 1px 3px rgba(0,0,0,.7);
+}
+.cv-label{
+  position:absolute;transform:translateY(-50%);width:var(--cv-gutter,21%);
+  display:flex;align-items:flex-start;gap:5px;font-size:11px;line-height:1.25;
+}
+.cv-label-left{left:0;justify-content:flex-start;}
+.cv-label-right{right:0;}
+.cv-num{
+  flex-shrink:0;min-width:17px;height:17px;padding:0 3px;border-radius:9px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-size:11px;font-weight:800;color:#0d0f11;
+}
+.cv-label-text{min-width:0;}
+.cv-label-item{display:block;font-weight:700;}
+.cv-label-drawn{
+  display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:10px;color:var(--text-faint);word-break:break-word;
+}
+.cv-label-qty{display:block;color:var(--text-faint);font-size:10px;}
+.cv-diagram-empty{
+  padding:16px;text-align:center;font-size:12px;color:var(--text-faint);
+  border:1px dashed var(--line);border-radius:8px;margin-bottom:10px;
+}
+.cv-pages{margin-bottom:8px;}
+/* Wide enough for margins: labels live in the gutters, legend is redundant. */
+.cv-legend{display:none;}
+
+@media (max-width:700px){
+  /* No room for margins on a phone: the sheet takes the full width and
+     the labels become a numbered legend under it. The balloons carry the
+     same numbers, so it reads the same either way. */
+  .cv-sheet-wrap{margin-left:0 !important;width:100% !important;}
+  .cv-leaders,.cv-label{display:none;}
+  .cv-legend{
+    display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;
+    list-style:none;padding:10px 0 0 0;margin:0;
+  }
+  .cv-legend-row{display:flex;align-items:flex-start;gap:5px;font-size:11px;line-height:1.25;}
+}
+@media (max-width:420px){
+  .cv-legend{grid-template-columns:1fr;}
+}
+
 /* ---------- Component map: pins on the real scanned drawing ---------- */
 .bp-map{position:relative;width:100%;margin-bottom:10px;border-radius:8px;overflow:hidden;background:var(--steel-950);border:1px solid var(--line);}
 .bp-map-img{display:block;width:100%;height:auto;}

@@ -8,12 +8,13 @@ import { setAiProvider, setApiKey, setOpenRouterKey } from '../ai/keys.js';
 import { render } from './render.js';
 import { openBlockerForm, updateBlockersList } from '../blockers/index.js';
 import { extractComponents, extractNewJobFromBlueprint } from '../blueprints/extract.js';
-import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal, setComponentMapPage, showPdfPagesField, updatePdfPagesHint } from '../blueprints/ui.js';
+import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal, showPdfPagesField, updatePdfPagesHint } from '../blueprints/ui.js';
+import { setCalloutPage } from '../blueprints/calloutDiagram.js';
 import { blueprintImageCache, fetchBlueprintImage } from '../blueprints/images.js';
 import { logActivity, persistBlockers, persistJobs, reloadFromStorage } from '../db/repository.js';
 import { attemptAdvance, confirmAdvance, moveJobToStage, openMover, stepStage } from '../jobs/actions.js';
 import { updateDashboardList } from '../jobs/dashboard.js';
-import { openJobDetail } from '../jobs/detail.js';
+import { closeJobPage, openJobDetail } from '../jobs/detail.js';
 import { openJobForm } from '../jobs/jobForm.js';
 import { toggleStageChecklistItem } from '../jobs/stageGate.js';
 import { openNoteForm, updateNotesList } from '../notes/index.js';
@@ -72,6 +73,18 @@ export function initEventRouter(){
   // path. Second call is a no-op rather than a duplicate listener.
   if(routerBound) return;
   routerBound = true;
+
+  // The job page pushes a history entry, so back (the phone gesture, the
+  // browser button, or our own Back) has somewhere to land. Trust the URL
+  // rather than our own state here -- it's the thing that actually moved.
+  window.addEventListener('popstate', ()=>{
+    const onJobUrl = /^#job\//.test(location.hash || '');
+    if(!onJobUrl && state.tab === 'job') closeJobPage();
+    else if(onJobUrl && state.tab !== 'job'){
+      const id = location.hash.slice('#job/'.length);
+      if(state.jobs.some(j => j.id === id)) openJobDetail(id, false);
+    }
+  });
 
   document.addEventListener('submit', e=>{
     const form = e.target.closest('[data-action="bom-add-component-form"]');
@@ -221,9 +234,15 @@ export function initEventRouter(){
         refreshOpenModal();   // optimistic -- don't wait on the round trip to feel responsive
         break;
       }
-      case 'bp-map-page':
-        setComponentMapPage(id, Number(btn.getAttribute('data-index')));
-        refreshOpenModal();
+      case 'cv-page':
+        setCalloutPage(id, Number(btn.getAttribute('data-index')));
+        render();
+        break;
+      case 'job-back':
+        // Go back through history when we have an entry to pop, so the
+        // button and the phone's back gesture behave identically.
+        if(typeof history !== 'undefined' && history.state && history.state.job) history.back();
+        else closeJobPage();
         break;
       case 'refresh-activity':
         loadActivity();

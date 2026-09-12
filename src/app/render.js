@@ -8,6 +8,7 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL, supabaseReady } from '../db/config.js'
 import { loadAll } from '../db/repository.js';
 import { renderBoard } from '../jobs/board.js';
 import { renderDashboard, renderMetrics } from '../jobs/dashboard.js';
+import { renderJobPage } from '../jobs/detail.js';
 import { renderNotes } from '../notes/index.js';
 import { state } from '../state/store.js';
 
@@ -64,6 +65,14 @@ export function render(){
           not the one who set this up, let them know this message is showing.
         </div>
       </div>`;
+    return;
+  }
+  // A job's own page is a full view, not a tab: no metrics strip above it
+  // and no tab highlighted, since it belongs to whichever list opened it.
+  if(state.tab==='job'){
+    document.getElementById('metricsStrip').innerHTML = '';
+    renderJobPage();
+    restoreUiState(ui);
     return;
   }
   renderMetrics();
