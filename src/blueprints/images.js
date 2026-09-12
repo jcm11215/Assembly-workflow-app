@@ -62,6 +62,18 @@ export async function ensureBlueprintImageLoaded(jobId){
  */
 export const componentMapPageCache = {};
 
+/** Natural pixel size of a base64 image. Resolves to {} rather than
+ *  rejecting: without it the diagram shows the whole sheet uncropped,
+ *  which is a worse view, not a broken one. */
+function measureImage(base64, mime){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve({});
+    img.src = `data:${mime};base64,${base64}`;
+  });
+}
+
 export async function ensureComponentMapPageLoaded(jobId, page){
   const key = `${jobId}:${page}`;
   if(componentMapPageCache[key] !== undefined) return;
@@ -74,11 +86,14 @@ export async function ensureComponentMapPageLoaded(jobId, page){
   try {
     if(original.mimeType !== 'application/pdf'){
       // The original photo/image IS the page the AI looked at -- page 1.
-      componentMapPageCache[key] = { base64: original.base64, mime: original.mimeType };
+      const size = await measureImage(original.base64, original.mimeType);
+      componentMapPageCache[key] = { base64: original.base64, mime: original.mimeType, ...size };
     } else {
       const blob = base64ToBlob(original.base64, original.mimeType);
       const [rendered] = await pdfFileToImages(blob, 1, 1600, 0.85, [page]);
-      componentMapPageCache[key] = rendered ? { base64: rendered.base64, mime: rendered.mime } : false;
+      componentMapPageCache[key] = rendered
+        ? { base64: rendered.base64, mime: rendered.mime, width: rendered.width, height: rendered.height }
+        : false;
     }
   } catch (e) {
     console.error('ensureComponentMapPageLoaded failed', e);

@@ -13,7 +13,7 @@
  * it reads the same either way.
  */
 import { componentMapPageCache, ensureComponentMapPageLoaded } from './images.js';
-import { layoutCallouts, GUTTER, IMAGE_LEFT, IMAGE_WIDTH } from './calloutLayout.js';
+import { layoutCallouts, frameForParts, frameImageStyle, GUTTER, IMAGE_LEFT, IMAGE_WIDTH } from './calloutLayout.js';
 import { BOM_BUCKET_META, bomBucketFor } from '../models/stageMeta.js';
 import { escapeHtml } from '../utils/dom.js';
 
@@ -21,6 +21,12 @@ import { escapeHtml } from '../utils/dom.js';
 // across more than one sheet.
 let calloutPage = {};
 export function setCalloutPage(jobId, page){ calloutPage[jobId] = page; }
+
+// jobId -> true when they've asked to see the whole sheet instead of just
+// the machine. Off by default: the conveyor is the point, and a sheet is
+// mostly border, title block and notes.
+let showWholeSheet = {};
+export function toggleWholeSheet(jobId){ showWholeSheet[jobId] = !showWholeSheet[jobId]; }
 
 /** Parts that can actually be pointed at, grouped by the sheet they're on. */
 function positionedByPage(job){
@@ -87,7 +93,15 @@ export function calloutDiagramHtml(job){
     return `${tabs}<div class="cv-diagram-empty">Could not load the drawing for this scan.</div>`;
   }
 
-  const { callouts, minHeightPx } = layoutCallouts(byPage[current]);
+  // Crop to the machine unless they've asked for the whole sheet, or we
+  // don't know the page's pixel size to crop against (an older cached
+  // render) -- in which case the full sheet is the honest fallback.
+  const wantsWhole = !!showWholeSheet[job.id];
+  const frame = wantsWhole ? null : frameForParts(byPage[current]);
+  const imageStyle = frame ? frameImageStyle(frame, cached.width, cached.height) : null;
+  const cropped = !!imageStyle;
+
+  const { callouts, minHeightPx } = layoutCallouts(byPage[current], cropped ? frame : null);
 
   const leaders = callouts.map(c => `
     <line x1="${c.anchorX.toFixed(2)}" y1="${c.labelY.toFixed(2)}"
@@ -99,7 +113,7 @@ export function calloutDiagramHtml(job){
   // plain fraction of the image and stay right when the phone layout
   // widens the sheet to the full container.
   const balloons = callouts.map(c => `
-    <span class="cv-balloon" style="left:${(c.component.position.x*100).toFixed(2)}%;top:${(c.component.position.y*100).toFixed(2)}%;background:${colorFor(c.component)};"
+    <span class="cv-balloon" style="left:${(c.inFrame.x*100).toFixed(2)}%;top:${(c.inFrame.y*100).toFixed(2)}%;background:${colorFor(c.component)};"
           title="${escapeHtml(c.component.item)}">${c.number}</span>`).join('');
 
   const labels = callouts.map(c => `
@@ -110,16 +124,33 @@ export function calloutDiagramHtml(job){
   const legend = callouts.map(c => `
     <li class="cv-legend-row">${labelInnerHtml(c.component, c.number, true)}</li>`).join('');
 
+  // Cropped: the wrapper is the frame, and the sheet is blown up inside
+  // it and shifted so the frame is what shows through.
+  const sheet = cropped
+    ? `<div class="cv-sheet-crop" style="aspect-ratio:${imageStyle.aspectRatio.toFixed(4)};">
+         <img class="cv-sheet cv-sheet-zoom"
+              style="width:${imageStyle.width.toFixed(3)}%;left:${imageStyle.left.toFixed(3)}%;top:${imageStyle.top.toFixed(3)}%;"
+              src="data:${cached.mime};base64,${cached.base64}"
+              alt="The conveyor on sheet ${current} of the drawing for ${escapeHtml(job.jobNumber)}">
+       </div>`
+    : `<img class="cv-sheet" src="data:${cached.mime};base64,${cached.base64}"
+            alt="Sheet ${current} of the drawing for ${escapeHtml(job.jobNumber)}">`;
+
+  const viewToggle = `
+    <button type="button" class="btn btn-outline btn-sm cv-view-toggle" data-action="cv-whole-sheet" data-id="${job.id}">
+      ${cropped ? 'Show whole sheet' : 'Show just the conveyor'}
+    </button>`;
+
   return `
   ${tabs}
   <div class="cv-diagram" style="--cv-gutter:${GUTTER}%;min-height:${minHeightPx}px;">
     <svg class="cv-leaders" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${leaders}</svg>
     <div class="cv-sheet-wrap" style="margin-left:${IMAGE_LEFT}%;width:${IMAGE_WIDTH}%;">
-      <img class="cv-sheet" src="data:${cached.mime};base64,${cached.base64}"
-           alt="Sheet ${current} of the drawing for ${escapeHtml(job.jobNumber)}">
+      ${sheet}
       ${balloons}
     </div>
     ${labels}
   </div>
+  <div class="cv-under">${viewToggle}</div>
   <ol class="cv-legend">${legend}</ol>`;
 }

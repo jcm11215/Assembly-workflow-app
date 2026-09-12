@@ -3,7 +3,8 @@
 // modes worth pinning down are overlapping labels, leader lines dragged
 // across the whole sheet, and numbering that doesn't match how a person
 // reads a drawing.
-const { layoutCallouts, GUTTER, IMAGE_LEFT, IMAGE_WIDTH, MIN_LABEL_GAP } =
+const { layoutCallouts, frameForParts, pointInFrame, frameImageStyle,
+        GUTTER, IMAGE_LEFT, IMAGE_WIDTH, MIN_LABEL_GAP } =
   await import('../src/blueprints/calloutLayout.js');
 
 let pass = 0, fail = 0;
@@ -138,6 +139,107 @@ t('layout does not leave scratch fields on the caller\'s components', () => {
     const extra = Object.keys(c).filter(k => k !== 'item' && k !== 'position');
     if (extra.length) throw new Error('mutated input with: ' + extra.join(','));
   }
+});
+
+console.log('\n=== framing: crop the sheet down to the machine ===');
+// A conveyor elevation: parts strung left to right across the middle of a
+// sheet that is mostly border, title block and notes.
+const conveyor = [
+  at(0.115, 0.625), at(0.175, 0.545), at(0.345, 0.500), at(0.455, 0.455),
+  at(0.545, 0.500), at(0.735, 0.615), at(0.865, 0.400)
+];
+t('the frame contains every part', () => {
+  const f = frameForParts(conveyor);
+  for (const c of conveyor) {
+    if (c.position.x < f.x || c.position.x > f.x + f.w) throw new Error('x outside frame');
+    if (c.position.y < f.y || c.position.y > f.y + f.h) throw new Error('y outside frame');
+  }
+});
+t('it pads out past the outermost parts -- the machine runs past them', () => {
+  const f = frameForParts(conveyor);
+  if (f.x >= 0.115 || f.x + f.w <= 0.865) throw new Error('frame is tighter than the parts');
+});
+t('it actually crops something worth cropping', () => {
+  const f = frameForParts(conveyor);
+  if (f.h > 0.6) throw new Error('barely cropped vertically: h=' + f.h);
+});
+t('it never runs off the sheet', () => {
+  for (const set of [conveyor, [at(0, 0), at(1, 1)], [at(0.02, 0.98), at(0.05, 0.95)]]) {
+    const f = frameForParts(set);
+    if (!f) continue;
+    if (f.x < 0 || f.y < 0 || f.x + f.w > 1 + 1e-9 || f.y + f.h > 1 + 1e-9) {
+      throw new Error(JSON.stringify(f));
+    }
+  }
+});
+t('two parts close together do not zoom to a postage stamp', () => {
+  const f = frameForParts([at(0.50, 0.50), at(0.52, 0.51)]);
+  if (f.w < 0.29 || f.h < 0.21) throw new Error('zoomed too far: ' + JSON.stringify(f));
+});
+t('parts already spanning the sheet are left uncropped', () => {
+  if (frameForParts([at(0.02, 0.02), at(0.5, 0.5), at(0.98, 0.98)]) !== null) {
+    throw new Error('cropped when there was nothing to crop away');
+  }
+});
+t('a single part locates nothing, so nothing is cropped', () => {
+  if (frameForParts([at(0.5, 0.5)]) !== null) throw new Error('cropped off one point');
+});
+t('no parts -> no frame', () => {
+  if (frameForParts([]) !== null || frameForParts(null) !== null) throw new Error('expected null');
+});
+
+console.log('\n=== framing: parts are placed within the crop, not the page ===');
+t('a part at the frame\'s corners maps to that corner of the view', () => {
+  const f = { x: 0.2, y: 0.1, w: 0.6, h: 0.4 };
+  const tl = pointInFrame({ x: 0.2, y: 0.1 }, f);
+  const br = pointInFrame({ x: 0.8, y: 0.5 }, f);
+  if (Math.abs(tl.x) > 1e-9 || Math.abs(tl.y) > 1e-9) throw new Error('top-left wrong');
+  if (Math.abs(br.x - 1) > 1e-9 || Math.abs(br.y - 1) > 1e-9) throw new Error('bottom-right wrong');
+});
+t('with no frame a part keeps its page position', () => {
+  const p = pointInFrame({ x: 0.3, y: 0.7 }, null);
+  if (p.x !== 0.3 || p.y !== 0.7) throw new Error('moved without a frame');
+});
+t('cropping re-sides the labels against what is on screen', () => {
+  // At page x=0.45 this part is left-of-centre, but a frame covering
+  // 0.4..1.0 puts it hard against the left edge -- still left. A frame
+  // covering 0.0..0.5 puts it near the right edge, so its label belongs
+  // on the right or the leader line crosses the whole view.
+  const part = [at(0.45, 0.5), at(0.05, 0.5)];
+  const rightHalf = layoutCallouts(part, { x: 0.0, y: 0.3, w: 0.5, h: 0.4 });
+  const c = rightHalf.callouts.find(x => x.component.position.x === 0.45);
+  if (c.side !== 'right') throw new Error('expected a right-hand label, got ' + c.side);
+});
+t('a cropped point still lands inside the image band', () => {
+  const f = { x: 0.1, y: 0.4, w: 0.8, h: 0.3 };
+  for (const c of layoutCallouts(conveyor, f).callouts) {
+    if (c.pointX < IMAGE_LEFT - 1e-9 || c.pointX > IMAGE_LEFT + IMAGE_WIDTH + 1e-9) {
+      throw new Error('pointX outside the band: ' + c.pointX);
+    }
+  }
+});
+
+console.log('\n=== framing: how the sheet is scaled behind the frame ===');
+t('the view box takes the crop\'s real proportions', () => {
+  // Half the width and a quarter the height of a 1000x500 page is
+  // 500x125 of pixels -- 4:1.
+  const s = frameImageStyle({ x: 0, y: 0, w: 0.5, h: 0.25 }, 1000, 500);
+  if (Math.abs(s.aspectRatio - 4) > 1e-9) throw new Error('got ' + s.aspectRatio);
+});
+t('the sheet is blown up by exactly the crop factor', () => {
+  const s = frameImageStyle({ x: 0, y: 0, w: 0.25, h: 0.5 }, 1000, 500);
+  if (Math.abs(s.width - 400) > 1e-9) throw new Error('got width ' + s.width);
+});
+t('and shifted so the crop is what shows through', () => {
+  const s = frameImageStyle({ x: 0.25, y: 0.5, w: 0.5, h: 0.25 }, 1000, 500);
+  if (Math.abs(s.left - -50) > 1e-9) throw new Error('got left ' + s.left);
+  if (Math.abs(s.top - -200) > 1e-9) throw new Error('got top ' + s.top);
+});
+t('an unmeasured page gives no crop rather than a wrong one', () => {
+  if (frameImageStyle({ x: 0, y: 0, w: 0.5, h: 0.5 }, undefined, undefined) !== null) {
+    throw new Error('expected null without page dimensions');
+  }
+  if (frameImageStyle(null, 1000, 500) !== null) throw new Error('expected null without a frame');
 });
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

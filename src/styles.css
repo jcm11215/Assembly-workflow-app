@@ -701,7 +701,12 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
    The sheet keeps a gutter either side for labels; leader lines are an
    SVG stretched over the whole box, so its user units are percentages
    and the line ends line up with the absolutely-positioned labels. */
-.cv-diagram{position:relative;margin-bottom:10px;}
+/* The box is held open to fit the labels down each margin, which for a
+   cropped conveyor -- short and very wide -- is taller than the drawing
+   itself. Centring the sheet in that space keeps the leader lines
+   converging on it from both sides instead of all pointing up at a
+   drawing stuck to the top edge. */
+.cv-diagram{position:relative;margin-bottom:10px;display:flex;flex-direction:column;justify-content:center;}
 /* Stacking matters here: a leader line runs from the margin to a part in
    the middle of the sheet, so nearly all of it lies OVER the drawing. The
    sheet comes first in the DOM and would otherwise paint on top of every
@@ -713,6 +718,16 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
   display:block;width:100%;height:auto;border-radius:6px;
   background:var(--steel-950);border:1px solid var(--line);
 }
+/* Cropped to the machine: this box IS the frame, and the sheet inside is
+   scaled up and shifted so the frame is what shows through. */
+.cv-sheet-crop{
+  position:relative;overflow:hidden;width:100%;border-radius:6px;
+  background:var(--steel-950);border:1px solid var(--line);
+}
+.cv-sheet-zoom{
+  position:absolute;max-width:none;height:auto;border:0;border-radius:0;
+}
+.cv-under{display:flex;justify-content:flex-end;margin:-2px 0 8px 0;}
 .cv-leaders{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.9;}
 .cv-balloon{
   position:absolute;transform:translate(-50%,-50%);

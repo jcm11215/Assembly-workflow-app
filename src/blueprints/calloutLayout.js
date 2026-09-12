@@ -58,14 +58,84 @@ function spread(n, top, bottom){
   return Array.from({ length: n }, (_, i) => top + i * step);
 }
 
+/* ------------------------------------------------------------------ *
+ * Framing: which part of the sheet to actually show.
+ * ------------------------------------------------------------------ */
+
+// A drawing sheet is mostly not the conveyor -- border, title block,
+// notes, other views. The parts are all ON the machine, so the box they
+// occupy locates it; these pad that box back out to the machine itself,
+// which extends past the outermost part.
+const PAD_X = 0.06;           // of the sheet, each side
+const PAD_Y = 0.10;
+const MIN_W = 0.30;           // never zoom past this, however tight the parts
+const MIN_H = 0.22;
+// Above this much of the sheet there's nothing worth cropping away.
+const NO_CROP_ABOVE = 0.86;
+
+function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+
+/** Grows a 1-D span to at least `min`, staying inside 0..1. */
+function atLeast(lo, hi, min){
+  const short = min - (hi - lo);
+  if(short <= 0) return [lo, hi];
+  lo -= short / 2; hi += short / 2;
+  if(lo < 0){ hi -= lo; lo = 0; }
+  if(hi > 1){ lo -= (hi - 1); hi = 1; }
+  return [clamp01(lo), clamp01(hi)];
+}
+
+/**
+ * The region of the sheet holding the conveyor, as 0..1 of the page, or
+ * null when the parts already cover enough of it that cropping would
+ * gain nothing. Derived from the parts rather than asked of the AI: they
+ * are the thing we know the position of, and a machine drawn around them
+ * cannot be far away.
+ */
+export function frameForParts(components){
+  const pts = (components || []).filter(c => c && c.position).map(c => c.position);
+  if(pts.length < 2) return null;          // one part locates nothing useful
+
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  let [x0, x1] = atLeast(clamp01(Math.min(...xs) - PAD_X), clamp01(Math.max(...xs) + PAD_X), MIN_W);
+  let [y0, y1] = atLeast(clamp01(Math.min(...ys) - PAD_Y), clamp01(Math.max(...ys) + PAD_Y), MIN_H);
+
+  const w = x1 - x0, h = y1 - y0;
+  if(w >= NO_CROP_ABOVE && h >= NO_CROP_ABOVE) return null;
+  return { x: x0, y: y0, w, h };
+}
+
+/** A part's position expressed inside the frame instead of the page. */
+export function pointInFrame(position, frame){
+  if(!frame) return { x: position.x, y: position.y };
+  return { x: (position.x - frame.x) / frame.w, y: (position.y - frame.y) / frame.h };
+}
+
+/**
+ * How to place the sheet image so `frame` fills its box, given the page
+ * image's real pixel size. All percentages, so the caller can size the
+ * box however it likes.
+ */
+export function frameImageStyle(frame, pageW, pageH){
+  if(!frame || !(pageW > 0) || !(pageH > 0)) return null;
+  return {
+    aspectRatio: (frame.w * pageW) / (frame.h * pageH),
+    width: 100 / frame.w,
+    left: -100 * frame.x / frame.w,
+    top: -100 * frame.y / frame.h
+  };
+}
+
 /**
  * @param components  each needs {position:{x,y}} in 0..1; anything without
  *                    a position is skipped by the caller, not here.
+ * @param frame       when cropping, the region being shown -- callout
+ *                    points are then placed within it rather than the page.
  * @returns {{image:{left,width}, callouts:[...]}} callouts carry the
  *          1-based `number` shown in the balloon, the label box position,
  *          and the point on the drawing the leader line runs to.
  */
-export function layoutCallouts(components){
+export function layoutCallouts(components, frame){
   const list = (components || []).filter(c => c && c.position);
 
   // Number them the way a person reads a drawing -- left to right, top to
@@ -98,13 +168,20 @@ export function layoutCallouts(components){
 
   // A part on the left half gets a left-hand label: the leader line then
   // runs outward to the nearest edge instead of crossing the drawing.
-  const left  = ordered.filter(c => c.position.x < 0.5).sort((a, b) => a.position.y - b.position.y);
-  const right = ordered.filter(c => c.position.x >= 0.5).sort((a, b) => a.position.y - b.position.y);
+  // Halves of what's ON SCREEN -- a crop moves parts relative to the
+  // frame, and splitting on the page's midline would send a part now
+  // sitting on the right out to a label on the left.
+  const sideX = c => pointInFrame(c.position, frame).x;
+  const left  = ordered.filter(c => sideX(c) < 0.5).sort((a, b) => a.position.y - b.position.y);
+  const right = ordered.filter(c => sideX(c) >= 0.5).sort((a, b) => a.position.y - b.position.y);
 
   const callouts = [];
   for(const [side, group] of [['left', left], ['right', right]]){
     const ys = spread(group.length, TOP, BOTTOM);
     group.forEach((c, i) => {
+      // Where the part sits in what's actually on screen -- the cropped
+      // frame when there is one, the whole page otherwise.
+      const p = pointInFrame(c.position, frame);
       callouts.push({
         number: c._n,
         component: c,
@@ -113,8 +190,9 @@ export function layoutCallouts(components){
         labelY: ys[i],
         anchorX: side === 'left' ? GUTTER : 100 - GUTTER,
         // The point on the drawing itself.
-        pointX: IMAGE_LEFT + c.position.x * IMAGE_WIDTH,
-        pointY: c.position.y * 100
+        inFrame: p,
+        pointX: IMAGE_LEFT + p.x * IMAGE_WIDTH,
+        pointY: p.y * 100
       });
     });
   }

@@ -9,7 +9,7 @@ import { render } from './render.js';
 import { openBlockerForm, updateBlockersList } from '../blockers/index.js';
 import { extractComponents, extractNewJobFromBlueprint } from '../blueprints/extract.js';
 import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal, showPdfPagesField, updatePdfPagesHint } from '../blueprints/ui.js';
-import { setCalloutPage } from '../blueprints/calloutDiagram.js';
+import { setCalloutPage, toggleWholeSheet } from '../blueprints/calloutDiagram.js';
 import { blueprintImageCache, fetchBlueprintImage } from '../blueprints/images.js';
 import { logActivity, persistBlockers, persistJobs, reloadFromStorage } from '../db/repository.js';
 import { attemptAdvance, confirmAdvance, moveJobToStage, openMover, stepStage } from '../jobs/actions.js';
@@ -236,6 +236,10 @@ export function initEventRouter(){
       }
       case 'cv-page':
         setCalloutPage(id, Number(btn.getAttribute('data-index')));
+        render();
+        break;
+      case 'cv-whole-sheet':
+        toggleWholeSheet(id);
         render();
         break;
       case 'job-back':
