@@ -1,3 +1,21 @@
+/**
+ * Version stamps for each prompt, part of the cache key for the reading
+ * it drives (scanStore.js).
+ *
+ * BUMP THE NUMBER WHENEVER YOU CHANGE THAT PROMPT'S WORDING. A stored
+ * answer is an answer to the question as it was asked; serve it against
+ * a reworded question and you get the worst kind of stale -- invisible,
+ * confident, and to a question nobody asked any more. Bumping makes
+ * every old entry miss, which is exactly right: they answer a question
+ * that no longer exists.
+ */
+export const PROMPT_VERSIONS = {
+  classify: 1,
+  parts: 1,
+  callouts: 1,
+  dimensions: 1
+};
+
 /** Extraction prompts. The AI reads values off the drawing only; it
  *  never invents one, and never assigns a component's assembly stage --
  *  see installation_location below and stageForLocation() in spec.js. */

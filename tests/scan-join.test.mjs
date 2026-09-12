@@ -207,8 +207,9 @@ t('an unplaced ambiguous part cannot be placed by position', () => {
   eq(components[0].installation_location, 'unknown', 'location');
 });
 
-console.log('\n=== slicing the upload up per pass ===');
-const { pageOfBlocks, blocksForPages } = await import('../src/blueprints/extract.js');
+console.log('\n=== slicing the upload up per reading ===');
+const { pageOfBlocks } = await import('../src/blueprints/extract.js');
+const { preparePages } = await import('../src/blueprints/scanLayers.js');
 const img = n => ({ type: 'image', source: { data: 'IMG' + n } });
 const labelled = [
   { type: 'text', text: 'PDF page 3:' }, img(3),
@@ -223,15 +224,24 @@ t('keeps each image with the sheet number it was labelled with', () => {
 t('a single uploaded image is page 1', () => {
   eq(pageOfBlocks([img(1)]).map(p => p.page).join(), '1', 'pages');
 });
-t('a pass is shown only the pages it needs', () => {
-  const blocks = blocksForPages(pageOfBlocks(labelled), [7]);
-  eq(blocks.filter(b => b.type === 'image').length, 1, 'one image');
-  eq(blocks.find(b => b.type === 'image').source.data, 'IMG7', 'the right one');
+t('each page keeps its own blocks, so a reading can be given a subset', () => {
+  const prepared = preparePages(pageOfBlocks(labelled));
+  const page7 = prepared.find(p => p.page === 7);
+  eq(page7.blocks.filter(b => b.type === 'image').length, 1, 'one image');
+  eq(page7.blocks.find(b => b.type === 'image').source.data, 'IMG7', 'the right one');
 });
-t('asking for pages that are not there falls back to the whole set', () => {
-  // Better a pass that reads everything than one that reads nothing.
-  const blocks = blocksForPages(pageOfBlocks(labelled), [99]);
-  eq(blocks.filter(b => b.type === 'image').length, 3, 'all images');
+t('every page gets a content hash, and different pages hash differently', () => {
+  // The hash is what decides whether a stored reading belongs to the
+  // page in front of us, so two sheets must never share one.
+  const prepared = preparePages(pageOfBlocks(labelled));
+  const hashes = prepared.map(p => p.hash);
+  eq(new Set(hashes).size, 3, 'distinct hashes');
+  if (hashes.some(h => !h)) throw new Error('a page came back without a hash');
+});
+t('the same page hashes the same way twice', () => {
+  const a = preparePages(pageOfBlocks(labelled)).map(p => p.hash).join();
+  const b = preparePages(pageOfBlocks(labelled)).map(p => p.hash).join();
+  eq(a, b, 'stable hashes -- otherwise nothing would ever cache-hit');
 });
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
