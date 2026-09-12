@@ -6,6 +6,7 @@ import { bomListHtml } from '../blueprints/bom.js';
 import { blueprintImageCache, ensureBlueprintImageLoaded } from '../blueprints/images.js';
 import { blueprintImageSectionHtml } from '../blueprints/ui.js';
 import { calloutDiagramHtml } from '../blueprints/calloutDiagram.js';
+import { jobErrorsSectionHtml } from '../errors/index.js';
 import { PROCEDURE, STAGES, STAGE_PROCEDURE, stageChecklistProgress, stageLabel } from './procedure.js';
 import { dueStatus } from './selectors.js';
 import { state } from '../state/store.js';
@@ -108,6 +109,8 @@ export function jobPageHtml(job){
 
     <div class="section-title">Open Blockers</div>
     ${blockersHtml}
+
+    ${jobErrorsSectionHtml(job)}
   </div>`;
 }
 

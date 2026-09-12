@@ -12,6 +12,7 @@ import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal, 
 import { setCalloutPage, toggleWholeSheet } from '../blueprints/calloutDiagram.js';
 import { blueprintImageCache, fetchBlueprintImage } from '../blueprints/images.js';
 import { logActivity, persistBlockers, persistJobs, reloadFromStorage } from '../db/repository.js';
+import { openErrorForm, removeError, toggleErrorStatus } from '../errors/index.js';
 import { attemptAdvance, confirmAdvance, moveJobToStage, openMover, stepStage } from '../jobs/actions.js';
 import { updateDashboardList } from '../jobs/dashboard.js';
 import { closeJobPage, openJobDetail } from '../jobs/detail.js';
@@ -317,6 +318,38 @@ export function initEventRouter(){
       case 'new-blocker':
         openBlockerForm(null);
         break;
+      case 'log-error':
+        // data-jobnumber is present on a job's page and absent on the
+        // Errors tab, where the form asks which job it was.
+        openErrorForm(btn.getAttribute('data-jobnumber'));
+        break;
+      case 'toggle-error-status':
+        toggleErrorStatus(id);
+        break;
+      case 'filter-errors-dept':
+        state.errorDeptFilter = btn.getAttribute('data-filter');
+        render();
+        break;
+      case 'toggle-error-breakdown':
+        state.errorBreakdownOpen = !state.errorBreakdownOpen;
+        render();
+        break;
+      case 'filter-errors-status':
+        state.errorStatusFilter = btn.getAttribute('data-filter');
+        render();
+        break;
+      case 'delete-error': {
+        const delErr = state.jobErrors.find(e => e.id === id);
+        if(!delErr) break;
+        // An error log whose rows can vanish on a mis-tap is not a record.
+        confirmAction({
+          title: 'Delete Error',
+          message: `Delete this logged error on ${delErr.jobNumber || 'this job'}? The record of what went wrong goes with it, and this cannot be undone.`,
+          confirmLabel: 'Delete Error',
+          onConfirm(){ removeError(id); showToast('Error deleted'); }
+        });
+        break;
+      }
       case 'delete-blocker': {
         const delBlk = state.blockers.find(b=>b.id===id);
         if(!delBlk) break;

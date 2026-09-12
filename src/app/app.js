@@ -23,6 +23,7 @@ import { showLogin } from '../auth/loginView.js';
 import { onConnectionChange, disconnectAll } from '../realtime/realtimeClient.js';
 import { startJobsRealtime, stopJobsRealtime } from '../realtime/jobsRealtime.js';
 import { startBlockersRealtime, stopBlockersRealtime } from '../realtime/blockersRealtime.js';
+import { startErrorsRealtime, stopErrorsRealtime } from '../realtime/errorsRealtime.js';
 import { startNotesRealtime, stopNotesRealtime } from '../realtime/notesRealtime.js';
 import { startActivityRealtime, stopActivityRealtime } from '../realtime/activityRealtime.js';
 import { showToast } from '../ui/components/toast.js';
@@ -88,6 +89,7 @@ function startRealtime(){
 
   startJobsRealtime();
   startBlockersRealtime();
+  startErrorsRealtime();
   startNotesRealtime();
   startActivityRealtime();
 }
@@ -95,6 +97,7 @@ function startRealtime(){
 function stopRealtime(){
   stopJobsRealtime();
   stopBlockersRealtime();
+  stopErrorsRealtime();
   stopNotesRealtime();
   stopActivityRealtime();
   disconnectAll();

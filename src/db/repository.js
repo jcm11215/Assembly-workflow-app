@@ -25,6 +25,7 @@ import { USE_RELATIONAL_READS, USE_LEGACY_FALLBACK, getMode, MODE } from './cuto
 
 import * as jobsRepo from './jobsRepo.js';
 import * as blockersRepo from './blockersRepo.js';
+import * as errorsRepo from './errorsRepo.js';
 import * as notesRepo from './notesRepo.js';
 import * as checklistRepo from './checklistRepo.js';
 import * as activityRepo from './activityRepo.js';
@@ -55,7 +56,7 @@ function changedRecords(list, prev){
  * ------------------------------------------------------------------ */
 export async function loadAll(){
   if(!supabaseReady()){
-    state.jobs = []; state.blockers = []; state.notes = [];
+    state.jobs = []; state.blockers = []; state.notes = []; state.jobErrors = [];
     return;
   }
 
@@ -71,14 +72,22 @@ export async function loadAll(){
     // No legacy blob (already archived) -- fall through to relational.
   }
 
-  const [jobs, blockers, notes] = await Promise.all([
+  const [jobs, blockers, notes, jobErrors] = await Promise.all([
     tracked('jobs', 'read', () => jobsRepo.listJobs()),
     tracked('blockers', 'read', () => blockersRepo.listBlockers()),
-    tracked('notes', 'read', () => notesRepo.listNotes())
+    tracked('notes', 'read', () => notesRepo.listNotes()),
+    // Errors are written one row at a time through errorsRepo, so they
+    // are not in the diff-and-persist snapshot below; a failed read must
+    // not take the whole load down with it.
+    tracked('job_errors', 'read', () => errorsRepo.listJobErrors()).catch(e => {
+      console.error('could not load the error log', e);
+      return [];
+    })
   ]);
   state.jobs = jobs;
   state.blockers = blockers;
   state.notes = notes;
+  state.jobErrors = jobErrors;
   snapshot = { jobs: snap(jobs), blockers: snap(blockers), notes: snap(notes) };
 }
 

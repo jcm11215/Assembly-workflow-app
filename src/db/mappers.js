@@ -117,6 +117,56 @@ export function blockerToRow(b, jobId){
   };
 }
 
+/* ---------------- job errors ---------------- */
+
+/**
+ * A logged engineering/purchasing error. `reworkHours` stays null rather
+ * than 0 when nobody recorded it: "we didn't measure" and "it cost
+ * nothing" are different answers, and averaging them together would
+ * quietly understate what errors cost.
+ */
+export function rowToJobError(row){
+  return {
+    id: row.id,
+    jobId: row.job_id,
+    jobNumber: row.job_number || '',        // joined
+    department: row.department || 'other',
+    category: row.category || 'other',
+    description: row.description || '',
+    foundAtStage: row.found_at_stage || 'unknown',
+    reworkHours: row.rework_hours != null ? Number(row.rework_hours) : null,
+    causedDelay: !!row.caused_delay,
+    scrapped: !!row.scrapped,
+    status: row.status || 'Open',
+    correction: row.correction || '',
+    blockerId: row.blocker_id || null,
+    reportedBy: row.reported_by_name || '',
+    reportedAt: row.reported_at || '',
+    dateReported: (row.reported_at || '').slice(0, 10),
+    correctedAt: row.corrected_at || null
+  };
+}
+
+export function jobErrorToRow(e, jobId){
+  const hours = Number(e.reworkHours);
+  return {
+    job_id: jobId ?? e.jobId,
+    department: e.department || 'other',
+    category: e.category || 'other',
+    description: e.description || '',
+    found_at_stage: e.foundAtStage || 'unknown',
+    // '' from an untouched number field is "not recorded", not zero.
+    rework_hours: (e.reworkHours === '' || e.reworkHours == null || !isFinite(hours)) ? null : hours,
+    caused_delay: !!e.causedDelay,
+    scrapped: !!e.scrapped,
+    status: e.status || 'Open',
+    correction: e.correction || null,
+    blocker_id: e.blockerId || null
+    // corrected_at is stamped by a DB trigger, never sent from here --
+    // it has to agree with status or the row's CHECK rejects it.
+  };
+}
+
 /* ---------------- notes ---------------- */
 
 export function rowToNote(row){

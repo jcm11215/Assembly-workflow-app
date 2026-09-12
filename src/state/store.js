@@ -13,9 +13,17 @@ export const state = {
   jobs: [],
   blockers: [],
   notes: [],
+  // Logged engineering/purchasing errors, the whole log across every job
+  // -- the per-job section filters this rather than fetching its own.
+  jobErrors: [],
   jobFilter: 'all',
   jobSearch: '',
   blockerFilter: 'active',
+  errorDeptFilter: 'all',
+  errorStatusFilter: 'all',
+  // The breakdown is analysis, not the thing you came for -- closed by
+  // default so the errors themselves are above the fold.
+  errorBreakdownOpen: false,
   noteSearch: '',
   activity: [],
   activitySearch: '',

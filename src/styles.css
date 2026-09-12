@@ -638,6 +638,21 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
   text-transform:uppercase;letter-spacing:.05em;min-height:60px;position:relative;min-width:0;
 }
 .tab-btn .ic{width:24px;height:24px;}
+/* The label is wrapped so it can be sized and, as a last resort,
+   truncated. Seven tabs at 12px with letter-spacing overflowed their
+   share of a phone's width and ran into each other -- "ASSISTANT" and
+   "ACTIVITY" arrived as one word. Tightened below, and ellipsised
+   rather than allowed to collide on anything narrower still. */
+.tab-btn .tab-lbl{
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+@media (max-width:480px){
+  /* 9px so all seven labels fit as whole words: a truncated "ASSISTA..."
+     is harder to read at a glance than the same word one point smaller,
+     and the ellipsis above is only the backstop for narrower still. */
+  .tab-btn{font-size:9px;letter-spacing:0;padding-left:0;padding-right:0;gap:3px;}
+  .tab-btn .ic{width:22px;height:22px;}
+}
 .tab-btn.active{color:var(--accent);background:linear-gradient(180deg,rgba(245,130,32,.12),rgba(245,130,32,0) 70%);}
 .tab-btn.active .ic{filter:drop-shadow(0 0 6px rgba(245,130,32,.5));}
 .tab-btn.active::before{
@@ -980,6 +995,15 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
   text-transform:uppercase;letter-spacing:.06em;
 }
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;margin-bottom:10px;}
+/* Four tiles land 3-across on a phone, leaving the fourth orphaned on a
+   row of its own. Two-by-two divides evenly. Only for sets of four --
+   the admin dashboard's five are better off as they are. */
+@media (max-width:480px){
+  .stat-grid-4{grid-template-columns:repeat(2,1fr);}
+}
+.stat-note{
+  font-size:11px;color:var(--text-faint);margin-top:3px;line-height:1.3;
+}
 .stat-tile{
   background:var(--plate);border:1px solid var(--line);border-radius:var(--radius);
   padding:10px 12px;box-shadow:var(--plate-shadow);
@@ -1030,4 +1054,78 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
 /* Motion is decoration here, never information -- honour the OS setting. */
 @media (prefers-reduced-motion: reduce){
   .cv-screw,.belt::before,.board-col-head::after{animation:none;}
+}
+
+/* ---------- Error log (engineering / purchasing) ---------- */
+.err-card{
+  background:var(--plate);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px;margin-bottom:8px;box-shadow:var(--plate-shadow);
+  /* The department's colour down the edge, so a scan of the list reads
+     as "who" before you read a word of it. */
+  border-left:3px solid var(--line);
+}
+.err-card.corrected{opacity:.62;}
+.err-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;}
+.err-dept{
+  font-family:var(--font-display);font-size:11px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.06em;color:#14181c;padding:3px 8px;border-radius:999px;white-space:nowrap;
+}
+.err-cat{font-family:var(--font-display);font-size:14px;font-weight:700;margin-bottom:4px;}
+.err-cost{
+  font-family:var(--font-display);font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--accent);margin-top:6px;
+}
+.err-fix{
+  font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.45;
+  border-left:2px solid var(--steel-600);padding-left:8px;
+}
+.err-check{
+  display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-dim);
+  padding:8px 2px;cursor:pointer;
+}
+.err-check input{width:18px;height:18px;flex:none;}
+
+/* A bar per row, sized against the largest, so the shape of the data
+   reads without pulling in a chart library for four lists.
+
+   One line per row: label, bar, count. Stacking the label above the
+   track cost two lines to use a sliver of the width and left a wide
+   empty gap between the label and its number -- the bar goes there. */
+/* One grid per chart, three columns: label, bar, count. The label column
+   is max-content, so it is exactly as wide as the longest label in THAT
+   chart -- a fixed percentage left a dead gap between a short label like
+   "Testing" and the start of its bar. Every bar still begins at the same
+   x, which is the whole point: bars you cannot line up cannot be
+   compared. */
+.err-bars{
+  display:grid;grid-template-columns:minmax(0,max-content) minmax(80px,1fr) auto;
+  column-gap:12px;row-gap:8px;align-items:center;margin-bottom:4px;
+}
+.err-bar-label{min-width:0;font-size:13px;line-height:1.25;}
+.err-bar-sub{display:block;font-size:11px;color:var(--text-faint);}
+.err-bar-track{height:8px;border-radius:4px;background:var(--steel-800);overflow:hidden;}
+.err-bar-fill{height:100%;border-radius:4px;}
+.err-bar-n{
+  min-width:1.4em;text-align:right;
+  font-family:var(--font-display);font-variant-numeric:tabular-nums;font-size:14px;
+}
+@media (max-width:480px){
+  /* A long category name would otherwise take the whole row on a phone
+     and leave the bar a stub, so the column is capped and truncates. */
+  .err-bars{grid-template-columns:minmax(0,42%) minmax(48px,1fr) auto;column-gap:9px;}
+  .err-bar-label{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .err-bar-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+}
+
+/* Counts baked into the department filter chips -- what "by department"
+   used to need a whole chart for. */
+.chip-dot{
+  display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;
+  vertical-align:baseline;
+}
+.chip-n{
+  margin-left:6px;font-variant-numeric:tabular-nums;opacity:.7;font-weight:800;
+}
+.err-breakdown{
+  border-left:2px solid var(--line);padding-left:10px;margin:2px 0 4px;
 }

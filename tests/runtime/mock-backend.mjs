@@ -1,6 +1,6 @@
 // Mock Supabase: PostgREST + Storage + GoTrue + Gemini.
 export const DB = {
-  jobs: [], job_checklist: [], blockers: [], notes: [],
+  jobs: [], job_checklist: [], blockers: [], notes: [], job_errors: [],
   activity_log: [], profiles: [{id:'u-lead', full_name:'Test Lead', role:'lead', active:true}],
   blueprints: [], blueprint_components: [], app_data: []
 };

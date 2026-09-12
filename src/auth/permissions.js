@@ -85,3 +85,14 @@ export function canAssignJobs(){ return isLeadOrAdmin(); }
 export function canManageBlockers(){ return isLeadOrAdmin(); }
 export function canApproveBlueprints(){ return isLeadOrAdmin(); }
 export function canManageUsers(){ return isAdmin(); }
+
+/**
+ * Logging an error is deliberately open to everyone signed in -- an error
+ * log the floor cannot write to is an empty one, and the person who hit
+ * the problem is the one who knows what happened. Closing one out is a
+ * lead's call, and deleting one an admin's, so a record cannot be quietly
+ * walked back by whoever it reflects on. Mirrors the RLS on job_errors.
+ */
+export function canLogErrors(){ return isSignedInRole(); }
+export function canCloseErrors(){ return isLeadOrAdmin(); }
+export function canDeleteErrors(){ return isAdmin(); }

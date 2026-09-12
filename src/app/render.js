@@ -4,6 +4,7 @@
 /* ================= RENDER ROUTER ================= */
 import { renderActivity } from '../activity/index.js';
 import { renderBlockers } from '../blockers/index.js';
+import { renderErrors } from '../errors/index.js';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabaseReady } from '../db/config.js';
 import { loadAll } from '../db/repository.js';
 import { renderBoard } from '../jobs/board.js';
@@ -79,6 +80,7 @@ export function render(){
   if(state.tab==='dashboard') renderDashboard();
   else if(state.tab==='board') renderBoard();
   else if(state.tab==='blockers') renderBlockers();
+  else if(state.tab==='errors') renderErrors();
   else if(state.tab==='notes') renderNotes();
   else if(state.tab==='assistant') renderAssistantLazy();
   else if(state.tab==='activity') renderActivity();
