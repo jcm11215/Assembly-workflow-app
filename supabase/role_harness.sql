@@ -11,14 +11,21 @@
 
 do $$
 declare
-  admin_id     uuid := gen_random_uuid();
-  lead_id      uuid := gen_random_uuid();
-  assembler_id uuid := gen_random_uuid();
-  other_id     uuid := gen_random_uuid();   -- second assembler, not assigned to test_job
-  test_job_id  uuid;
-  other_job_id uuid;
-  n            int;
-  step0_items  int := 5;   -- PROCEDURE[0].items.length, must match triggers.sql
+  admin_id       uuid := gen_random_uuid();
+  lead_id        uuid := gen_random_uuid();
+  assembler_id   uuid := gen_random_uuid();
+  other_id       uuid := gen_random_uuid();   -- second assembler, not assigned to test_job
+  assembler_a_id uuid := gen_random_uuid();   -- experienced tier
+  assembler_b_id uuid := gen_random_uuid();   -- trainee tier
+  test_job_id    uuid;
+  other_job_id   uuid;
+  job_a_id       uuid;   -- assigned to assembler A, walked ready -> complete
+  job_b_id       uuid;   -- assigned to assembler B, walked ready -> testing, then blocked at sign-off
+  n              int;
+  step0_items    int := 5;   -- PROCEDURE[0].items.length, must match triggers.sql
+  step_idx       smallint;
+  item_idx       int;
+  next_stage     job_stage;
 begin
   raise notice '--- setting up fixtures as postgres (bypasses RLS) ---';
   set local role postgres;
@@ -27,7 +34,9 @@ begin
     (admin_id, 'Harness Admin', 'admin'),
     (lead_id, 'Harness Lead', 'lead'),
     (assembler_id, 'Harness Assembler', 'assembler'),
-    (other_id, 'Harness Other Assembler', 'assembler')
+    (other_id, 'Harness Other Assembler', 'assembler'),
+    (assembler_a_id, 'Harness Assembler A', 'assembler_a'),
+    (assembler_b_id, 'Harness Assembler B', 'assembler_b')
   on conflict (id) do update set role = excluded.role;
 
   insert into jobs (job_number, customer, stage, assigned_to)
@@ -37,6 +46,29 @@ begin
   insert into jobs (job_number, customer, stage, assigned_to)
   values ('HARNESS-2', 'Test Co', 'ready', other_id)
   returning id into other_job_id;
+
+  insert into jobs (job_number, customer, stage, assigned_to)
+  values ('HARNESS-3', 'Test Co', 'ready', assembler_a_id)
+  returning id into job_a_id;
+
+  insert into jobs (job_number, customer, stage, assigned_to)
+  values ('HARNESS-4', 'Test Co', 'ready', assembler_b_id)
+  returning id into job_b_id;
+
+  -- Pre-clear every checklist gate (steps 0-6) on both tier-test jobs, so
+  -- the walk-throughs below exercise the sign-off gate itself rather than
+  -- re-proving the checklist gate that the legacy ASSEMBLER block above
+  -- already covers.
+  foreach step_idx in array array[0,1,2,3,4,5,6]::smallint[] loop
+    for item_idx in 0 .. step_item_count(step_idx) - 1 loop
+      insert into job_checklist (job_id, step_index, item_index, done)
+      values (job_a_id, step_idx, item_idx, true)
+      on conflict (job_id, step_index, item_index) do update set done = true;
+      insert into job_checklist (job_id, step_index, item_index, done)
+      values (job_b_id, step_idx, item_idx, true)
+      on conflict (job_id, step_index, item_index) do update set done = true;
+    end loop;
+  end loop;
 
   -- ================== ASSEMBLER ==================
   raise notice '--- as ASSEMBLER (assigned to HARNESS-1) ---';
@@ -100,6 +132,85 @@ begin
     raise notice 'PASS: assembler cannot change blocker status';
   end;
 
+  -- ================== ASSEMBLER A (experienced) ==================
+  -- Checklist gates are already pre-cleared on HARNESS-3 (job_a_id), so
+  -- this walk exercises the sign-off gate (can_sign_off), not the
+  -- checklist gate -- that's covered above for the legacy assembler role.
+  raise notice '--- as ASSEMBLER A (experienced, assigned to HARNESS-3) ---';
+  perform set_config('request.jwt.claims', json_build_object('sub', assembler_a_id)::text, true);
+
+  update jobs set percent_complete = 35 where id = job_a_id;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL: assembler_a could not update percent_complete on own assigned job'; end if;
+  raise notice 'PASS: assembler_a updates percent_complete on assigned job';
+
+  foreach next_stage in array array['layout','bearings','drive','final','testing','qc','complete']::job_stage[] loop
+    update jobs set stage = next_stage where id = job_a_id;
+    get diagnostics n = row_count;
+    if n <> 1 then
+      raise exception 'FAIL: assembler_a (experienced) could not advance HARNESS-3 into %', next_stage;
+    end if;
+  end loop;
+  raise notice 'PASS: assembler_a (experienced) walked HARNESS-3 all the way through qc and complete';
+
+  -- ================== ASSEMBLER B (trainee) ==================
+  raise notice '--- as ASSEMBLER B (trainee, assigned to HARNESS-4) ---';
+  perform set_config('request.jwt.claims', json_build_object('sub', assembler_b_id)::text, true);
+
+  -- Same day-to-day rights as an experienced assembler: progress, checklist,
+  -- notes, blockers -- the tier only restricts sign-off, nothing else.
+  update jobs set percent_complete = 35 where id = job_b_id;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL: assembler_b (trainee) could not update percent_complete on own assigned job'; end if;
+  raise notice 'PASS: assembler_b (trainee) updates percent_complete on assigned job';
+
+  update job_checklist set done = false where job_id = job_b_id and step_index = 0 and item_index = 0;
+  update job_checklist set done = true  where job_id = job_b_id and step_index = 0 and item_index = 0;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL: assembler_b (trainee) could not toggle a checklist item on own assigned job'; end if;
+  raise notice 'PASS: assembler_b (trainee) completes a checklist item on assigned job';
+
+  insert into notes (job_id, author, body) values (job_b_id, assembler_b_id, 'harness note by assembler B');
+  raise notice 'PASS: assembler_b (trainee) can add a note';
+
+  insert into blockers (job_id, issue) values (job_b_id, 'harness blocker by assembler B');
+  raise notice 'PASS: assembler_b (trainee) can report a blocker';
+
+  -- Full stage walk up to (but not into) a sign-off stage: same as an
+  -- experienced assembler, checklist gates already pre-cleared.
+  foreach next_stage in array array['layout','bearings','drive','final','testing']::job_stage[] loop
+    update jobs set stage = next_stage where id = job_b_id;
+    get diagnostics n = row_count;
+    if n <> 1 then
+      raise exception 'FAIL: assembler_b (trainee) could not advance HARNESS-4 into % (should match assembler_a up to testing)', next_stage;
+    end if;
+  end loop;
+  raise notice 'PASS: assembler_b (trainee) walked HARNESS-4 through every stage up to testing, same as an experienced assembler';
+
+  begin
+    update jobs set stage = 'qc' where id = job_b_id;
+    raise exception 'FAIL: assembler_b (trainee) was able to sign HARNESS-4 into qc';
+  exception when insufficient_privilege then
+    raise notice 'PASS: assembler_b (trainee) blocked from testing -> qc: %', sqlerrm;
+  end;
+
+  -- A trainee can also be handed a job that's already past qc (e.g.
+  -- reassigned by a lead) -- confirm qc -> complete is blocked too, not
+  -- just the testing -> qc hop.
+  raise notice '--- lead advances HARNESS-4 into qc so the qc -> complete gate can be tested ---';
+  perform set_config('request.jwt.claims', json_build_object('sub', lead_id)::text, true);
+  update jobs set stage = 'qc' where id = job_b_id;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL: lead could not advance HARNESS-4 into qc (test setup)'; end if;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', assembler_b_id)::text, true);
+  begin
+    update jobs set stage = 'complete' where id = job_b_id;
+    raise exception 'FAIL: assembler_b (trainee) was able to sign HARNESS-4 into complete';
+  exception when insufficient_privilege then
+    raise notice 'PASS: assembler_b (trainee) blocked from qc -> complete: %', sqlerrm;
+  end;
+
   -- ================== LEAD ==================
   raise notice '--- as LEAD ---';
   perform set_config('request.jwt.claims', json_build_object('sub', lead_id)::text, true);
@@ -159,8 +270,8 @@ begin
 
   raise notice '--- cleanup ---';
   reset role;
-  delete from jobs where job_number in ('HARNESS-1','HARNESS-2');
-  delete from profiles where id in (admin_id, lead_id, assembler_id, other_id);
+  delete from jobs where job_number in ('HARNESS-1','HARNESS-2','HARNESS-3','HARNESS-4');
+  delete from profiles where id in (admin_id, lead_id, assembler_id, other_id, assembler_a_id, assembler_b_id);
   delete from activity_log where action = 'harness test';
 
   raise notice '=== ROLE HARNESS: ALL CHECKS PASSED ===';

@@ -46,7 +46,7 @@ const loadAssistant     = () => import('../ai/assistant.js');
 const loadAssistantView = () => import('../ai/assistantView.js');
 const loadMigration     = () => import('../admin/migrationDashboard.js');
 const loadHealth        = () => import('../admin/healthDashboard.js');
-const loadTeam          = () => import('../admin/teamDashboard.js');
+const loadAdmin         = () => import('../admin/adminDashboard.js');
 
 /**
  * Calls `use(module)` once the chunk arrives. A failed fetch (dropped shop
@@ -153,8 +153,9 @@ export function initEventRouter(){
   if(action === 'open-migration'){ withModule(loadMigration, m=>m.openMigrationDashboard()); return; }
   if(action === 'open-health'){ withModule(loadHealth, m=>m.openHealthDashboard()); return; }
   if(action === 'health-refresh'){ withModule(loadHealth, m=>m.refreshHealthDashboard()); return; }
-  if(action === 'open-team'){ withModule(loadTeam, m=>m.openTeamDashboard()); return; }
-  if(action.startsWith('team-')){ withModule(loadTeam, m=>m.handleTeamAction(action, btn)); return; }
+  // The admin dashboard is a view, not a modal: close Settings behind it.
+  if(action === 'open-admin'){ closeModal(); state.tab = 'admin'; render(); return; }
+  if(action.startsWith('admin-')){ withModule(loadAdmin, m=>m.handleAdminAction(action, btn)); return; }
 
   // The login/signup screens own their own namespaces too.
   if(action.startsWith('login-') || action.startsWith('signup-')){ handleAuthScreenAction(action); return; }

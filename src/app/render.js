@@ -82,6 +82,7 @@ export function render(){
   else if(state.tab==='notes') renderNotes();
   else if(state.tab==='assistant') renderAssistantLazy();
   else if(state.tab==='activity') renderActivity();
+  else if(state.tab==='admin') renderAdminLazy();
   restoreUiState(ui);
 }
 
@@ -106,6 +107,24 @@ function renderAssistantLazy(){
     if(state.tab !== 'assistant') return;
     document.getElementById('content').innerHTML =
       `<div class="empty-state"><div class="big">&#9888;</div>Could not load the assistant.<br>Check the connection and tap the tab again.</div>`;
+  });
+}
+
+/** Same on-demand treatment as the assistant: admins are the rare case. */
+let adminView = null;
+
+function renderAdminLazy(){
+  if(adminView){ adminView.openAdmin(); return; }
+  document.getElementById('content').innerHTML =
+    `<div class="empty-state"><div class="big">&#8987;</div>Loading admin...</div>`;
+  import('../admin/adminDashboard.js').then(mod => {
+    adminView = mod;
+    if(state.tab === 'admin') mod.openAdmin();
+  }).catch(e => {
+    console.error('admin dashboard failed to load', e);
+    if(state.tab !== 'admin') return;
+    document.getElementById('content').innerHTML =
+      `<div class="empty-state"><div class="big">&#9888;</div>Could not load the admin dashboard.<br>Check the connection and try again.</div>`;
   });
 }
 

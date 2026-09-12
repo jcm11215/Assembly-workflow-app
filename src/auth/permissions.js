@@ -15,17 +15,66 @@
 import { AUTH_ENABLED } from './authService.js';
 import { getCachedProfile } from './profileService.js';
 
+/**
+ * Two tiers of assembler, because experience is the thing that decides
+ * who may sign work off:
+ *   assembler_a  experienced -- full assembly work, including sign-off
+ *   assembler_b  trainee     -- same work, no sign-off into QC/Complete
+ * 'assembler' is the pre-tier role, treated as experienced. 'lead' still
+ * exists for older rows; the owner is an admin, so nobody is assigned it.
+ */
+export const ASSEMBLER_ROLES = ['assembler', 'assembler_a', 'assembler_b'];
+
+/** Offered in the admin Team screen, in this order. */
+export const ASSIGNABLE_ROLES = ['assembler_b', 'assembler_a', 'admin'];
+
+const ROLE_META = {
+  admin: {
+    label: 'Admin',
+    tag: 'role-admin',
+    blurb: 'Runs the shop app: everything an experienced assembler can do, plus the team, the access code, editing and deleting any job, and the admin screens.'
+  },
+  lead: {
+    label: 'Lead',
+    tag: 'role-lead',
+    blurb: 'Assigns and edits any job, resolves blockers, approves blueprints.'
+  },
+  assembler_a: {
+    label: 'Assembler A',
+    tag: 'role-a',
+    blurb: 'Experienced. Works any job assigned to them, ticks off checklists, raises blockers, writes notes, and can sign a job through QC and Complete.'
+  },
+  assembler_b: {
+    label: 'Assembler B',
+    tag: 'role-b',
+    blurb: 'Trainee. Same day-to-day work as Assembler A, but cannot sign a job into QC or Complete -- an experienced assembler or the lead does that.'
+  },
+  assembler: {
+    label: 'Assembler (old)',
+    tag: 'role-a',
+    blurb: 'The single assembler role used before A/B tiers. Treated as Assembler A.'
+  }
+};
+
+export function roleLabel(role){ return (ROLE_META[role] || {}).label || role || 'No role'; }
+export function roleBlurb(role){ return (ROLE_META[role] || {}).blurb || ''; }
+export function roleTagClass(role){ return (ROLE_META[role] || {}).tag || 'role-b'; }
+
 export function currentRole(){
   if(!AUTH_ENABLED) return 'lead';   // legacy: unrestricted, same as today
   const p = getCachedProfile();
   return p ? p.role : null;          // null = signed in but no profile yet, or signed out
 }
 
-export function isAssembler(){ return currentRole() === 'assembler'; }
+export function isAssembler(){ return ASSEMBLER_ROLES.includes(currentRole()); }
+export function isTrainee(){ return currentRole() === 'assembler_b'; }
 export function isLead(){ return currentRole() === 'lead'; }
 export function isAdmin(){ return currentRole() === 'admin'; }
 export function isLeadOrAdmin(){ return isLead() || isAdmin(); }
 export function isSignedInRole(){ return !!currentRole(); }
+
+/** Moving a job into a sign-off stage (QC, Complete) -- trainees may not. */
+export function canSignOff(){ return !isTrainee(); }
 
 /** Any authenticated role may attempt a stage move -- per-job scoping
  *  (assigned_to) and the checklist gate are enforced elsewhere (jobs/
