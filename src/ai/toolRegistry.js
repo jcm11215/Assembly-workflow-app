@@ -18,7 +18,6 @@ import * as jobsRepo from '../db/jobsRepo.js';
 import * as blockersRepo from '../db/blockersRepo.js';
 import * as notesRepo from '../db/notesRepo.js';
 import * as checklistRepo from '../db/checklistRepo.js';
-import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { validateStageTransition, TRANSITION } from '../jobs/transitions.js';
 import { STAGES, stageLabel, PROCEDURE, checklistItemLabel } from '../jobs/procedure.js';
 import { PERMISSION } from './permissionAdapter.js';
@@ -297,46 +296,6 @@ export const TOOLS = {
     },
     preview({ blocker }){ return `Resolve blocker on ${blocker.jobNumber}: "${blocker.issueDescription}".`; },
     entity: (r, {blocker}) => ({ type:'blocker', id: blocker.id })
-  },
-
-  approve_blueprint: {
-    description: "Approve a job's pending blueprint extraction.",
-    params: { required:['jobNumber'], optional:['note'] },
-    permission: PERMISSION.LEAD_OR_ADMIN,
-    mutates: true,
-    async resolve(params){
-      const job = findJob(params.jobNumber);
-      if(!job) return fail(`No job matching "${params.jobNumber}".`);
-      if(!job.blueprintId) return fail(`${job.jobNumber} has no blueprint extraction to approve.`);
-      return ok({ job });
-    },
-    validate(){ return ok({}); },
-    async run({ job, params }){
-      const updated = await blueprintsRepo.approveVersion(job.blueprintId, params.note);
-      return { blueprint: updated };
-    },
-    preview({ job }){ return `Approve the blueprint extraction for ${job.jobNumber} (v${job.blueprintVersion||'?'}).`; },
-    entity: (r, {job}) => ({ type:'blueprint', id: job.blueprintId })
-  },
-
-  reject_blueprint: {
-    description: "Reject a job's pending blueprint extraction.",
-    params: { required:['jobNumber'], optional:['note'] },
-    permission: PERMISSION.LEAD_OR_ADMIN,
-    mutates: true,
-    async resolve(params){
-      const job = findJob(params.jobNumber);
-      if(!job) return fail(`No job matching "${params.jobNumber}".`);
-      if(!job.blueprintId) return fail(`${job.jobNumber} has no blueprint extraction to reject.`);
-      return ok({ job });
-    },
-    validate(){ return ok({}); },
-    async run({ job, params }){
-      const updated = await blueprintsRepo.rejectVersion(job.blueprintId, params.note);
-      return { blueprint: updated };
-    },
-    preview({ job, params }){ return `Reject the blueprint extraction for ${job.jobNumber}${params.note?`: "${params.note}"`:''}.`; },
-    entity: (r, {job}) => ({ type:'blueprint', id: job.blueprintId })
   },
 
   generate_pull_list: {

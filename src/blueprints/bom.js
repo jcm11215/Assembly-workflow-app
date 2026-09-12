@@ -82,8 +82,3 @@ export function bomListHtml(job){
   ${editing ? `<div class="bp-hint" style="margin-bottom:8px;">The AI scanner doesn't always get it right -- add, remove, or reorder anything here.</div>` : ''}
   ${sections}`;
 }
-
-// A proportional schematic built from the dimensions read off the drawing --
-// NOT a CAD model. It is accurate to the numbers extracted (diameter,
-// length, incline, hanger count) and nothing more, which is enough to
-// orient someone on the floor without pretending to be engineering data.

@@ -121,7 +121,7 @@ parsed = await parseUserIntent('what is the weather');
 t('unsupported request reported, not forced into an action', parsed.unsupported.length===1);
 
 console.log('\n=== toolRegistry: every declared action has resolve/validate/run/preview ===');
-t('all 13 actions registered', ACTION_NAMES.length===13);
+t('all 11 actions registered', ACTION_NAMES.length===11);
 ACTION_NAMES.forEach(name=>{
   const tool = getTool(name);
   if(!(typeof tool.resolve==='function' && typeof tool.validate==='function' && typeof tool.run==='function' && typeof tool.preview==='function')){

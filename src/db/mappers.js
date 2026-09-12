@@ -38,10 +38,8 @@ export function rowToJob(row, checklistRows){
     // Blueprint-derived fields, hydrated from the blueprints table.
     spec: row._spec ?? null,
     validation: row._validation ?? null,
-    geometry: row._geometry ?? null,
     billOfMaterials: row._bom ?? [],
     hasBlueprintImage: !!row._hasImage,
-    blueprintThumbnail: row._thumbnail ?? null,
     blueprintThumbnail: row._thumbnail ?? null,
     blueprintExtractedAt: row._extractedAt || null,
     blueprintId: row._blueprintId || null,

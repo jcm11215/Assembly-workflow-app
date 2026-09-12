@@ -1,5 +1,13 @@
+// ES module imports are read-only to the importer, so a module that
+// exports mutable state has to export a setter for it too -- reassigning
+// the imported binding directly throws `TypeError: Assignment to constant
+// variable` at runtime, which module parsing and boot-time checks never
+// catch (Phase 11 found exactly that bug in the blueprint file picker).
+// This checks every such setter still applies its value.
+//
+// The geometry/model-mode setters this file also used to cover are gone
+// with the 3D view itself -- src/models/geometry.js no longer exists.
 import './stub.mjs';
-const geo = await import('../src/models/geometry.js');
 const modal = await import('../src/ui/components/modal.js');
 const store = await import('../src/state/store.js');
 
@@ -9,23 +17,7 @@ const t=(n,fn)=>{
   catch(e){ fail++; console.log('  FAIL '+n+' -> '+e.constructor.name+': '+e.message); }
 };
 
-console.log('=== every previously-broken mutable binding, via its setter ===');
-t('setModelMode(assembly)', ()=>{
-  const r = geo.setModelMode(geo.MODEL_MODES.assembly);
-  if(r !== geo.MODEL_MODES.assembly) throw new Error('value not applied');
-});
-t('setModelMode(engineering)', ()=>{
-  const r = geo.setModelMode(geo.MODEL_MODES.engineering);
-  if(r !== geo.MODEL_MODES.engineering) throw new Error('value not applied');
-});
-t('toggleShowDimensions returns new value', ()=>{
-  const a = geo.toggleShowDimensions();
-  const b = geo.toggleShowDimensions();
-  if(a === b) throw new Error('toggle did not flip');
-});
-t('setShowDimensions(true)', ()=>{
-  if(geo.setShowDimensions(true) !== true) throw new Error('not applied');
-});
+console.log('=== every mutable binding, via its setter ===');
 t('setModalRefresh(fn)', ()=>{
   const f = ()=>'x';
   if(modal.setModalRefresh(f) !== f) throw new Error('not applied');
@@ -40,6 +32,10 @@ t('setSelectedBlueprintFile (Phase 11 fix, still working)', ()=>{
   const f={name:'x.jpg'};
   store.setSelectedBlueprintFile(f);
   if(store.getSelectedBlueprintFile() !== f) throw new Error('not applied');
+});
+t('setSelectedBlueprintFile(null) clears', ()=>{
+  store.setSelectedBlueprintFile(null);
+  if(store.getSelectedBlueprintFile() !== null) throw new Error('not cleared');
 });
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

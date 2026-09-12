@@ -1,5 +1,5 @@
-/** Extraction prompts. AI reads values only; it never produces geometry
- *  and, as of Phase 8, never assigns a component's assembly stage --
+/** Extraction prompts. The AI reads values off the drawing only; it
+ *  never invents one, and never assigns a component's assembly stage --
  *  see installation_location below and stageForLocation() in spec.js. */
 
 /**
@@ -129,6 +129,6 @@ For a SCREW conveyor, "belt"/"head"/"idlers" will be all not_found -- that is ex
 }
 
 /* ---------------- Engineering validation ----------------
-   Runs before any geometry is built. Never silently corrects -- it
-   reports, and the geometry generator then refuses to invent anything
-   that failed. */
+   Never silently corrects what the AI read -- it reports, so a value
+   that failed a check is shown as failed rather than quietly replaced
+   with a plausible-looking one. */

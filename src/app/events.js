@@ -18,7 +18,7 @@ import { openJobForm } from '../jobs/jobForm.js';
 import { toggleStageChecklistItem } from '../jobs/stageGate.js';
 import { openNoteForm, updateNotesList } from '../notes/index.js';
 import { setSelectedBlueprintFile, state } from '../state/store.js';
-import { closeModal, currentJobId, modalRefresh, openModal, refreshOpenModal, setModalRefresh } from '../ui/components/modal.js';
+import { closeModal, currentJobId, modalRefresh, refreshOpenModal, setModalRefresh } from '../ui/components/modal.js';
 import { acceptConfirm, confirmAction, dismissConfirm } from '../ui/components/confirm.js';
 import { copyToClipboard, showToast } from '../ui/components/toast.js';
 import { openSettingsModal } from '../ui/settings.js';
@@ -32,7 +32,6 @@ import { stopActivityRealtime } from '../realtime/activityRealtime.js';
 import { disconnectAll } from '../realtime/realtimeClient.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { BUCKET_TO_STAGE, bomBucketFor } from '../models/stageMeta.js';
-import { openVersionHistory, toggleCompareSelection, compareModalHtml } from '../blueprints/ui.js';
 import { showGuideTip, toggleTip } from '../tips/partTips.js';
 
 
@@ -222,42 +221,10 @@ export function initEventRouter(){
         refreshOpenModal();   // optimistic -- don't wait on the round trip to feel responsive
         break;
       }
-      case 'bp-approve':
-        blueprintsRepo.approveVersion(id).then((row)=>{
-          logActivity('Blueprint approved', { jobNumber: state.jobs.find(j=>j.blueprintId===id)?.jobNumber || '', version: row && row.version }, {type:'blueprint', id});
-          showToast('Blueprint version approved');
-          reloadFromStorage(false);
-        }).catch(e=>showToast(`Could not approve: ${e.message}`, 5000));
-        break;
-      case 'bp-reject':
-        blueprintsRepo.rejectVersion(id).then((row)=>{
-          logActivity('Blueprint rejected', { jobNumber: state.jobs.find(j=>j.blueprintId===id)?.jobNumber || '', version: row && row.version }, {type:'blueprint', id});
-          showToast('Blueprint version rejected');
-          reloadFromStorage(false);
-        }).catch(e=>showToast(`Could not reject: ${e.message}`, 5000));
-        break;
-      case 'bp-show-versions':
-        openVersionHistory(id);
-        break;
       case 'bp-map-page':
         setComponentMapPage(id, Number(btn.getAttribute('data-index')));
         refreshOpenModal();
         break;
-      case 'bp-toggle-compare':
-        toggleCompareSelection(id);
-        refreshOpenModal();
-        break;
-      case 'bp-compare': {
-        // compareSelection lives in ui.js; read it back via the two
-        // checked boxes currently rendered rather than re-importing state.
-        const checked = [...document.querySelectorAll('[data-action="bp-toggle-compare"]:checked')]
-          .map(el => el.getAttribute('data-id'));
-        if(checked.length !== 2){ showToast('Select exactly two versions to compare'); break; }
-        blueprintsRepo.compareVersions(checked[0], checked[1]).then(diff=>{
-          openModal(compareModalHtml(diff), ()=>compareModalHtml(diff));
-        }).catch(e=>showToast(`Could not compare: ${e.message}`, 5000));
-        break;
-      }
       case 'refresh-activity':
         loadActivity();
         showToast('Activity refreshed');

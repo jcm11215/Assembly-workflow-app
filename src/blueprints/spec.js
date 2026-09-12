@@ -213,9 +213,9 @@ export function normalizeComponents(parsed){
 /* ================================================================
    ENGINEERING SPECIFICATION LAYER
    The AI's only job is to read the drawing and fill this structure in.
-   It never produces geometry. Everything below -- normalization,
-   validation, and the 3D build -- is deterministic application code
-   working from these numbers.
+   It never invents a value. Everything below -- normalization and
+   validation -- is deterministic application code working from the
+   numbers it read.
    ================================================================ */
 
 // Every dimension carries provenance so nothing is silently invented.

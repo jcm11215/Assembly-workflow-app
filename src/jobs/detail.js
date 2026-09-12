@@ -1,9 +1,9 @@
-/** Job detail view: info, checklist, blueprint, 3D, blockers. */
+/** Job detail view: info, checklist, blueprint, component map, blockers. */
 
 
 import { bomListHtml } from '../blueprints/bom.js';
 import { blueprintImageCache, ensureBlueprintImageLoaded } from '../blueprints/images.js';
-import { blueprintImageSectionHtml, componentMapHtml, engineeringPanelHtml, reviewPanelHtml } from '../blueprints/ui.js';
+import { blueprintImageSectionHtml, componentMapHtml } from '../blueprints/ui.js';
 import { PROCEDURE, STAGES, STAGE_PROCEDURE, stageChecklistProgress, stageLabel } from './procedure.js';
 import { dueStatus } from './selectors.js';
 import { state } from '../state/store.js';
@@ -90,8 +90,6 @@ export function jobDetailModalHtml(job){
     <div class="section-title">Blueprint &amp; Hardware</div>
     ${blueprintImageSectionHtml(job)}
     ${componentMapHtml(job)}
-    ${reviewPanelHtml(job)}
-    ${engineeringPanelHtml(job)}
     ${bomListHtml(job) || `<div class="bp-hint" style="margin-bottom:10px;">No blueprint scanned yet for this job.</div>`}
     <div class="fab-row">
       <button class="btn btn-outline btn-block" data-action="open-blueprint" data-id="${job.id}">&#128208; ${job.billOfMaterials && job.billOfMaterials.length ? 'Re-Scan Blueprint' : 'Scan Blueprint'}</button>
