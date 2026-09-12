@@ -10,8 +10,8 @@ globalThis.fetch = async(url,opt={})=>{
   return ok([]);
 };
 
-const { initConnectionMonitor, getConnectionSummary, getConnectionHistory } = await import('./src/monitoring/connectionMonitor.mjs');
-const rc = await import('./src/realtime/realtimeClient.mjs');
+const { initConnectionMonitor, getConnectionSummary, getConnectionHistory } = await import('../src/monitoring/connectionMonitor.js');
+const rc = await import('../src/realtime/realtimeClient.js');
 
 let pass=0, fail=0;
 const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};

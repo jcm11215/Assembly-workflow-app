@@ -19,8 +19,6 @@ const ACTION_LABELS = {
   create_note: 'Note added',
   create_blocker: 'Blocker reported',
   resolve_blocker: 'Blocker resolved',
-  approve_blueprint: 'Blueprint approved',
-  reject_blueprint: 'Blueprint rejected',
   generate_pull_list: 'Pull list generated',
   generate_shift_report: 'Shift report generated'
 };

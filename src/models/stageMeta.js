@@ -1,10 +1,11 @@
-/** Subassembly colour/label metadata shared by BOM and 3D views. */
+/** Subassembly colour/label metadata shared by the BOM list and the
+ *  component map's pins. */
 
-// The 3D model still keys off the original 6 stages (trough/screw/bearings/
-// drive/tail/other) -- unchanged. Trough GEOMETRY (dimensions, the
-// physical shape) is still needed for the 3D build even though trough
-// hardware is no longer listed as a BOM component -- those are different
-// things (see the components-list exclusion in spec.js/prompt.js).
+// Keyed by the original 6 stages (trough/screw/bearings/drive/tail/other).
+// 'trough' stays in this map even though trough hardware is no longer
+// listed as a BOM component, so a component extracted before that
+// exclusion existed still resolves to a colour instead of crashing --
+// see bomBucketFor() below, which folds it into 'other'.
 export const STAGE_META = {
   trough:   { label:'Trough',        color:'#5aa3d8' },
   screw:    { label:'Screw & Shafts',color:'#f5b400' },

@@ -17,7 +17,7 @@ class FlakeyWS{
 }
 globalThis.WebSocket=FlakeyWS;
 
-const rc = await import('./src/realtime/realtimeClient.mjs');
+const rc = await import('../src/realtime/realtimeClient.js');
 
 let pass=0,fail=0; const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};
 

@@ -1,5 +1,5 @@
-import './dom.mjs';
-import { DB, CALLS } from './backend.mjs';
+import './dom-harness.mjs';
+import { DB, CALLS } from './mock-backend.mjs';
 
 const errors = [];
 const origError = console.error;
@@ -36,15 +36,15 @@ function step(name, fn){
 // ---- boot ----
 let app;
 await step('boot app.js', async ()=>{
-  app = await import('./src/app/app.mjs');
+  app = await import('../../src/app/app.js');
   await new Promise(r=>setTimeout(r,120));
 });
 
-const { state } = await import('./src/state/store.mjs');
-const render = (await import('./src/app/render.mjs'));
+const { state } = await import('../../src/state/store.js');
+const render = (await import('../../src/app/render.js'));
 
 await step('loadAll populated state', async ()=>{
-  const { loadAll } = await import('./src/db/repository.mjs');
+  const { loadAll } = await import('../../src/db/repository.js');
   await loadAll();
   if(!state.jobs.length) throw new Error('no jobs loaded from mock DB');
 });
@@ -60,52 +60,49 @@ for(const tab of ['dashboard','board','blockers','notes','assistant','activity']
 
 // ---- exercise every module's exported render/open functions ----
 const probes = [
-  ['jobs/detail: openJobDetail', async()=>{ const m=await import('./src/jobs/detail.mjs'); m.openJobDetail('j1'); }],
-  ['jobs/jobForm: openJobForm(new)', async()=>{ const m=await import('./src/jobs/jobForm.mjs'); m.openJobForm(null); }],
-  ['jobs/jobForm: openJobForm(edit)', async()=>{ const m=await import('./src/jobs/jobForm.mjs'); m.openJobForm('j1'); }],
-  ['jobs/stageGate: openStageGateModal', async()=>{ const m=await import('./src/jobs/stageGate.mjs'); m.openStageGateModal('j1'); }],
-  ['jobs/actions: openMover', async()=>{ const m=await import('./src/jobs/actions.mjs'); m.openMover('j1'); }],
-  ['blockers: openBlockerForm', async()=>{ const m=await import('./src/blockers/index.mjs'); m.openBlockerForm('SC-4472'); }],
-  ['notes: openNoteForm', async()=>{ const m=await import('./src/notes/index.mjs'); m.openNoteForm('SC-4472'); }],
-  ['ui/settings: openSettingsModal', async()=>{ const m=await import('./src/ui/settings.mjs'); m.openSettingsModal(); }],
-  ['blueprints/ui: openBlueprintModal', async()=>{ const m=await import('./src/blueprints/ui.mjs'); m.openBlueprintModal('j1'); }],
-  ['blueprints/ui: openNewJobBlueprintModal', async()=>{ const m=await import('./src/blueprints/ui.mjs'); m.openNewJobBlueprintModal(); }],
-  ['blueprints/ui: reviewPanelHtml', async()=>{ const m=await import('./src/blueprints/ui.mjs'); m.reviewPanelHtml(state.jobs[0]); }],
-  ['blueprints/ui: engineeringPanelHtml', async()=>{ const m=await import('./src/blueprints/ui.mjs'); m.engineeringPanelHtml(state.jobs[0]); }],
-  ['blueprints/ui: verificationReportHtml', async()=>{ const m=await import('./src/blueprints/ui.mjs'); m.verificationReportHtml(state.jobs[0]); }],
-  ['blueprints/ui: openVersionHistory', async()=>{ const m=await import('./src/blueprints/ui.mjs'); await m.openVersionHistory('j1'); }],
-  ['blueprints/bom: bomListHtml', async()=>{ const m=await import('./src/blueprints/bom.mjs'); m.bomListHtml(state.jobs[0]); }],
-  ['admin/migrationDashboard: open', async()=>{ const m=await import('./src/admin/migrationDashboard.mjs'); m.openMigrationDashboard(); }],
-  ['admin/healthDashboard: open', async()=>{ const m=await import('./src/admin/healthDashboard.mjs'); await m.openHealthDashboard(); }],
-  ['activity: loadActivity', async()=>{ const m=await import('./src/activity/index.mjs'); await m.loadActivity(); }],
+  ['jobs/detail: openJobDetail', async()=>{ const m=await import('../../src/jobs/detail.js'); m.openJobDetail('j1'); }],
+  ['jobs/jobForm: openJobForm(new)', async()=>{ const m=await import('../../src/jobs/jobForm.js'); m.openJobForm(null); }],
+  ['jobs/jobForm: openJobForm(edit)', async()=>{ const m=await import('../../src/jobs/jobForm.js'); m.openJobForm('j1'); }],
+  ['jobs/stageGate: openStageGateModal', async()=>{ const m=await import('../../src/jobs/stageGate.js'); m.openStageGateModal('j1'); }],
+  ['jobs/actions: openMover', async()=>{ const m=await import('../../src/jobs/actions.js'); m.openMover('j1'); }],
+  ['blockers: openBlockerForm', async()=>{ const m=await import('../../src/blockers/index.js'); m.openBlockerForm('SC-4472'); }],
+  ['notes: openNoteForm', async()=>{ const m=await import('../../src/notes/index.js'); m.openNoteForm('SC-4472'); }],
+  ['ui/settings: openSettingsModal', async()=>{ const m=await import('../../src/ui/settings.js'); m.openSettingsModal(); }],
+  ['blueprints/ui: openBlueprintModal', async()=>{ const m=await import('../../src/blueprints/ui.js'); m.openBlueprintModal('j1'); }],
+  ['blueprints/ui: openNewJobBlueprintModal', async()=>{ const m=await import('../../src/blueprints/ui.js'); m.openNewJobBlueprintModal(); }],
+  ['blueprints/calloutDiagram: calloutDiagramHtml', async()=>{ const m=await import('../../src/blueprints/calloutDiagram.js'); m.calloutDiagramHtml(state.jobs[0]); }],
+  ['blueprints/bom: bomListHtml', async()=>{ const m=await import('../../src/blueprints/bom.js'); m.bomListHtml(state.jobs[0]); }],
+  ['admin/migrationDashboard: open', async()=>{ const m=await import('../../src/admin/migrationDashboard.js'); m.openMigrationDashboard(); }],
+  ['admin/healthDashboard: open', async()=>{ const m=await import('../../src/admin/healthDashboard.js'); await m.openHealthDashboard(); }],
+  ['activity: loadActivity', async()=>{ const m=await import('../../src/activity/index.js'); await m.loadActivity(); }],
 ];
 for(const [name, fn] of probes) await step(name, fn);
 
 // ---- exercise mutations ----
 await step('mutation: advance stage (gated, should be blocked)', async()=>{
-  const m = await import('./src/jobs/actions.mjs');
+  const m = await import('../../src/jobs/actions.js');
   const before = state.jobs.find(j=>j.id==='j1').assemblyStatus;
   m.attemptAdvance('j1');
   await new Promise(r=>setTimeout(r,20));
 });
 await step('mutation: toggle checklist item', async()=>{
-  const m = await import('./src/jobs/stageGate.mjs');
+  const m = await import('../../src/jobs/stageGate.js');
   m.toggleStageChecklistItem('j1','0-0');
   await new Promise(r=>setTimeout(r,20));
 });
 await step('mutation: move stage backward (always allowed)', async()=>{
-  const m = await import('./src/jobs/actions.mjs');
+  const m = await import('../../src/jobs/actions.js');
   m.moveJobToStage('j2','ready');
   await new Promise(r=>setTimeout(r,20));
 });
 await step('mutation: persistJobs', async()=>{
-  const m = await import('./src/db/repository.mjs');
+  const m = await import('../../src/db/repository.js');
   await m.persistJobs();
 });
 
 // ---- AI action layer ----
 await step('AI: proposeActions (no execution)', async()=>{
-  const m = await import('./src/ai/workflowExecutor.mjs');
+  const m = await import('../../src/ai/workflowExecutor.js');
   await m.proposeActions('move SC-4472 to layout');
 });
 

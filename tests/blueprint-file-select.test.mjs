@@ -8,9 +8,7 @@
 // routing every read/write through the setSelectedBlueprintFile() /
 // getSelectedBlueprintFile() functions that already existed for exactly
 // this purpose but weren't being used by later phases' code.
-//
-// Run via the same .js -> .mjs conversion used elsewhere in tests/.
-const store = require('../src/state/store.js');   // adapt path/extension to your test runner
+const store = await import('../src/state/store.js');
 
 let pass = 0, fail = 0;
 const t = (n, c) => { c ? pass++ : (fail++, console.log('  FAIL ' + n)); };

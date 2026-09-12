@@ -4,6 +4,7 @@ globalThis.localStorage={_d:{},getItem(k){return this._d[k]??null},setItem(k,v){
 globalThis.AbortController=class{constructor(){this.signal={}}abort(){}};
 
 let BLUEPRINTS=[];
+let COMPONENTS=[];
 globalThis.fetch=async(url,opt={})=>{
   const u=String(url); const m=opt.method||'GET';
   const ok=d=>({ok:true,status:200,text:async()=>JSON.stringify(d),json:async()=>d});
@@ -34,52 +35,69 @@ globalThis.fetch=async(url,opt={})=>{
       return ok([row]);
     }
   }
-  if(u.includes('/blueprint_components')) return ok([]);
+  if(u.includes('/blueprint_components')){
+    if(m==='POST'){
+      const rows=Array.isArray(body)?body:[body];
+      rows.forEach(r=>{ r.id=r.id||'c'+(COMPONENTS.length+1); COMPONENTS.push(r); });
+      return ok(rows);
+    }
+    const bpMatch=u.match(/blueprint_id=eq\.([\w-]+)/);
+    return ok(bpMatch ? COMPONENTS.filter(c=>c.blueprint_id===bpMatch[1]) : COMPONENTS);
+  }
   if(u.includes('/storage/v1/object')) return ok({});
   return ok([]);
 };
 
-const repo = await import('./src/db/blueprintsRepo.mjs');
+const repo = await import('../src/db/blueprintsRepo.js');
 
 let pass=0,fail=0; const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};
 
-console.log('=== version numbering (Req 8) ===');
-const v1 = await repo.saveExtraction('job1', {spec:{conveyorType:'screw'}, components:[], status:'review_required', confidence:0.6});
+console.log('=== version numbering: every scan is a new version, never an overwrite ===');
+const v1 = await repo.saveExtraction('job1', {components:[]});
 t('first scan is version 1', v1.version===1);
-const v2 = await repo.saveExtraction('job1', {spec:{conveyorType:'screw'}, components:[], status:'review_required', confidence:0.8});
+const v2 = await repo.saveExtraction('job1', {components:[]});
 t('second scan is version 2', v2.version===2);
-const v3 = await repo.saveExtraction('job1', {spec:{conveyorType:'screw'}, components:[], status:'approved', confidence:0.95, autoApproved:true});
+const v3 = await repo.saveExtraction('job1', {components:[]});
 t('third scan is version 3', v3.version===3);
-t('auto-approval leaves reviewed_by null (distinguishable from human approval)',
-  BLUEPRINTS.find(b=>b.id===v3.id).reviewed_by===null);
-t('auto-approval still stamps reviewed_at', !!BLUEPRINTS.find(b=>b.id===v3.id).reviewed_at);
+t('the earlier versions are still there, not overwritten', BLUEPRINTS.filter(b=>b.job_id==='job1').length===3);
 
-console.log('\n=== getForJob prefers latest APPROVED over latest overall ===');
-const v4 = await repo.saveExtraction('job1', {spec:{conveyorType:'screw'}, components:[], status:'review_required', confidence:0.6});
-t('version 4 exists and is newer', v4.version===4);
+console.log('\n=== getForJob serves the latest scan ===');
+// There is no approval step to defer to anymore -- a re-scan is what the
+// floor sees as soon as it finishes. (This used to prefer the latest
+// APPROVED version; that workflow was removed from the scan pipeline.)
 const active = await repo.getForJob('job1');
-t('getForJob returns v3 (latest approved), not v4 (latest overall)', active.version===3);
+t('getForJob returns the newest version', active.version===3);
+const v4 = await repo.saveExtraction('job1', {components:[]});
+t('a newer scan becomes the active one immediately', (await repo.getForJob('job1')).version===4 && v4.version===4);
 
-console.log('\n=== approveVersion is a human decision, distinct from auto-approval ===');
-const approvedV4 = await repo.approveVersion(v4.id, 'Looked correct after review');
-t('human approval clears auto_approved flag (the real distinguishing signal -- reviewed_by is null here only because currentUserId() has no provider wired in this unauthenticated test, matching Phase 5 legacy-mode default)', approvedV4.auto_approved===false);
-const nowActive = await repo.getForJob('job1');
-t('getForJob now returns v4 (newest approved after human review)', nowActive.version===4);
+console.log('\n=== saveExtraction records only what survives a scan ===');
+// spec/validation/confidence/status are deliberately not persisted -- the
+// components list and the original file are the whole output of a scan.
+const savedRow = BLUEPRINTS.find(b=>b.id===v4.id);
+t('status is always the plain extracted state', savedRow.status==='extracted');
+t('no confidence is recorded', savedRow.confidence===undefined || savedRow.confidence===null);
+t('no spec blob is recorded', savedRow.spec===undefined || savedRow.spec===null);
 
-console.log('\n=== version comparison (Req 8) ===');
+console.log('\n=== component positions round-trip (component map) ===');
+const withPins = await repo.saveExtraction('job2', {components:[
+  {item:'Drive', item_as_drawn:'SCREW CONV DRIVE, 3/4HP', stage:'drive', installation_location:'drive_end', source_page:1, position:{x:0.25, y:0.75}},
+  {item:'Reducer', stage:'drive', installation_location:'drive_end', source_page:1, position:null}
+]});
+const pinRows = COMPONENTS.filter(c=>c.blueprint_id===withPins.id);
+t('the drawing\'s own wording is persisted verbatim next to the category',
+  (await repo.listComponents(withPins.id)).some(c=>c.item==='Drive' && c.item_as_drawn==='SCREW CONV DRIVE, 3/4HP'));
+t('a pinned component stores its x/y', pinRows.some(c=>c.item==='Drive' && Number(c.position_x)===0.25 && Number(c.position_y)===0.75));
+t('an unpinned component stores nulls, not a guess', pinRows.some(c=>c.item==='Reducer' && c.position_x===null && c.position_y===null));
+
+console.log('\n=== version comparison ===');
 const specA = {overall:{overall_length:{status:'ok',normalized_in:480,confidence:0.9}}};
 const specB = {overall:{overall_length:{status:'ok',normalized_in:576,confidence:0.95}}};
-const compA = {version:1, spec:specA, components:[{item:'Bearing', installation_location:'hanger', specification:'2"', quantity:2}], status:'review_required', confidence:0.7};
-const compB = {version:2, spec:specB, components:[{item:'Bearing', installation_location:'hanger', specification:'2.5"', quantity:2},{item:'Coupling', installation_location:'screw', specification:'3"', quantity:4}], status:'approved', confidence:0.92};
+const compA = {version:1, spec:specA, components:[{item:'Bearing', installation_location:'hanger', specification:'2"', quantity:2}]};
+const compB = {version:2, spec:specB, components:[{item:'Bearing', installation_location:'hanger', specification:'2.5"', quantity:2},{item:'Coupling', installation_location:'screw', specification:'3"', quantity:4}]};
 const diff = repo.diffVersions(compA, compB);
 t('dimension change detected (length 480->576)', diff.dimensionChanges.some(d=>d.field==='overall.overall_length'&&d.from===480&&d.to===576));
 t('changed component detected (bearing spec 2"->2.5")', diff.changedComponents.some(c=>c.item==='Bearing'));
 t('added component detected (Coupling)', diff.addedComponents.some(c=>c.item==='Coupling'));
-t('status change detected', diff.statusChange && diff.statusChange.from==='review_required' && diff.statusChange.to==='approved');
-
-console.log('\n=== rejectVersion ===');
-const rejected = await repo.rejectVersion(v2.id, 'Blurry photo, re-scan needed');
-t('reject sets status', rejected.status==='rejected');
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 process.exit(fail?1:0);

@@ -675,9 +675,125 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
 .bom-row{background:var(--plate);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
 .bom-item{font-weight:700;font-size:14px;}
 .bom-spec{font-size:13px;color:var(--text-dim);margin-top:2px;}
+/* The drawing's own wording. Monospaced and quoted so it reads as copied
+   text rather than one of our labels -- it should look like the paper. */
+.bom-drawn{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;color:var(--text-dim);margin-top:3px;letter-spacing:.01em;
+  border-left:2px solid var(--steel-600);padding-left:7px;
+}
 .bom-qty{font-family:var(--font-display);font-size:13px;color:var(--text-faint);margin-top:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
 .bp-hint{font-size:12px;color:var(--text-faint);margin-top:6px;line-height:1.4;}
 .bp-preview-img{cursor:zoom-in;}
+
+/* ---------- A job's own page ---------- */
+.job-page{padding-bottom:8px;}
+.job-page-bar{
+  display:flex;align-items:center;gap:10px;margin:0 0 12px 0;padding-bottom:10px;
+  border-bottom:1px solid var(--line);
+}
+.job-page-title{
+  font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:.02em;
+  text-transform:uppercase;margin-right:auto;
+}
+
+/* ---------- Callout diagram: the real drawing, ballooned ----------
+   The sheet keeps a gutter either side for labels; leader lines are an
+   SVG stretched over the whole box, so its user units are percentages
+   and the line ends line up with the absolutely-positioned labels. */
+/* The drawing alone sets this box's height, and that is load-bearing:
+   every leader line's endpoints are percentages of THIS box, and the
+   part it points at is a percentage of the drawing. Pad the box out or
+   centre the drawing inside it and the two stop agreeing -- the leaders
+   then stop short in mid-air while the arrows sit somewhere else. */
+.cv-diagram{position:relative;margin-bottom:10px;}
+/* Stacking matters here: a leader line runs from the margin to a part in
+   the middle of the sheet, so nearly all of it lies OVER the drawing. The
+   sheet comes first in the DOM and would otherwise paint on top of every
+   line, hiding the lot. */
+.cv-sheet-wrap{position:relative;display:block;z-index:1;}
+.cv-leaders{z-index:2;}
+.cv-arrows,.cv-tag,.cv-label{z-index:3;}
+/* Arrows live over the sheet, in its own coordinate space. */
+.cv-arrows{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+.cv-sheet{
+  display:block;width:100%;height:auto;border-radius:6px;
+  background:var(--steel-950);border:1px solid var(--line);
+}
+/* Cropped to the machine: this box IS the frame, and the sheet inside is
+   scaled up and shifted so the frame is what shows through. */
+.cv-sheet-crop{
+  position:relative;overflow:hidden;width:100%;border-radius:6px;
+  background:var(--steel-950);border:1px solid var(--line);
+}
+.cv-sheet-zoom{
+  position:absolute;max-width:none;height:auto;border:0;border-radius:0;
+}
+.cv-under{display:flex;justify-content:flex-end;margin:-2px 0 8px 0;}
+.cv-leaders{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.9;}
+/* The number sits at the far end of the arrow, clear of the part. Only
+   shown where there's no margin label to carry it -- see the phone rules
+   below. Small: it identifies the arrow, it isn't the callout itself. */
+.cv-tag{
+  display:none;position:absolute;transform:translate(-50%,-50%);
+  min-width:15px;height:15px;padding:0 3px;border-radius:8px;
+  align-items:center;justify-content:center;
+  font-family:var(--font-display);font-size:10px;font-weight:800;color:#0d0f11;
+  box-shadow:0 0 0 1.5px rgba(0,0,0,.5);
+}
+.cv-label{
+  position:absolute;transform:translateY(-50%);width:var(--cv-gutter,21%);
+  display:flex;align-items:flex-start;gap:5px;font-size:11px;line-height:1.25;
+}
+.cv-label-left{left:0;justify-content:flex-start;}
+.cv-label-right{right:0;}
+.cv-num{
+  flex-shrink:0;min-width:17px;height:17px;padding:0 3px;border-radius:9px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-size:11px;font-weight:800;color:#0d0f11;
+}
+.cv-label-text{min-width:0;}
+.cv-label-item{display:block;font-weight:700;}
+.cv-label-drawn{
+  display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:10px;color:var(--text-faint);word-break:break-word;
+}
+.cv-label-qty{color:var(--text-faint);font-weight:600;font-variant-numeric:tabular-nums;}
+.cv-diagram-empty{
+  padding:16px;text-align:center;font-size:12px;color:var(--text-faint);
+  border:1px dashed var(--line);border-radius:8px;margin-bottom:10px;
+}
+.cv-pages{margin-bottom:8px;}
+/* Wide enough for margins: labels live in the gutters, legend is redundant. */
+.cv-legend{display:none;}
+
+@media (max-width:700px){
+  /* No room for margins on a phone: the sheet takes the full width and
+     the labels become a numbered legend under it. The balloons carry the
+     same numbers, so it reads the same either way. */
+  .cv-sheet-wrap{margin-left:0 !important;width:100% !important;}
+  .cv-leaders,.cv-label{display:none;}
+  /* No margin label to hold the number here, so it rides the arrow. */
+  .cv-tag{display:flex;}
+  .cv-legend{
+    display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;
+    list-style:none;padding:10px 0 0 0;margin:0;
+  }
+  .cv-legend-row{display:flex;align-items:flex-start;gap:5px;font-size:11px;line-height:1.25;}
+}
+@media (max-width:420px){
+  .cv-legend{grid-template-columns:1fr;}
+}
+
+/* ---------- Component map: pins on the real scanned drawing ---------- */
+.bp-map{position:relative;width:100%;margin-bottom:10px;border-radius:8px;overflow:hidden;background:var(--steel-950);border:1px solid var(--line);}
+.bp-map-img{display:block;width:100%;height:auto;}
+.bp-pin{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;max-width:120px;}
+.bp-pin-dot{width:11px;height:11px;border-radius:50%;box-shadow:0 0 0 3px rgba(0,0,0,.55),0 0 0 4px rgba(255,255,255,.25);}
+.bp-pin-label{
+  margin-top:3px;font-size:10px;font-weight:700;line-height:1.2;text-align:center;white-space:nowrap;
+  text-shadow:0 1px 2px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);
+}
 
 /* ---------- Fullscreen blueprint viewer ---------- */
 .bp-fullscreen{

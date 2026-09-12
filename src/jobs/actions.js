@@ -104,8 +104,9 @@ export function confirmAdvance(jobId){
   const verdict = moveJobToStage(job.id, nextStage.id);
   if(verdict.allowed) closeModal();   // stay open if it was rejected
 }
-/* ---------------- Component groups + 3D schematic ----------------
+/* ---------------- Component groups ----------------
    The AI classifies each extracted component by where it gets installed
    ("trough", "screw", "drive", "bearings", "tail"). That drives both the
-   grouped parts list and the colour coding in the 3D view, so a part in
-   the list and the thing on screen are visibly the same subassembly. */
+   grouped parts list and the pin colours on the component map, so a part
+   in the list and its pin on the drawing are visibly the same
+   subassembly. */

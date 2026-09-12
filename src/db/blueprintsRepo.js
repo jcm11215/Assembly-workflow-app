@@ -1,11 +1,12 @@
 /**
  * Blueprints repository.
  *
- * Images live in Supabase Storage; spec/validation/BOM live relationally
- * (Phase 3). Phase 8 adds versioning -- each scan of a job's blueprint
- * inserts a new row rather than overwriting the last one, so history is
- * naturally preserved; this module adds the version numbering,
- * comparison, and approval semantics on top of that.
+ * The original uploaded file lives in Supabase Storage; the extracted
+ * components live relationally. Each scan inserts a new row rather than
+ * overwriting the last, so history is preserved -- this module owns the
+ * version numbering and the comparison helpers built on it. The approval
+ * half of that (status/confidence/auto-approval) is gone: a scan now
+ * keeps only its components and the file they came from.
  */
 import { db, storage, BLUEPRINT_BUCKET, base64ToBlob, blobToBase64, currentUserId }
   from './supabaseClient.js';
@@ -15,13 +16,10 @@ const SEL = 'select=id,job_id,storage_path,original_filename,original_mime_type,
             'status,version,extracted_at';
 
 /**
- * The blueprint that should drive the job's displayed spec/BOM/3D model:
- * the latest APPROVED version if one exists, otherwise the latest
- * version overall (so a job with no review activity yet -- or on an
- * environment where Phase 8 hasn't rolled out -- behaves exactly as
- * before). This is the one behavioral change to a Phase 3 function, and
- * it exists because "review workflow" is meaningless if an unapproved
- * scan is still what feeds the floor.
+ * The blueprint driving the job's parts list and component map: simply
+ * the latest scan. There is no approval step to defer to -- a re-scan
+ * replaces what the floor sees as soon as it finishes, which is why
+ * every scan is kept as its own version rather than overwriting.
  */
 export async function getForJob(jobId){
   const rows = await db.select('blueprints', `${SEL}&job_id=eq.${jobId}&order=version.desc&limit=1`);
@@ -33,8 +31,8 @@ export async function getForJob(jobId){
 
 export async function listComponents(blueprintId){
   const rows = await db.select('blueprint_components',
-    'select=id,item,specification,quantity,stage,installation_location,source_page,' +
-    `source_callout,extraction_method,confidence,sort_order&blueprint_id=eq.${blueprintId}&order=sort_order.asc`);
+    'select=id,item,item_as_drawn,specification,quantity,stage,installation_location,source_page,' +
+    `source_callout,extraction_method,confidence,sort_order,position_x,position_y&blueprint_id=eq.${blueprintId}&order=sort_order.asc`);
   return rows.map(rowToComponent);
 }
 
@@ -119,23 +117,6 @@ async function nextVersion(jobId){
     `select=version&job_id=eq.${jobId}&order=version.desc&limit=1`);
   return rows.length ? rows[0].version + 1 : 1;
 }
-
-/** Human review action -- always stamps reviewed_by, unlike an
- *  auto-approval from saveExtraction(). */
-export async function setStatus(blueprintId, status, note){
-  const patch = { status };
-  if(status === 'approved' || status === 'rejected'){
-    patch.reviewed_by = currentUserId();
-    patch.reviewed_at = new Date().toISOString();
-    patch.reviewed_note = note || null;
-    patch.auto_approved = false;   // a human decision supersedes any prior auto-approval
-  }
-  const [row] = await db.update('blueprints', `id=eq.${blueprintId}`, patch);
-  return row;
-}
-
-export const approveVersion = (blueprintId, note) => setStatus(blueprintId, 'approved', note);
-export const rejectVersion  = (blueprintId, note) => setStatus(blueprintId, 'rejected', note);
 
 /**
  * Structural diff between two versions -- which dimensions changed

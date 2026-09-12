@@ -9,16 +9,17 @@ import { render } from './render.js';
 import { openBlockerForm, updateBlockersList } from '../blockers/index.js';
 import { extractComponents, extractNewJobFromBlueprint } from '../blueprints/extract.js';
 import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal, showPdfPagesField, updatePdfPagesHint } from '../blueprints/ui.js';
+import { setCalloutPage, toggleWholeSheet } from '../blueprints/calloutDiagram.js';
 import { blueprintImageCache, fetchBlueprintImage } from '../blueprints/images.js';
 import { logActivity, persistBlockers, persistJobs, reloadFromStorage } from '../db/repository.js';
 import { attemptAdvance, confirmAdvance, moveJobToStage, openMover, stepStage } from '../jobs/actions.js';
 import { updateDashboardList } from '../jobs/dashboard.js';
-import { openJobDetail } from '../jobs/detail.js';
+import { closeJobPage, openJobDetail } from '../jobs/detail.js';
 import { openJobForm } from '../jobs/jobForm.js';
 import { toggleStageChecklistItem } from '../jobs/stageGate.js';
 import { openNoteForm, updateNotesList } from '../notes/index.js';
 import { setSelectedBlueprintFile, state } from '../state/store.js';
-import { closeModal, currentJobId, modalRefresh, openModal, refreshOpenModal, setModalRefresh } from '../ui/components/modal.js';
+import { closeModal, currentJobId, modalRefresh, refreshOpenModal, setModalRefresh } from '../ui/components/modal.js';
 import { acceptConfirm, confirmAction, dismissConfirm } from '../ui/components/confirm.js';
 import { copyToClipboard, showToast } from '../ui/components/toast.js';
 import { openSettingsModal } from '../ui/settings.js';
@@ -32,7 +33,6 @@ import { stopActivityRealtime } from '../realtime/activityRealtime.js';
 import { disconnectAll } from '../realtime/realtimeClient.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { BUCKET_TO_STAGE, bomBucketFor } from '../models/stageMeta.js';
-import { openVersionHistory, toggleCompareSelection, compareModalHtml } from '../blueprints/ui.js';
 import { showGuideTip, toggleTip } from '../tips/partTips.js';
 
 
@@ -73,6 +73,18 @@ export function initEventRouter(){
   // path. Second call is a no-op rather than a duplicate listener.
   if(routerBound) return;
   routerBound = true;
+
+  // The job page pushes a history entry, so back (the phone gesture, the
+  // browser button, or our own Back) has somewhere to land. Trust the URL
+  // rather than our own state here -- it's the thing that actually moved.
+  window.addEventListener('popstate', ()=>{
+    const onJobUrl = /^#job\//.test(location.hash || '');
+    if(!onJobUrl && state.tab === 'job') closeJobPage();
+    else if(onJobUrl && state.tab !== 'job'){
+      const id = location.hash.slice('#job/'.length);
+      if(state.jobs.some(j => j.id === id)) openJobDetail(id, false);
+    }
+  });
 
   document.addEventListener('submit', e=>{
     const form = e.target.closest('[data-action="bom-add-component-form"]');
@@ -223,38 +235,20 @@ export function initEventRouter(){
         refreshOpenModal();   // optimistic -- don't wait on the round trip to feel responsive
         break;
       }
-      case 'bp-approve':
-        blueprintsRepo.approveVersion(id).then((row)=>{
-          logActivity('Blueprint approved', { jobNumber: state.jobs.find(j=>j.blueprintId===id)?.jobNumber || '', version: row && row.version }, {type:'blueprint', id});
-          showToast('Blueprint version approved');
-          reloadFromStorage(false);
-        }).catch(e=>showToast(`Could not approve: ${e.message}`, 5000));
+      case 'cv-page':
+        setCalloutPage(id, Number(btn.getAttribute('data-index')));
+        render();
         break;
-      case 'bp-reject':
-        blueprintsRepo.rejectVersion(id).then((row)=>{
-          logActivity('Blueprint rejected', { jobNumber: state.jobs.find(j=>j.blueprintId===id)?.jobNumber || '', version: row && row.version }, {type:'blueprint', id});
-          showToast('Blueprint version rejected');
-          reloadFromStorage(false);
-        }).catch(e=>showToast(`Could not reject: ${e.message}`, 5000));
+      case 'cv-whole-sheet':
+        toggleWholeSheet(id);
+        render();
         break;
-      case 'bp-show-versions':
-        openVersionHistory(id);
+      case 'job-back':
+        // Go back through history when we have an entry to pop, so the
+        // button and the phone's back gesture behave identically.
+        if(typeof history !== 'undefined' && history.state && history.state.job) history.back();
+        else closeJobPage();
         break;
-      case 'bp-toggle-compare':
-        toggleCompareSelection(id);
-        refreshOpenModal();
-        break;
-      case 'bp-compare': {
-        // compareSelection lives in ui.js; read it back via the two
-        // checked boxes currently rendered rather than re-importing state.
-        const checked = [...document.querySelectorAll('[data-action="bp-toggle-compare"]:checked')]
-          .map(el => el.getAttribute('data-id'));
-        if(checked.length !== 2){ showToast('Select exactly two versions to compare'); break; }
-        blueprintsRepo.compareVersions(checked[0], checked[1]).then(diff=>{
-          openModal(compareModalHtml(diff), ()=>compareModalHtml(diff));
-        }).catch(e=>showToast(`Could not compare: ${e.message}`, 5000));
-        break;
-      }
       case 'refresh-activity':
         loadActivity();
         showToast('Activity refreshed');

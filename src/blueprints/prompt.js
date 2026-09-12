@@ -1,5 +1,5 @@
-/** Extraction prompts. AI reads values only; it never produces geometry
- *  and, as of Phase 8, never assigns a component's assembly stage --
+/** Extraction prompts. The AI reads values off the drawing only; it
+ *  never invents one, and never assigns a component's assembly stage --
  *  see installation_location below and stageForLocation() in spec.js. */
 
 /**
@@ -89,7 +89,7 @@ ${includeJobFields ? '  "jobNumber": "<from title block, or \\"\\">",\n  "custom
   "belt": { "belt_width": {...}, "belt_thickness": {...} },
   "head": { "pulley": {"pulley_diameter": {...}, "pulley_width": {...}}, "shaft_diameter": {...}, "bearing_bore": {...} },
   "idlers": { "roller_diameter": {...}, "roller_width": {...}, "roller_spacing": {...}, "count": <integer or null> },
-  "components": [{"item": "<short name>", "specification": "<size/material/spec or \\"\\">", "quantity": <integer or null>, "installation_location": "drive_end"|"tail_end"|"trough"|"screw"|"hanger"|"other"|"unknown", "source_page": <page>, "source_callout": "<the exact text of the label/callout this came from, or \\"\\" if read from a table row with no label text>", "extraction_method": "bom_table"|"callout"|"detail_view"|"general_assembly"|"inferred", "confidence": <0..1>}],
+  "components": [{"item": "<short name>", "item_as_drawn": "<the part's description EXACTLY as the drawing writes it, verbatim>", "specification": "<size/material/spec or \\"\\">", "quantity": <integer or null>, "installation_location": "drive_end"|"tail_end"|"trough"|"screw"|"hanger"|"other"|"unknown", "source_page": <page>, "source_callout": "<the exact text of the label/callout this came from, or \\"\\" if read from a table row with no label text>", "extraction_method": "bom_table"|"callout"|"detail_view"|"general_assembly"|"inferred", "confidence": <0..1>, "position": {"x": <0..1, fraction of the SOURCE PAGE image width, from the left edge>, "y": <0..1, fraction of that page's height, from the top edge>} or null}],
   "conflicts": [{"field": "<dimension name>", "detail": "<page X says A, page Y says B>"}],
   "notes": "<anything an assembler should know that the fields above don't capture, or \\"\\">"
 }
@@ -104,7 +104,12 @@ A shaft, bearing, coupling, or sprocket physically located on the drive-end side
 
 If a drawing has no motor/gearbox visible on any page (e.g. a driveless assembly, or the drive is on a separate sheet not provided), say so honestly in "notes" and mark drive-related fields not_found rather than guessing which end would have been the drive end.
 
-COMPONENTS LIST -- ONLY include these part types, nothing else. Use the name shown as the start of "item" (put sizes and model numbers in "specification"):
+COMPONENTS LIST -- every component carries TWO names, and they are not interchangeable:
+
+- "item_as_drawn" is the shop's own wording, copied VERBATIM: the BOM/parts-table description cell for that row, or the callout text pointing at the part. Keep the drawing's abbreviations, punctuation, spacing and capitalization exactly as printed ("FLG BRG 2-7/16 BORE", "HNGR BRG ASSY", "GEARMOTOR, 3/4HP"). Do NOT tidy it up, expand abbreviations, re-order words, or drop the size out of it. This is what the assembler will be matching against the paper drawing in front of them, so it has to read identically. If a part genuinely has no written description anywhere (you inferred it from a picture alone), use "".
+- "item" is the category name from the fixed list below, used to group and colour-code the part. This is the ONLY field you normalize.
+
+ONLY include these part types, nothing else. Use the name shown as the start of "item" (put sizes and model numbers in "specification"):
 - Drive (the drive unit itself, e.g. a shaft-mount or screw conveyor drive)
 - Motor
 - Reducer (gearbox)
@@ -123,10 +128,12 @@ Check EVERY page for these -- BOM tables, callouts, and detail views on any shee
 
 For each of those part types, still assign installation_location per the two-pass procedure above -- the drive, motor, and reducer are always drive_end. Augers, coupling shafts, and coupling bolts along the run of the conveyor are "screw"; hanger bearings are "hanger".
 
+POSITION -- for each component, set "position" to where it visually sits on its own source_page, as a fraction of THAT page's image (0,0 is the top-left corner, 1,1 is the bottom-right corner) -- not the whole drawing set, and not a physical measurement. Only set it when you can actually see the component as a shape or callout marker on a general assembly, side, end, or detail view; set it to null when the component was read from a BOM/parts table row with no corresponding marked location on any view. Do not estimate a position from the item's name or typical layout -- an honest null is correct and expected for table-only entries.
+
 For a SCREW conveyor, "belt"/"head"/"idlers" will be all not_found -- that is expected; leave them as not_found rather than omitting them. For a BELT conveyor, "trough"/"screw"/"hangers" will be not_found. Fill in whichever applies. (These "not_found" spec fields are separate from the components whitelist above -- the trough dimension fields should still be filled in when known, even though trough hardware itself is never a listed component.)`;
 }
 
 /* ---------------- Engineering validation ----------------
-   Runs before any geometry is built. Never silently corrects -- it
-   reports, and the geometry generator then refuses to invent anything
-   that failed. */
+   Never silently corrects what the AI read -- it reports, so a value
+   that failed a check is shown as failed rather than quietly replaced
+   with a plausible-looking one. */

@@ -128,7 +128,11 @@ export async function pdfFileToImages(file, maxPages, maxDim, quality, pageNumbe
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
     await page.render({canvasContext: ctx, viewport}).promise;
     const dataUrl = canvas.toDataURL('image/jpeg', quality);
-    images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg', page: i});
+    // Real pixel size travels with the page: cropping to a region of it
+    // needs the aspect ratio, and the canvas is the only place it's known
+    // without decoding the image again.
+    images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg', page: i,
+                 width: canvas.width, height: canvas.height});
   }
   return images;
 }

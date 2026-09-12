@@ -1,6 +1,6 @@
 import './stub.mjs';
-const { state } = await import('./src/state/store.mjs');
-const { handleJobEvent } = await import('./src/realtime/jobsRealtime.mjs');
+const { state } = await import('../src/state/store.js');
+const { handleJobEvent } = await import('../src/realtime/jobsRealtime.js');
 
 let pass=0, fail=0;
 const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};

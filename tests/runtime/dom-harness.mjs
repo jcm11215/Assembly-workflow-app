@@ -5,6 +5,12 @@ class El {
     this.tagName = tag.toUpperCase(); this.children = []; this.parentNode = null;
     this.attrs = {}; this.style = {}; this._html = ''; this.value = ''; this.files = [];
     this._listeners = {}; this.checked = false; this.disabled = false;
+    // Real <form>.elements gives named access to child controls; innerHTML
+    // here is never parsed into a tree, so there are no real children to
+    // expose -- a plain object makes any name (form.elements.foo) resolve
+    // to undefined rather than throw, same as a browser form with no such
+    // control.
+    this.elements = {};
     this.classList = {
       _s:new Set(),
       add:(...c)=>c.forEach(x=>this.classList._s.add(x)),
@@ -54,11 +60,28 @@ globalThis.document = {
   activeElement: null, hidden: false
 };
 globalThis.window = {
-  addEventListener(){}, removeEventListener(){}, devicePixelRatio:1,
+  _listeners:{},
+  addEventListener(t,f){ (this._listeners[t]=this._listeners[t]||[]).push(f); },
+  removeEventListener(t,f){ if(this._listeners[t]) this._listeners[t]=this._listeners[t].filter(x=>x!==f); },
+  dispatch(t,detail){ (this._listeners[t]||[]).forEach(f=>f(detail)); },
+  devicePixelRatio:1,
   scrollTo(){}, location:{ reload(){}, href:'http://localhost/' }, __threePromise:undefined
 };
 globalThis.localStorage = { _d:{}, getItem(k){return this._d[k]??null}, setItem(k,v){this._d[k]=String(v)}, removeItem(k){delete this._d[k]}, clear(){this._d={}} };
 globalThis.AbortController = class { constructor(){ this.signal={aborted:false}; } abort(){ this.signal.aborted=true; } };
+// Node's native FormData expects a real HTMLFormElement and throws on our
+// fake El (innerHTML here is just a stored string, never parsed into a
+// walkable tree, so a "form" is never more than an empty stand-in) --
+// this app's own null-checks (`prev ? new FormData(prev) : {}`) are
+// correct for a real browser, so replace the constructor, not the app.
+globalThis.FormData = class {
+  constructor(){ this._entries = []; }
+  append(k,v){ this._entries.push([k,v]); }
+  get(k){ const e = this._entries.find(([kk])=>kk===k); return e ? e[1] : null; }
+  getAll(k){ return this._entries.filter(([kk])=>kk===k).map(([,v])=>v); }
+  entries(){ return this._entries[Symbol.iterator](); }
+  [Symbol.iterator](){ return this.entries(); }
+};
 globalThis.Blob = class { constructor(p,o){ this.parts=p; this.type=(o&&o.type)||''; this.size=100; } };
 globalThis.FileReader = class {
   readAsDataURL(){ setTimeout(()=>{ this.result='data:image/jpeg;base64,AAAA'; this.onload&&this.onload(); },0); }

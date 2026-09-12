@@ -12,8 +12,8 @@ globalThis.fetch = async(url,opt={})=>{
   if(u.includes('/rest/v1/job_checklist')||u.includes('/rest/v1/blueprints')||u.includes('/rest/v1/blueprint_components')||u.includes('/rest/v1/profiles')||u.includes('/rest/v1/notes')) return ok([]);
   return ok([]);
 };
-const { loadAll, persistBlockers } = await import('./src/db/repository.mjs');
-const { state } = await import('./src/state/store.mjs');
+const { loadAll, persistBlockers } = await import('../src/db/repository.js');
+const { state } = await import('../src/state/store.js');
 
 let pass=0, fail=0;
 const t=(n,c)=>{c?(pass++,console.log('  PASS '+n)):(fail++,console.log('  FAIL '+n));};

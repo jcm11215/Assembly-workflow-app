@@ -38,10 +38,8 @@ export function rowToJob(row, checklistRows){
     // Blueprint-derived fields, hydrated from the blueprints table.
     spec: row._spec ?? null,
     validation: row._validation ?? null,
-    geometry: row._geometry ?? null,
     billOfMaterials: row._bom ?? [],
     hasBlueprintImage: !!row._hasImage,
-    blueprintThumbnail: row._thumbnail ?? null,
     blueprintThumbnail: row._thumbnail ?? null,
     blueprintExtractedAt: row._extractedAt || null,
     blueprintId: row._blueprintId || null,
@@ -163,6 +161,7 @@ export function rowToComponent(row){
   return {
     id: row.id || null,
     item: row.item,
+    item_as_drawn: row.item_as_drawn || '',
     specification: row.specification || '',
     quantity: row.quantity ?? null,
     stage: row.stage || 'other',
@@ -171,7 +170,9 @@ export function rowToComponent(row){
     source_callout: row.source_callout || '',
     extraction_method: row.extraction_method || 'inferred',
     confidence: row.confidence != null ? Number(row.confidence) : null,
-    sortOrder: row.sort_order ?? 0
+    sortOrder: row.sort_order ?? 0,
+    position: (row.position_x != null && row.position_y != null)
+      ? { x: Number(row.position_x), y: Number(row.position_y) } : null
   };
 }
 
@@ -179,6 +180,7 @@ export function componentToRow(c, blueprintId){
   return {
     blueprint_id: blueprintId,
     item: c.item || 'Unspecified item',
+    item_as_drawn: c.item_as_drawn || null,
     specification: c.specification || '',
     quantity: c.quantity ?? null,
     stage: c.stage || 'other',
@@ -187,6 +189,8 @@ export function componentToRow(c, blueprintId){
     source_callout: c.source_callout || null,
     extraction_method: c.extraction_method || 'inferred',
     confidence: c.confidence ?? null,
-    sort_order: c.sortOrder ?? 0
+    sort_order: c.sortOrder ?? 0,
+    position_x: c.position ? c.position.x : null,
+    position_y: c.position ? c.position.y : null
   };
 }
