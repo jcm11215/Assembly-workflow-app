@@ -64,16 +64,26 @@ function parseJsonReply(text, label){
   };
 }
 
-/** One pass: prompt in, parsed JSON out. A pass that fails outright is
- *  recorded and returns {} rather than taking the whole scan down with
- *  it -- three narrow passes mean two good ones are still worth having. */
+/**
+ * One pass: prompt in, parsed JSON out.
+ *
+ * A pass that fails is recorded and returns {} rather than taking the
+ * whole scan down with it -- three narrow passes mean two good ones are
+ * still worth having. `callError` is kept separate from a parse failure
+ * because the two mean different things: a reply that would not parse is
+ * this drawing's problem, while a call that never completed is usually
+ * the key or the connection, and the caller has to be able to tell.
+ */
 async function runPass(label, systemPrompt, blocks, instruction){
   try {
     const text = await callClaudeAPI(systemPrompt, [...blocks, {type:'text', text:instruction}]);
-    return { label, ...parseJsonReply(text, label) };
+    return { label, callError: null, ...parseJsonReply(text, label) };
   } catch (e) {
     console.error(`${label}: the call itself failed`, e);
-    return { label, parsed: {}, parseError: { pass: label, message: String(e && e.message || e), failed: true } };
+    return {
+      label, parsed: {}, callError: e,
+      parseError: { pass: label, message: String(e && e.message || e), failed: true }
+    };
   }
 }
 
@@ -177,6 +187,16 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
       'Read this complete drawing set and return the engineering specification JSON.')
   ]);
 
+  // Every pass failing to complete is not a thin scan -- it is a scan
+  // that never happened, and almost always one cause for all three: a
+  // rejected API key, or no connection. Rethrowing puts it back in front
+  // of the person as "could not read the blueprint, here's why", which
+  // is what a single call used to do before this was split up. Silently
+  // returning nothing would open a blank job form off a drawing the AI
+  // never even saw, and send them looking for a fault in the drawing.
+  const passes = [partsPass, calloutPass, dimsPass];
+  if(passes.every(p => p.callError)) throw passes[0].callError;
+
   // Whitelisted and normalized first, so the join only ever has to add
   // location to parts that were going to be kept anyway.
   const { components: tableParts, report: filterReport } = normalizeComponentsDetailed(partsPass.parsed);
@@ -209,11 +229,11 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
       ...joinReport,
       ...locationReport,
       pagesRead: { bom: roles.bom, views: roles.views, total: allPages.length },
-      parseError: [partsPass, calloutPass, dimsPass].map(p => p.parseError).filter(Boolean),
+      parseError: passes.map(p => p.parseError).filter(Boolean),
       // A reply that only parsed after repair is worth seeing: it means
       // the model is mis-escaping, which is one bad character away from
       // costing a whole pass.
-      repairedPasses: [partsPass, calloutPass, dimsPass]
+      repairedPasses: passes
         .filter(p => p.repairs && p.repairs.length)
         .map(p => `${p.label}: ${p.repairs.join('; ')}`)
     }
