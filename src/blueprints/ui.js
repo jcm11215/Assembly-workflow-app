@@ -5,7 +5,7 @@
 // NOT a CAD model. It is accurate to the numbers extracted (diameter,
 // length, incline, hanger count) and nothing more, which is enough to
 // orient someone on the floor without pretending to be engineering data.
-import { blueprintImageCache } from './images.js';
+import { blueprintImageCache, componentMapPageCache, ensureComponentMapPageLoaded } from './images.js';
 import { bomListHtml } from './bom.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { confLabel, dimIn, validateSpec } from './spec.js';
@@ -14,6 +14,7 @@ import { modalRefresh, openModal, setCurrentJobId, setModalRefresh } from '../ui
 import { escapeHtml } from '../utils/dom.js';
 import { getSelectedBlueprintFile, setSelectedBlueprintFile } from '../state/store.js';
 import { MAX_PDF_PAGES, parsePageSelection, pdfPageCount } from './pdf.js';
+import { BOM_BUCKET_META, bomBucketFor } from '../models/stageMeta.js';
 
 export function dimRowHtml(label, d, extra){
   const flag = confLabel(d);
@@ -136,6 +137,67 @@ export function blueprintImageSectionHtml(job){
   // Any image type: inline preview, tap to open the pinch-zoom viewer.
   return `<img src="data:${cached.mimeType};base64,${cached.base64}" class="bp-preview-img" style="max-height:340px;margin-bottom:10px;" alt="Blueprint for ${escapeHtml(job.jobNumber)}" data-action="open-blueprint-fullscreen" data-id="${job.id}">
   <div class="bp-hint" style="margin-top:-4px;margin-bottom:10px;">Tap the drawing to open it full screen and zoom in.</div>`;
+}
+
+// jobId -> which source_page's pins are currently shown, when a scan
+// placed components across more than one page.
+let componentMapPage = {};
+export function setComponentMapPage(jobId, page){ componentMapPage[jobId] = page; }
+
+/**
+ * Pins on the ACTUAL scanned drawing -- not a synthesized schematic --
+ * showing where each extracted component physically sits. A component
+ * only appears here when the AI could visually pinpoint it on a page
+ * (see spec.js's normPosition/prompt.js's POSITION rule); a scan read
+ * entirely from a BOM table has nothing to pin and falls back to a hint.
+ */
+export function componentMapHtml(job){
+  if(!job.hasBlueprintImage) return '';
+  const positioned = (job.billOfMaterials || []).filter(c => c.position && c.source_page);
+  if(!positioned.length) return '';
+
+  const byPage = {};
+  positioned.forEach(c => { (byPage[c.source_page] = byPage[c.source_page] || []).push(c); });
+  const pages = Object.keys(byPage).map(Number).sort((a,b)=>a-b);
+  const remembered = componentMapPage[job.id];
+  const current = (remembered && byPage[remembered])
+    ? remembered
+    : pages.reduce((best,p) => byPage[p].length > byPage[best].length ? p : best, pages[0]);
+  componentMapPage[job.id] = current;
+
+  const key = `${job.id}:${current}`;
+  const cached = componentMapPageCache[key];
+
+  const pageTabs = pages.length > 1 ? `
+    <div class="fab-row" style="margin-bottom:8px;">
+      ${pages.map(p => `<button type="button" class="btn btn-sm ${p===current?'btn-primary':'btn-outline'}" data-action="bp-map-page" data-id="${job.id}" data-index="${p}">Page ${p}</button>`).join('')}
+    </div>` : '';
+
+  if(cached === undefined){
+    ensureComponentMapPageLoaded(job.id, current);
+    return `<div class="section-title" style="margin-top:16px;">Where Each Part Goes</div>${pageTabs}<div class="bp-hint" style="margin-bottom:10px;">Loading drawing...</div>`;
+  }
+  if(!cached){
+    return `<div class="section-title" style="margin-top:16px;">Where Each Part Goes</div>${pageTabs}<div class="bp-hint" style="margin-bottom:10px;">Could not load the drawing image for this scan.</div>`;
+  }
+
+  const pins = byPage[current].map(c=>{
+    const meta = BOM_BUCKET_META[bomBucketFor(c)] || BOM_BUCKET_META.other;
+    const title = `${c.item}${c.specification ? ' -- '+c.specification : ''}${c.quantity ? ' (x'+c.quantity+')' : ''}`;
+    return `
+    <div class="bp-pin" style="left:${(c.position.x*100).toFixed(2)}%;top:${(c.position.y*100).toFixed(2)}%;" title="${escapeHtml(title)}">
+      <div class="bp-pin-dot" style="background:${meta.color};"></div>
+      <div class="bp-pin-label" style="color:${meta.color};">${escapeHtml(c.item)}</div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="section-title" style="margin-top:16px;">Where Each Part Goes</div>
+  ${pageTabs}
+  <div class="bp-map">
+    <img src="data:${cached.mime};base64,${cached.base64}" class="bp-map-img" alt="Blueprint page ${current} for ${escapeHtml(job.jobNumber)}">
+    ${pins}
+  </div>`;
 }
 
 // "Pages to scan" -- hidden until a PDF is picked; showPdfPagesField()

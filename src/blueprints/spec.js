@@ -128,6 +128,16 @@ export function stageForLocation(location){
 
 const EXTRACTION_METHODS = ['bom_table', 'callout', 'detail_view', 'general_assembly', 'inferred'];
 
+/** Normalizes a component's on-page position to {x,y} in [0,1], or null.
+ *  Null is a legitimate, common outcome (a BOM-table-only entry has
+ *  nothing to point at) -- never invented from the item's name or type. */
+function normPosition(p){
+  if(!p || typeof p !== 'object') return null;
+  const x = Number(p.x), y = Number(p.y);
+  if(!isFinite(x) || !isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return null;
+  return { x, y };
+}
+
 // The shop's component list -- the only part types a scan keeps: drive,
 // motor, reducer, seal, gasket, bearing, hanger, coupling shaft, tail
 // shaft, drive shaft, auger, coupling bolts, UHMW. Everything else
@@ -195,7 +205,8 @@ export function normalizeComponents(parsed){
       extraction_method: (c && EXTRACTION_METHODS.includes(c.extraction_method))
         ? c.extraction_method : 'inferred',
       confidence: (c && c.confidence!=null && isFinite(Number(c.confidence)))
-        ? Math.min(1, Math.max(0, Number(c.confidence))) : 0.5
+        ? Math.min(1, Math.max(0, Number(c.confidence))) : 0.5,
+      position: normPosition(c && c.position)
     };
   });
 }

@@ -9,6 +9,8 @@
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { state } from '../state/store.js';
 import { refreshOpenModal } from '../ui/components/modal.js';
+import { pdfFileToImages } from './pdf.js';
+import { base64ToBlob } from '../db/supabaseClient.js';
 
 /** jobId -> {base64, mimeType, filename} once loaded, or false if
  *  confirmed missing. */
@@ -46,5 +48,41 @@ export async function fetchBlueprintImage(jobId){
 export async function ensureBlueprintImageLoaded(jobId){
   const file = await fetchBlueprintImage(jobId);
   blueprintImageCache[jobId] = file || false;
+  refreshOpenModal();
+}
+
+/**
+ * The component map (ui.js's componentMapHtml) overlays pins on the exact
+ * page image the AI reported each component's position against -- for a
+ * PDF that means re-rendering that one page as an image client-side with
+ * the same pdf.js path the scan itself uses, not the whole original file.
+ * A plain image *is* its own page 1, so it's served straight from the
+ * already-cached original file with no re-render.
+ * jobId:page -> {base64, mime} once rendered, or false if it failed.
+ */
+export const componentMapPageCache = {};
+
+export async function ensureComponentMapPageLoaded(jobId, page){
+  const key = `${jobId}:${page}`;
+  if(componentMapPageCache[key] !== undefined) return;
+  let original = blueprintImageCache[jobId];
+  if(original === undefined){
+    original = await fetchBlueprintImage(jobId);
+    blueprintImageCache[jobId] = original || false;
+  }
+  if(!original){ componentMapPageCache[key] = false; refreshOpenModal(); return; }
+  try {
+    if(original.mimeType !== 'application/pdf'){
+      // The original photo/image IS the page the AI looked at -- page 1.
+      componentMapPageCache[key] = { base64: original.base64, mime: original.mimeType };
+    } else {
+      const blob = base64ToBlob(original.base64, original.mimeType);
+      const [rendered] = await pdfFileToImages(blob, 1, 1600, 0.85, [page]);
+      componentMapPageCache[key] = rendered ? { base64: rendered.base64, mime: rendered.mime } : false;
+    }
+  } catch (e) {
+    console.error('ensureComponentMapPageLoaded failed', e);
+    componentMapPageCache[key] = false;
+  }
   refreshOpenModal();
 }

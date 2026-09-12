@@ -8,7 +8,7 @@ import { setAiProvider, setApiKey, setOpenRouterKey } from '../ai/keys.js';
 import { render } from './render.js';
 import { openBlockerForm, updateBlockersList } from '../blockers/index.js';
 import { extractComponents, extractNewJobFromBlueprint } from '../blueprints/extract.js';
-import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal, showPdfPagesField, updatePdfPagesHint } from '../blueprints/ui.js';
+import { openBlueprintFullscreen, openBlueprintModal, openNewJobBlueprintModal, setComponentMapPage, showPdfPagesField, updatePdfPagesHint } from '../blueprints/ui.js';
 import { blueprintImageCache, fetchBlueprintImage } from '../blueprints/images.js';
 import { logActivity, persistBlockers, persistJobs, reloadFromStorage } from '../db/repository.js';
 import { attemptAdvance, confirmAdvance, moveJobToStage, openMover, stepStage } from '../jobs/actions.js';
@@ -238,6 +238,10 @@ export function initEventRouter(){
         break;
       case 'bp-show-versions':
         openVersionHistory(id);
+        break;
+      case 'bp-map-page':
+        setComponentMapPage(id, Number(btn.getAttribute('data-index')));
+        refreshOpenModal();
         break;
       case 'bp-toggle-compare':
         toggleCompareSelection(id);

@@ -53,5 +53,24 @@ t('conflict overrides high confidence', M.determineExtractionStatus(0.97, { erro
 const goodSpec = M.normalizeSpec({ conveyorType: 'screw', overall: { overall_length: mkDim(480) }, screw: { screw_diameter: mkDim(20) } });
 t('validateSpec unchanged and still works standalone', M.validateSpec(goodSpec).ok === true);
 
+// component position -- for the "where each part goes" map (pins on the
+// real scanned drawing, not a synthesized schematic). Null is a normal,
+// expected outcome (a BOM-table-only entry has nothing to point at), so
+// every malformed/absent shape must resolve to null, never a guess.
+const posComps = M.normalizeComponents([
+  { item: 'Drive', installation_location: 'drive_end', position: { x: 0.12, y: 0.55 } },
+  { item: 'Reducer', installation_location: 'drive_end', position: null },
+  { item: 'Bearing', installation_location: 'hanger' },                              // field absent entirely
+  { item: 'Gasket', installation_location: 'unknown', position: { x: 1.4, y: 0.5 } }, // out of range
+  { item: 'Seal', installation_location: 'unknown', position: { x: 'nope', y: 0.5 } },// non-numeric
+  { item: 'Coupling Bolts', installation_location: 'screw', position: { x: 0, y: 1 } } // boundary values
+]);
+t('valid in-range position kept as {x,y}', posComps[0].position && posComps[0].position.x === 0.12 && posComps[0].position.y === 0.55);
+t('explicit null position stays null', posComps[1].position === null);
+t('missing position field normalizes to null', posComps[2].position === null);
+t('out-of-range coordinate rejected to null', posComps[3].position === null);
+t('non-numeric coordinate rejected to null', posComps[4].position === null);
+t('boundary values 0 and 1 are valid', posComps[5].position && posComps[5].position.x === 0 && posComps[5].position.y === 1);
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

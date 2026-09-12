@@ -171,7 +171,9 @@ export function rowToComponent(row){
     source_callout: row.source_callout || '',
     extraction_method: row.extraction_method || 'inferred',
     confidence: row.confidence != null ? Number(row.confidence) : null,
-    sortOrder: row.sort_order ?? 0
+    sortOrder: row.sort_order ?? 0,
+    position: (row.position_x != null && row.position_y != null)
+      ? { x: Number(row.position_x), y: Number(row.position_y) } : null
   };
 }
 
@@ -187,6 +189,8 @@ export function componentToRow(c, blueprintId){
     source_callout: c.source_callout || null,
     extraction_method: c.extraction_method || 'inferred',
     confidence: c.confidence ?? null,
-    sort_order: c.sortOrder ?? 0
+    sort_order: c.sortOrder ?? 0,
+    position_x: c.position ? c.position.x : null,
+    position_y: c.position ? c.position.y : null
   };
 }

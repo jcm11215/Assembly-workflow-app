@@ -89,7 +89,7 @@ ${includeJobFields ? '  "jobNumber": "<from title block, or \\"\\">",\n  "custom
   "belt": { "belt_width": {...}, "belt_thickness": {...} },
   "head": { "pulley": {"pulley_diameter": {...}, "pulley_width": {...}}, "shaft_diameter": {...}, "bearing_bore": {...} },
   "idlers": { "roller_diameter": {...}, "roller_width": {...}, "roller_spacing": {...}, "count": <integer or null> },
-  "components": [{"item": "<short name>", "specification": "<size/material/spec or \\"\\">", "quantity": <integer or null>, "installation_location": "drive_end"|"tail_end"|"trough"|"screw"|"hanger"|"other"|"unknown", "source_page": <page>, "source_callout": "<the exact text of the label/callout this came from, or \\"\\" if read from a table row with no label text>", "extraction_method": "bom_table"|"callout"|"detail_view"|"general_assembly"|"inferred", "confidence": <0..1>}],
+  "components": [{"item": "<short name>", "specification": "<size/material/spec or \\"\\">", "quantity": <integer or null>, "installation_location": "drive_end"|"tail_end"|"trough"|"screw"|"hanger"|"other"|"unknown", "source_page": <page>, "source_callout": "<the exact text of the label/callout this came from, or \\"\\" if read from a table row with no label text>", "extraction_method": "bom_table"|"callout"|"detail_view"|"general_assembly"|"inferred", "confidence": <0..1>, "position": {"x": <0..1, fraction of the SOURCE PAGE image width, from the left edge>, "y": <0..1, fraction of that page's height, from the top edge>} or null}],
   "conflicts": [{"field": "<dimension name>", "detail": "<page X says A, page Y says B>"}],
   "notes": "<anything an assembler should know that the fields above don't capture, or \\"\\">"
 }
@@ -122,6 +122,8 @@ COMPONENTS LIST -- ONLY include these part types, nothing else. Use the name sho
 Check EVERY page for these -- BOM tables, callouts, and detail views on any sheet. Do NOT include plates, weldments, sprockets, keys, guards, other fasteners, trough sections, covers, shrouds, or discharge spouts/chutes -- even if clearly visible and labeled on the drawing. This is a fixed whitelist, not a completeness target.
 
 For each of those part types, still assign installation_location per the two-pass procedure above -- the drive, motor, and reducer are always drive_end. Augers, coupling shafts, and coupling bolts along the run of the conveyor are "screw"; hanger bearings are "hanger".
+
+POSITION -- for each component, set "position" to where it visually sits on its own source_page, as a fraction of THAT page's image (0,0 is the top-left corner, 1,1 is the bottom-right corner) -- not the whole drawing set, and not a physical measurement. Only set it when you can actually see the component as a shape or callout marker on a general assembly, side, end, or detail view; set it to null when the component was read from a BOM/parts table row with no corresponding marked location on any view. Do not estimate a position from the item's name or typical layout -- an honest null is correct and expected for table-only entries.
 
 For a SCREW conveyor, "belt"/"head"/"idlers" will be all not_found -- that is expected; leave them as not_found rather than omitting them. For a BELT conveyor, "trough"/"screw"/"hangers" will be not_found. Fill in whichever applies. (These "not_found" spec fields are separate from the components whitelist above -- the trough dimension fields should still be filled in when known, even though trough hardware itself is never a listed component.)`;
 }

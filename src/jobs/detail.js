@@ -3,7 +3,7 @@
 
 import { bomListHtml } from '../blueprints/bom.js';
 import { blueprintImageCache, ensureBlueprintImageLoaded } from '../blueprints/images.js';
-import { blueprintImageSectionHtml, engineeringPanelHtml, reviewPanelHtml } from '../blueprints/ui.js';
+import { blueprintImageSectionHtml, componentMapHtml, engineeringPanelHtml, reviewPanelHtml } from '../blueprints/ui.js';
 import { PROCEDURE, STAGES, STAGE_PROCEDURE, stageChecklistProgress, stageLabel } from './procedure.js';
 import { dueStatus } from './selectors.js';
 import { state } from '../state/store.js';
@@ -89,6 +89,7 @@ export function jobDetailModalHtml(job){
 
     <div class="section-title">Blueprint &amp; Hardware</div>
     ${blueprintImageSectionHtml(job)}
+    ${componentMapHtml(job)}
     ${reviewPanelHtml(job)}
     ${engineeringPanelHtml(job)}
     ${bomListHtml(job) || `<div class="bp-hint" style="margin-bottom:10px;">No blueprint scanned yet for this job.</div>`}

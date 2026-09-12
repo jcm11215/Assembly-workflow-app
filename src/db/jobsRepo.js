@@ -144,7 +144,7 @@ async function loadBlueprintFields(jobIds){
   const comps = bpIds.length
     ? await db.select('blueprint_components',
         `select=id,blueprint_id,item,specification,quantity,stage,installation_location,` +
-        `source_page,source_callout,extraction_method,confidence,sort_order` +
+        `source_page,source_callout,extraction_method,confidence,sort_order,position_x,position_y` +
         `&blueprint_id=in.(${bpIds.join(',')})&order=sort_order.asc`)
     : [];
 
