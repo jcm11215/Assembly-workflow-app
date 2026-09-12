@@ -36,8 +36,8 @@ t('a network failure blames the connection, not the key alone', () => {
 });
 t('a rate limit says to wait rather than to replace the key', () => {
   const m = explainFetchError(new Error('RESOURCE_EXHAUSTED: quota exceeded'));
-  has(m, /rate-limiting/i, 'rate limit');
-  has(m, /Wait/i, 'tells them to wait');
+  has(m, /free tier|quota|rate/i, 'names the quota');
+  has(m, /minute|wait/i, 'tells them time is the fix');
   if (/rejected the API key/.test(m)) throw new Error('mistook a quota for a bad key');
 });
 t('an unrecognised message is passed through rather than swallowed', () => {

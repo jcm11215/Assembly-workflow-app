@@ -22,7 +22,12 @@ export function explainFetchError(err){
     return `${providerName} rejected the API key. Open Settings (the gear icon, top right) and paste a current key, or switch providers.`;
   }
   if(/quota|rate limit|RESOURCE_EXHAUSTED|429/i.test(msg)){
-    return `${providerName} is rate-limiting this key. Wait a few minutes, or switch providers in Settings.`;
+    // The app already waited and retried several times before this
+    // surfaced, so "try again" on its own would be poor advice. A free
+    // tier caps requests per minute, and one scan spends three or four.
+    const limit = /limit:\s*(\d+)/i.exec(msg);
+    return `${providerName}'s free tier is out of requests for the moment${limit ? ` (cap: ${limit[1]} per minute)` : ''}. ` +
+           `It already waited and retried. Give it a minute, scan fewer pages at once, or switch providers in Settings.`;
   }
   return msg || 'Please try again.';
 }

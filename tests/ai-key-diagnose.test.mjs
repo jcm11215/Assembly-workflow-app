@@ -29,13 +29,16 @@ t('surrounding whitespace from a paste is ignored', () => {
   if (!describeGeminiKeyShape('  ' + realShape + '\n').ok) throw new Error('rejected over whitespace');
 });
 
-console.log('\n=== the credential that caused this ===');
-t('an AI Studio ephemeral token is identified by name', () => {
+console.log('\n=== AQ. keys, which this got wrong once ===');
+t('an "AQ." key is accepted -- Google accepts them, so a shape rule must not veto', () => {
+  // This assertion used to be the opposite, on the theory that an AQ.
+  // credential explained a 401. It did not: the device's own test showed
+  // "Key accepted by Google -- 40 usable models" for exactly such a key,
+  // and the real fault was a 429 quota. A guess about format must never
+  // contradict the provider's own verdict, because the person is then
+  // sent to replace a key that works.
   const r = describeGeminiKeyShape('AQ.Ab8RN6Jxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
-  if (r.ok) throw new Error('accepted an ephemeral token');
-  has(r.why, /ephemeral/i, 'names what it is');
-  has(r.why, /aistudio\.google\.com/, 'says where to get the right one');
-  has(r.why, /AIza/, 'says what the right one looks like');
+  if (!r.ok) throw new Error('rejected a key Google accepts: ' + r.why);
 });
 t('an OAuth access token is identified', () => {
   const r = describeGeminiKeyShape('ya29.a0ARrdaM-xxxxxxxxxxxxxxxxxxxx');
@@ -79,7 +82,7 @@ t('an unrecognised string reports what it actually got', () => {
   has(r.why, /7 characters/, 'reports the length it saw');
 });
 t('no message ever claims a key is expired -- that is a different fault', () => {
-  for (const v of ['AQ.abc', 'ya29.abc', 'sk-or-v1-abc', 'hunter2', '']) {
+  for (const v of ['ya29.abc', 'sk-or-v1-abc', 'hunter2', '']) {
     const r = describeGeminiKeyShape(v);
     if (/expired/i.test(r.why)) throw new Error('claimed expiry for: ' + v);
   }

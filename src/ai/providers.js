@@ -35,7 +35,30 @@ export function toGeminiParts(content){
   });
 }
 
-export async function callGeminiAPI(systemPrompt, content){
+/**
+ * How long Google says to wait, in ms, or null.
+ *
+ * A 429 carries a RetryInfo detail with the exact delay ("retryDelay":
+ * "1.719814202s"), and the message repeats it. Honouring the number the
+ * server gave beats any backoff curve we could invent: too short and the
+ * retry is refused as well, too long and a scan sits idle for no reason.
+ */
+export function retryAfterMs(data, headers){
+  const details = (data && data.error && data.error.details) || [];
+  for(const d of details){
+    const v = d && (d.retryDelay || d.retry_delay);
+    const m = /^([\d.]+)s$/.exec(String(v || ''));
+    if(m) return Math.ceil(parseFloat(m[1]) * 1000);
+  }
+  const msg = (data && data.error && data.error.message) || '';
+  const inline = /retry in ([\d.]+)\s*s/i.exec(msg);
+  if(inline) return Math.ceil(parseFloat(inline[1]) * 1000);
+  const header = headers && typeof headers.get === 'function' && headers.get('retry-after');
+  if(header && /^\d+$/.test(header.trim())) return Number(header.trim()) * 1000;
+  return null;
+}
+
+async function callGeminiOnce(systemPrompt, content){
   const apiKey = getApiKey();
   if(!apiKey) throw new Error('NO_API_KEY');
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
@@ -51,11 +74,41 @@ export async function callGeminiAPI(systemPrompt, content){
   try{ data = JSON.parse(raw); }catch(e){ throw new Error('Unexpected response from Gemini (not JSON). Please try again.'); }
   if(!response.ok){
     const apiMsg = (data && data.error && data.error.message) ? data.error.message : `Request failed (${response.status})`;
-    throw new Error(apiMsg);
+    const err = new Error(apiMsg);
+    err.status = response.status;
+    // Carried so the retry loop can wait exactly as long as told to.
+    if(response.status === 429) err.retryAfterMs = retryAfterMs(data, response.headers);
+    throw err;
   }
   const candidate = data && data.candidates && data.candidates[0];
   const parts = candidate && candidate.content && candidate.content.parts;
   return parts ? parts.map(p=>p.text||'').filter(Boolean).join('\n') : '';
+}
+
+/**
+ * Gemini had no retry at all, which made the free tier's per-minute cap
+ * fatal to a scan rather than a short pause: one 429 and the pass was
+ * lost. A quota error is the most retryable failure there is -- the
+ * server even says how long to wait -- so it waits and tries again.
+ * A rejected key or a missing model is not retried, since neither
+ * resolves itself and retrying only delays the real message.
+ */
+export async function callGeminiAPI(systemPrompt, content){
+  const MAX_ATTEMPTS = 4;
+  let lastErr;
+  for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
+    try {
+      return await callGeminiOnce(systemPrompt, content);
+    } catch (err) {
+      lastErr = err;
+      if(err.message === 'NO_API_KEY' || err.status !== 429 || attempt === MAX_ATTEMPTS) throw err;
+      // Google's own number, plus a little, and never less than a second.
+      const wait = Math.max(1000, (err.retryAfterMs || 2000 * attempt) + 250);
+      console.warn(`Gemini rate-limited; waiting ${wait}ms before attempt ${attempt + 1}`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+  throw lastErr;
 }
 
 export function toOpenRouterContent(content){

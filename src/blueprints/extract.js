@@ -165,16 +165,25 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
   const pairs = pageOfBlocks(contentBlocks);
   const allPages = pairs.map(p => p.page);
 
-  // Preliminary, cheap pass: what kind of page is each one? Its answer
-  // decides which pages the other three passes are shown.
+  // Preliminary pass: what kind of page is each one? Its answer decides
+  // which pages the other three passes are shown, so on a multi-sheet set
+  // it pays for itself by shrinking the other uploads.
+  //
+  // Skipped entirely for a single page, where it cannot change anything:
+  // every role falls back to "the only page there is". That is a quarter
+  // of the scan's requests saved on the commonest case, and requests are
+  // the scarce thing -- the free tier caps them per minute, and a scan
+  // that trips the cap waits rather than finishing.
   let pageClassification = null;
-  try {
-    const classifyText = await callClaudeAPI(buildPageClassificationPrompt(),
-      [...contentBlocks, {type:'text', text:'Classify each page.'}]);
-    pageClassification = parseJsonReply(classifyText, 'page classification').parsed;
-  } catch (e) {
-    console.error('page classification failed -- continuing without it', e);
-    pageClassification = null;   // pagesByRole/buildSpecPrompt both tolerate null
+  if(allPages.length > 1){
+    try {
+      const classifyText = await callClaudeAPI(buildPageClassificationPrompt(),
+        [...contentBlocks, {type:'text', text:'Classify each page.'}]);
+      pageClassification = parseJsonReply(classifyText, 'page classification').parsed;
+    } catch (e) {
+      console.error('page classification failed -- continuing without it', e);
+      pageClassification = null;   // pagesByRole/buildSpecPrompt both tolerate null
+    }
   }
   const roles = pagesByRole(pageClassification, allPages);
 

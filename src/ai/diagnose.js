@@ -60,8 +60,8 @@ export function describeGeminiKeyShape(key){
   const k = (key || '').trim();
   if(!k) return { ok: false, why: 'No Gemini key is saved on this device.' };
   if(/^AIza[\w-]{35}$/.test(k)) return { ok: true, why: 'Looks like a Gemini API key (AIza + 35 characters).' };
+  if(/^AQ\./.test(k)) return { ok: true, why: 'An AI Studio key beginning "AQ." -- Google accepts these on this endpoint.' };
   if(/^AIza/.test(k)) return { ok: false, why: `Starts with AIza but is ${k.length} characters; a Gemini API key is 39. Check for a truncated or double-pasted value.` };
-  if(/^AQ\./.test(k)) return { ok: false, why: 'This is an AI Studio ephemeral token (starts "AQ."), not a Gemini API key. Those only work with the Live API and are rejected here. Get a key from aistudio.google.com/apikey -- it will start with "AIza".' };
   if(/^ya29\./.test(k)) return { ok: false, why: 'This is an OAuth access token (starts "ya29."), not an API key. Get a key from aistudio.google.com/apikey -- it will start with "AIza".' };
   if(/^sk-or-/.test(k)) return { ok: false, why: 'This is an OpenRouter key (starts "sk-or-"), saved in the Gemini field. Either switch the provider to OpenRouter, or paste a Google key here.' };
   if(/^sk-/.test(k)) return { ok: false, why: 'This looks like an OpenAI-style key, not a Google one. Get a key from aistudio.google.com/apikey -- it will start with "AIza".' };
@@ -73,8 +73,10 @@ async function diagnoseGemini(){
   const key = getApiKey();
 
   const shape = describeGeminiKeyShape(key);
-  steps.push(step('Key format', shape.ok, shape.why));
-  if(!key) return { provider: 'Google Gemini', steps, models: [] };
+  if(!key){
+    steps.push(step('Key format', false, shape.why));
+    return { provider: 'Google Gemini', steps, models: [] };
+  }
 
   // Listing models proves the key independently of the model name, so a
   // rejected key and a model that does not exist stop looking alike.
@@ -86,6 +88,7 @@ async function diagnoseGemini(){
       const msg = providerMessage(json, text, res.status);
       const reason = json && json.error && json.error.status;
       const isWrongType = res.status === 401 || /Expected OAuth 2|unregistered callers/i.test(msg);
+      if(!shape.ok) steps.push(step('Key format', false, shape.why));
       steps.push(step('Key accepted by Google', false,
         isWrongType
           ? 'Google got a credential but not one it accepts here -- this is the signature of the wrong KIND of key, not a wrong or expired key. A Gemini API key from aistudio.google.com/apikey (starting "AIza") is what this endpoint wants.'
@@ -98,6 +101,9 @@ async function diagnoseGemini(){
     models = ((json && json.models) || [])
       .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
       .map(m => String(m.name || '').replace(/^models\//, ''));
+    // Google accepting the key settles the format question, whatever the
+    // shape rule above thinks. Reporting a format failure next to "40
+    // models available" sends people to replace a key that works.
     steps.push(step('Key accepted by Google', true, `${models.length} usable models available to this key.`));
   } catch (e) {
     steps.push(step('Reach Google', false,
@@ -120,10 +126,18 @@ async function diagnoseGemini(){
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ready' }] }] })
       });
       const { json, text } = await readJson(res);
+      const msg = providerMessage(json, text, res.status);
+      // A quota error is not a broken setup and must not read like one:
+      // everything above it passed, and the fix is time, not a new key.
+      const quota = res.status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(msg);
+      const cap = /limit:\s*(\d+)/i.exec(msg);
       steps.push(res.ok
         ? step('A real request works', true, 'Google answered a test prompt.')
-        : step('A real request works', false, 'The key and model are fine but the call was refused.',
-               `HTTP ${res.status} -- ${providerMessage(json, text, res.status)}`));
+        : step('A real request works', false,
+               quota
+                 ? `Nothing is wrong with the key or the model -- this account is simply out of free-tier requests for the moment${cap ? ` (cap: ${cap[1]} per minute)` : ''}. A scan spends three or four, and testing spends two. Wait a minute and try again, scan fewer pages at once, or switch to OpenRouter in Settings. Scans now wait and retry on their own, so this is a pause rather than a failure.`
+                 : 'The key and model are fine but the call was refused.',
+               `HTTP ${res.status} -- ${msg}`));
     } catch (e) {
       steps.push(step('A real request works', false, 'The request never completed.', String(e && e.message || e)));
     }
