@@ -28,6 +28,9 @@ export const TRANSITION = {
 // may only advance one stage at a time. Backward moves are always allowed
 // (correcting a mistake must never be blocked). Both directions are
 // validated here -- there is no unchecked path.
+/** Stages that mean "this work is signed off", which a trainee may not do. */
+export const SIGNOFF_STAGES = ['qc', 'complete'];
+
 export function validateStageTransition(job, toStageId, opts){
   opts = opts || {};
   if(!job) return { allowed:false, reason:'Job not found.', code:TRANSITION.NO_JOB };
@@ -40,6 +43,17 @@ export function validateStageTransition(job, toStageId, opts){
 
   // Backward / corrective moves: always permitted.
   if(toIdx < fromIdx) return { allowed:true, reason:null, code:TRANSITION.OK };
+
+  // Sign-off is an experience gate, not a checklist one. The caller passes
+  // the role in (rather than this module reading it) so this stays pure and
+  // testable; enforce_stage_transition() in triggers.sql is the real guard.
+  if(opts.role === 'assembler_b' && SIGNOFF_STAGES.includes(toStageId)){
+    return {
+      allowed:false,
+      code:TRANSITION.ROLE_DENIED,
+      reason:`Trainees can't sign a job into ${stageLabel(toStageId)}. Ask an experienced assembler or the lead.`
+    };
+  }
 
   // Forward moves may not skip stages.
   if(toIdx > fromIdx + 1){

@@ -4,7 +4,7 @@ import { getAiProvider, getApiKey, getOpenRouterKey, getOpenRouterModel, setApiK
 import { getUserName, setUserName } from '../auth/identity.js';
 import { AUTH_ENABLED, currentUser, signOut } from '../auth/authService.js';
 import { getCachedProfile } from '../auth/profileService.js';
-import { isAdmin } from '../auth/permissions.js';
+import { isAdmin, roleLabel } from '../auth/permissions.js';
 import { supabaseReady } from '../db/config.js';
 import { closeModal, openModal } from './components/modal.js';
 import { showToast } from './components/toast.js';
@@ -19,7 +19,7 @@ function accountSectionHtml(){
     <div class="section-title" style="margin-top:0;">Account</div>
     <div class="bp-hint" style="margin-bottom:10px;">
       Signed in as <b>${escapeHtml(profile ? profile.full_name : (user ? user.email : 'Unknown'))}</b>
-      ${profile ? ` &middot; role: ${escapeHtml(profile.role)}` : ''}.
+      ${profile ? ` &middot; ${escapeHtml(roleLabel(profile.role))}` : ''}.
     </div>
     <div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="account-sign-out">Sign Out</button></div>
   `;
@@ -124,22 +124,14 @@ export function settingsModalHtml(){
     </div>
 
     ${AUTH_ENABLED && isAdmin() ? `
-    <div class="section-title">Team</div>
+    <div class="section-title">Admin</div>
     <div class="bp-hint" style="margin-bottom:10px;">
-      Set what each person can do, and switch off accounts for people who have left.
+      The team and what each person can do, the shop access code, a full history of what changed and who
+      changed it, and the diagnostic panels.
     </div>
     <div class="fab-row">
-      <button type="button" class="btn btn-outline btn-block" data-action="open-team">Manage Team</button>
+      <button type="button" class="btn btn-primary btn-block" data-action="open-admin">Open Admin Dashboard</button>
     </div>` : ''}
-
-    <div class="section-title">Data Migration</div>
-    <div class="bp-hint" style="margin-bottom:10px;">
-      Parity verification and cutover controls for the relational database migration.
-      Read-only checks -- running them changes nothing.
-    </div>
-    <div class="fab-row">
-      <button type="button" class="btn btn-outline btn-block" data-action="open-migration">Open Migration Diagnostics</button>
-    </div>
 
     <div class="section-title">System Health</div>
     <div class="fab-row">

@@ -9,6 +9,7 @@
 // through here, and it refuses anything validateStageTransition() denies.
 import { requestRender as render } from '../app/bus.js';
 import { currentActorName } from '../auth/authService.js';
+import { currentRole } from '../auth/permissions.js';
 import { logActivity, persistJobs } from '../db/repository.js';
 import { STAGES, STAGE_DEFAULT_PERCENT, stageLabel } from './procedure.js';
 import { openStageGateModal } from './stageGate.js';
@@ -23,7 +24,7 @@ export function moveJobToStage(jobId, stageId, opts){
   const job = state.jobs.find(j=>j.id===jobId);
   if(!job) return { allowed:false, code:TRANSITION.NO_JOB };
 
-  const verdict = validateStageTransition(job, stageId, opts);
+  const verdict = validateStageTransition(job, stageId, { ...opts, role: currentRole() });
   if(!verdict.allowed){
     // SAME_STAGE is a no-op, not an error worth interrupting anyone over.
     if(verdict.code !== TRANSITION.SAME_STAGE && !opts.silent){
