@@ -1,19 +1,20 @@
 /**
- * The drawing with numbered balloons on each part and leader lines out to
- * labels in the margins -- the way a shop drawing calls out its own
- * hardware, rather than labels dumped on top of the picture.
+ * The drawing, with an arrow pointing at each part and a leader line out
+ * to its name in the margin -- the way a shop drawing calls out its own
+ * hardware. The arrow does the pointing precisely so that nothing has to
+ * sit on top of the part you're trying to look at.
  *
- * Nothing here is invented: a part only gets a balloon if the scan could
+ * Nothing here is invented: a part only gets an arrow if the scan could
  * actually point at it on the page (see spec.js's normPosition), and the
- * sheet under the balloons is the scanned drawing itself, re-rendered
- * from the stored original.
+ * sheet under the arrows is the scanned drawing itself, re-rendered from
+ * the stored original.
  *
- * On a phone the margins are too narrow for labels, so they collapse to a
- * numbered legend under the drawing -- the balloons keep the numbers, so
- * it reads the same either way.
+ * On a phone the margins are too narrow for names, so they collapse to a
+ * numbered legend under the drawing and each arrow picks up a small
+ * number at its tail -- still clear of the part.
  */
 import { componentMapPageCache, ensureComponentMapPageLoaded } from './images.js';
-import { layoutCallouts, frameForParts, frameImageStyle, GUTTER, IMAGE_LEFT, IMAGE_WIDTH } from './calloutLayout.js';
+import { layoutCallouts, frameForParts, frameImageStyle, arrowHead, GUTTER, IMAGE_LEFT, IMAGE_WIDTH } from './calloutLayout.js';
 import { BOM_BUCKET_META, bomBucketFor } from '../models/stageMeta.js';
 import { escapeHtml } from '../utils/dom.js';
 
@@ -101,20 +102,51 @@ export function calloutDiagramHtml(job){
   const imageStyle = frame ? frameImageStyle(frame, cached.width, cached.height) : null;
   const cropped = !!imageStyle;
 
-  const { callouts, minHeightPx } = layoutCallouts(byPage[current], cropped ? frame : null);
+  const { callouts } = layoutCallouts(byPage[current], cropped ? frame : null);
 
+  // The margin leader stops where the arrow begins; the arrow itself
+  // covers the last stretch to the part.
   const leaders = callouts.map(c => `
     <line x1="${c.anchorX.toFixed(2)}" y1="${c.labelY.toFixed(2)}"
-          x2="${c.pointX.toFixed(2)}" y2="${c.pointY.toFixed(2)}"
+          x2="${c.tailX.toFixed(2)}" y2="${c.tailY.toFixed(2)}"
           stroke="${colorFor(c.component)}" stroke-width="1"
           vector-effect="non-scaling-stroke"/>`).join('');
 
-  // Balloons sit inside the sheet wrapper, so their coordinates are a
-  // plain fraction of the image and stay right when the phone layout
-  // widens the sheet to the full container.
-  const balloons = callouts.map(c => `
-    <span class="cv-balloon" style="left:${(c.inFrame.x*100).toFixed(2)}%;top:${(c.inFrame.y*100).toFixed(2)}%;background:${colorFor(c.component)};"
-          title="${escapeHtml(c.component.item)}">${c.number}</span>`).join('');
+  // Arrows go in an overlay sized to the sheet, with the sheet's real
+  // proportions in its viewBox, so the heads come out symmetrical. The
+  // margin leaders can't share it: they have to reach labels outside the
+  // sheet, so their SVG spans the whole diagram and is stretched to it --
+  // fine for a straight line, but it would shear an arrowhead.
+  const sheetAspect = imageStyle
+    ? imageStyle.aspectRatio
+    : (cached.width > 0 && cached.height > 0 ? cached.width / cached.height : null);
+  const vbW = 100 * (sheetAspect || 1);
+  const arrowSize = 3.2;
+  const arrows = sheetAspect ? callouts.map(c => {
+    const toX = c.inFrame.x * vbW, toY = c.inFrame.y * 100;
+    const fromX = c.tail.x * vbW, fromY = c.tail.y * 100;
+    const head = arrowHead(fromX, fromY, toX, toY, arrowSize);
+    const col = colorFor(c.component);
+    // Stop the shaft at the head's base so it can't poke through the tip.
+    const shaftEnd = head ? head[0] : [toX, toY];
+    return `
+      <line x1="${fromX.toFixed(2)}" y1="${fromY.toFixed(2)}"
+            x2="${(shaftEnd[0]).toFixed(2)}" y2="${(shaftEnd[1]).toFixed(2)}"
+            stroke="${col}" stroke-width="0.9" vector-effect="non-scaling-stroke"/>
+      ${head ? `<polygon points="${head.map(p => p.map(n => n.toFixed(2)).join(',')).join(' ')}" fill="${col}"/>` : ''}`;
+  }).join('') : '';
+
+  // The number rides at the arrow's tail, off the part. On a wide screen
+  // the margin label carries it instead and these stay hidden. Without a
+  // measured page there's no arrow to sit at the end of, so it falls back
+  // to marking the part directly -- a tag adrift from its part with
+  // nothing joining them would be worse than one sitting on it.
+  const tags = callouts.map(c => {
+    const at = sheetAspect ? c.tail : c.inFrame;
+    return `
+    <span class="cv-tag${sheetAspect ? '' : ' cv-tag-on-part'}" style="left:${(at.x*100).toFixed(2)}%;top:${(at.y*100).toFixed(2)}%;background:${colorFor(c.component)};"
+          title="${escapeHtml(c.component.item)}">${c.number}</span>`;
+  }).join('');
 
   const labels = callouts.map(c => `
     <div class="cv-label cv-label-${c.side}" style="top:${c.labelY.toFixed(2)}%;">
@@ -143,11 +175,12 @@ export function calloutDiagramHtml(job){
 
   return `
   ${tabs}
-  <div class="cv-diagram" style="--cv-gutter:${GUTTER}%;min-height:${minHeightPx}px;">
+  <div class="cv-diagram" style="--cv-gutter:${GUTTER}%;">
     <svg class="cv-leaders" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${leaders}</svg>
     <div class="cv-sheet-wrap" style="margin-left:${IMAGE_LEFT}%;width:${IMAGE_WIDTH}%;">
       ${sheet}
-      ${balloons}
+      <svg class="cv-arrows" viewBox="0 0 ${vbW.toFixed(2)} 100" preserveAspectRatio="none" aria-hidden="true">${arrows}</svg>
+      ${tags}
     </div>
     ${labels}
   </div>

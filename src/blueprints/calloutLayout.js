@@ -25,11 +25,10 @@ const BOTTOM = 96;
 // overlapped -- a cramped-but-readable diagram beats a tidy unreadable one.
 export const MIN_LABEL_GAP = 9;
 
-// ...but a percentage gap is only as tall as the sheet it's measured
-// against, and a wide, shallow drawing gives a short container in which
-// 9% is a few pixels. The diagram is held to at least this many pixels
-// per label on its busiest side so the margins always have room.
-export const PX_PER_LABEL = 38;
+// How far back from the part the arrow starts, as a fraction of the
+// drawing's width. The arrow is what points at the part; nothing sits on
+// top of it, so the thing you're trying to look at stays visible.
+export const TAIL_LEN = 0.07;
 
 // Two parts belong to the same row while the vertical step between them
 // stays under this. It's a gap between neighbours, not a fixed band:
@@ -105,6 +104,27 @@ export function frameForParts(components){
   return { x: x0, y: y0, w, h };
 }
 
+/**
+ * The three points of an arrowhead sitting at (toX,toY), pointing along
+ * the direction it was travelling. Caller works in a square-ish space
+ * (see the sheet overlay's viewBox) so the head comes out symmetrical
+ * rather than sheared.
+ */
+export function arrowHead(fromX, fromY, toX, toY, size){
+  const dx = toX - fromX, dy = toY - fromY;
+  const len = Math.hypot(dx, dy);
+  if(!len) return null;
+  const ux = dx / len, uy = dy / len;          // along the shaft
+  const px = -uy, py = ux;                     // across it
+  const baseX = toX - ux * size, baseY = toY - uy * size;
+  const half = size * 0.42;
+  return [
+    [toX, toY],
+    [baseX + px * half, baseY + py * half],
+    [baseX - px * half, baseY - py * half]
+  ];
+}
+
 /** A part's position expressed inside the frame instead of the page. */
 export function pointInFrame(position, frame){
   if(!frame) return { x: position.x, y: position.y };
@@ -132,7 +152,7 @@ export function frameImageStyle(frame, pageW, pageH){
  * @param frame       when cropping, the region being shown -- callout
  *                    points are then placed within it rather than the page.
  * @returns {{image:{left,width}, callouts:[...]}} callouts carry the
- *          1-based `number` shown in the balloon, the label box position,
+ *          1-based `number`, the label box position,
  *          and the point on the drawing the leader line runs to.
  */
 export function layoutCallouts(components, frame){
@@ -182,6 +202,13 @@ export function layoutCallouts(components, frame){
       // Where the part sits in what's actually on screen -- the cropped
       // frame when there is one, the whole page otherwise.
       const p = pointInFrame(c.position, frame);
+      // The arrow starts back towards this part's own margin and flies in
+      // at the part, so the leader line, the arrow and the label all run
+      // the same way instead of doubling back across the drawing.
+      const tail = {
+        x: Math.max(0.015, Math.min(0.985, p.x + (side === 'left' ? -TAIL_LEN : TAIL_LEN))),
+        y: p.y
+      };
       callouts.push({
         number: c._n,
         component: c,
@@ -189,21 +216,20 @@ export function layoutCallouts(components, frame){
         // Where the label box sits, and the edge of it the line leaves from.
         labelY: ys[i],
         anchorX: side === 'left' ? GUTTER : 100 - GUTTER,
-        // The point on the drawing itself.
+        // The point on the drawing itself, and where its arrow starts --
+        // both as a fraction of the drawing, for the overlay that sits on
+        // it, plus container-space copies for the margin leader.
         inFrame: p,
+        tail,
         pointX: IMAGE_LEFT + p.x * IMAGE_WIDTH,
-        pointY: p.y * 100
+        pointY: p.y * 100,
+        tailX: IMAGE_LEFT + tail.x * IMAGE_WIDTH,
+        tailY: tail.y * 100
       });
     });
   }
 
   callouts.sort((a, b) => a.number - b.number);
   ordered.forEach(c => { delete c._n; });
-  return {
-    image: { left: IMAGE_LEFT, width: IMAGE_WIDTH },
-    callouts,
-    // What the diagram has to be tall enough for: whichever margin is
-    // carrying more labels.
-    minHeightPx: Math.max(left.length, right.length) * PX_PER_LABEL
-  };
+  return { image: { left: IMAGE_LEFT, width: IMAGE_WIDTH }, callouts };
 }

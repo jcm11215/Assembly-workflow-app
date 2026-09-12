@@ -3,8 +3,8 @@
 // modes worth pinning down are overlapping labels, leader lines dragged
 // across the whole sheet, and numbering that doesn't match how a person
 // reads a drawing.
-const { layoutCallouts, frameForParts, pointInFrame, frameImageStyle,
-        GUTTER, IMAGE_LEFT, IMAGE_WIDTH, MIN_LABEL_GAP } =
+const { layoutCallouts, frameForParts, pointInFrame, frameImageStyle, arrowHead,
+        GUTTER, IMAGE_LEFT, IMAGE_WIDTH, MIN_LABEL_GAP, TAIL_LEN } =
   await import('../src/blueprints/calloutLayout.js');
 
 let pass = 0, fail = 0;
@@ -139,6 +139,60 @@ t('layout does not leave scratch fields on the caller\'s components', () => {
     const extra = Object.keys(c).filter(k => k !== 'item' && k !== 'position');
     if (extra.length) throw new Error('mutated input with: ' + extra.join(','));
   }
+});
+
+console.log('\n=== arrows: the line points at the part, nothing sits on it ===');
+t('the arrow starts back towards the part\'s own margin', () => {
+  const { callouts } = layoutCallouts([at(0.2, 0.5, 'L'), at(0.8, 0.5, 'R')]);
+  const l = callouts.find(c => c.component.item === 'L');
+  const r = callouts.find(c => c.component.item === 'R');
+  if (!(l.tail.x < l.inFrame.x)) throw new Error('left-hand arrow should come from the left');
+  if (!(r.tail.x > r.inFrame.x)) throw new Error('right-hand arrow should come from the right');
+});
+t('the arrow flies the same way the leader line arrives', () => {
+  // Leader comes in from the margin, so the tail must sit between the
+  // margin and the part -- otherwise the arrow doubles back on itself.
+  for (const c of layoutCallouts([at(0.2, 0.4), at(0.75, 0.6)]).callouts) {
+    const towardMargin = c.side === 'left' ? c.tail.x <= c.inFrame.x : c.tail.x >= c.inFrame.x;
+    if (!towardMargin) throw new Error('arrow doubles back at ' + c.number);
+  }
+});
+t('a tail never leaves the drawing, even for a part on the edge', () => {
+  for (const c of layoutCallouts([at(0.01, 0.5), at(0.99, 0.5), at(0, 0.2), at(1, 0.8)]).callouts) {
+    if (c.tail.x < 0 || c.tail.x > 1) throw new Error('tail off the sheet: ' + c.tail.x);
+  }
+});
+t('the margin leader stops at the tail, leaving the last stretch to the arrow', () => {
+  const { callouts } = layoutCallouts([at(0.3, 0.5), at(0.7, 0.5)]);
+  for (const c of callouts) {
+    if (Math.abs(c.tailX - (IMAGE_LEFT + c.tail.x * IMAGE_WIDTH)) > 1e-9) throw new Error('tailX mismatch');
+    if (c.tailX === c.pointX) throw new Error('leader runs all the way onto the part');
+  }
+});
+
+console.log('\n=== arrowhead geometry ===');
+t('the head sits at the target, pointing along the shaft', () => {
+  const h = arrowHead(0, 0, 10, 0, 2);
+  if (h[0][0] !== 10 || h[0][1] !== 0) throw new Error('tip is not at the target');
+  // The other two corners trail behind the tip.
+  if (!(h[1][0] < 10 && h[2][0] < 10)) throw new Error('head is pointing backwards');
+});
+t('it is symmetrical about the shaft', () => {
+  const h = arrowHead(0, 0, 0, 10, 2);          // straight down
+  if (Math.abs((h[1][0] + h[2][0]) / 2 - h[0][0]) > 1e-9) throw new Error('lopsided head');
+});
+t('it turns with the line', () => {
+  const flat = arrowHead(0, 0, 10, 0, 2);
+  const diag = arrowHead(0, 0, 10, 10, 2);
+  if (Math.abs(flat[1][1] - diag[1][1]) < 1e-6) throw new Error('head did not rotate');
+});
+t('the head is the size asked for', () => {
+  const h = arrowHead(0, 0, 10, 0, 3);
+  const backOfHead = (h[1][0] + h[2][0]) / 2;
+  if (Math.abs((10 - backOfHead) - 3) > 1e-9) throw new Error('got length ' + (10 - backOfHead));
+});
+t('a zero-length shaft has no head rather than a NaN one', () => {
+  if (arrowHead(5, 5, 5, 5, 2) !== null) throw new Error('expected null');
 });
 
 console.log('\n=== framing: crop the sheet down to the machine ===');
