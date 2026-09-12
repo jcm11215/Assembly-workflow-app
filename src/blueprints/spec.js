@@ -138,6 +138,26 @@ function normPosition(p){
   return { x, y };
 }
 
+/** The drawing's item/find number, as a string key. Not a quantity and
+ *  not an index -- just the number printed in the table's first column,
+ *  which the balloons on the views repeat. */
+function normBalloon(v){
+  if(v == null || v === '') return null;
+  const n = Number(String(v).trim());
+  return isFinite(n) ? String(Math.trunc(n)) : String(v).trim() || null;
+}
+
+/** The raw list, wherever the reply put it. The parts-list pass returns
+ *  "parts"; a bare array and the older single-call "components" shape are
+ *  both still accepted so neither becomes a silent zero. */
+function rawComponentList(parsed){
+  if(Array.isArray(parsed)) return parsed;
+  if(!parsed || typeof parsed !== 'object') return [];
+  if(Array.isArray(parsed.parts)) return parsed.parts;
+  if(Array.isArray(parsed.components)) return parsed.components;
+  return [];
+}
+
 // The shop's component list -- the only part types a scan keeps: drive,
 // motor, reducer, seal, gasket, bearing, hanger, coupling shaft, tail
 // shaft, drive shaft, auger, coupling bolts, UHMW. Everything else
@@ -215,7 +235,7 @@ function isWantedComponent(c){
  * watching at the time.
  */
 export function normalizeComponentsDetailed(parsed){
-  const raw = (Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.components) ? parsed.components : []))
+  const raw = rawComponentList(parsed)
     .map(withDrawnName)
     .map(nameBareShaft);
   const dropped = raw.filter(c => c && !isWantedComponent(c));
@@ -251,6 +271,10 @@ export function normalizeComponentsDetailed(parsed){
         ? c.extraction_method : 'inferred',
       confidence: (c && c.confidence!=null && isFinite(Number(c.confidence)))
         ? Math.min(1, Math.max(0, Number(c.confidence))) : 0.5,
+      // The drawing's item/find number. Kept because it is what ties this
+      // row to the balloons on the assembly view -- see scanJoin.js.
+      balloon: normBalloon(c && c.balloon),
+      part_number: (c && c.part_number) ? String(c.part_number) : '',
       position: normPosition(c && c.position)
     };
   });

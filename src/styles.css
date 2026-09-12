@@ -682,6 +682,10 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
   font-size:12px;color:var(--text-dim);margin-top:3px;letter-spacing:.01em;
   border-left:2px solid var(--steel-600);padding-left:7px;
 }
+.bom-partno{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11px;color:var(--text-faint);margin-top:3px;letter-spacing:.02em;
+}
 .bom-qty{font-family:var(--font-display);font-size:13px;color:var(--text-faint);margin-top:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
 .bp-hint{font-size:12px;color:var(--text-faint);margin-top:6px;line-height:1.4;}
 .bp-preview-img{cursor:zoom-in;}

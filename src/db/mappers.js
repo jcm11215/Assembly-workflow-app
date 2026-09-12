@@ -171,6 +171,12 @@ export function rowToComponent(row){
     extraction_method: row.extraction_method || 'inferred',
     confidence: row.confidence != null ? Number(row.confidence) : null,
     sortOrder: row.sort_order ?? 0,
+    // The drawing's item/find number, and its part number where the
+    // parts table carries one. The item number is the join key the scan
+    // matches balloons on; both are also how an assembler cross-checks a
+    // part against the paper drawing.
+    balloon: row.balloon || null,
+    part_number: row.part_number || '',
     position: (row.position_x != null && row.position_y != null)
       ? { x: Number(row.position_x), y: Number(row.position_y) } : null
   };
@@ -190,6 +196,8 @@ export function componentToRow(c, blueprintId){
     extraction_method: c.extraction_method || 'inferred',
     confidence: c.confidence ?? null,
     sort_order: c.sortOrder ?? 0,
+    balloon: c.balloon || null,
+    part_number: c.part_number || null,
     position_x: c.position ? c.position.x : null,
     position_y: c.position ? c.position.y : null
   };

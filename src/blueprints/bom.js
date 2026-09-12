@@ -26,7 +26,19 @@ function drawnLineHtml(c){
   return `<div class="bom-drawn" title="Exactly as written on the drawing">${escapeHtml(drawn)}</div>`;
 }
 
-function componentRowHtml(c, bucket, idx, total, editing){
+/**
+ * "Listed in the parts table, but not drawn on any view."
+ *
+ * Only shown when some other part on this scan DID get located, since
+ * that is what makes this one's absence mean something. Flagging every
+ * row on a scan that placed nothing would say nothing.
+ */
+function notOnDrawingHtml(c, anyPlaced){
+  if(!anyPlaced || c.position || c.extraction_method === 'manual') return '';
+  return `<span class="chip-tiny" title="This part is in the parts list but isn't called out on any view, so it has no arrow on the diagram">not shown on the drawing</span>`;
+}
+
+function componentRowHtml(c, bucket, idx, total, editing, anyPlaced){
   const editControls = editing ? `
     <div class="bom-row-controls">
       <button type="button" class="bom-row-btn" data-action="bom-move-up" data-component-id="${c.id}" ${idx===0?'disabled':''} aria-label="Move up">&#8593;</button>
@@ -48,9 +60,10 @@ function componentRowHtml(c, bucket, idx, total, editing){
   return `
     <div class="bom-row${editing?' bom-row-editing':''}${tip?' bom-row-tip':''}"${tip?` data-tip-group="${escapeHtml(tipGroup)}"`:''}>
       <div class="bom-row-main">
-        <div class="bom-item">${escapeHtml(c.item)} ${manualTag}</div>
+        <div class="bom-item">${escapeHtml(c.item)} ${manualTag} ${notOnDrawingHtml(c, anyPlaced)}</div>
         ${drawnLineHtml(c)}
         ${c.specification ? `<div class="bom-spec">${escapeHtml(c.specification)}</div>` : ''}
+        ${c.part_number ? `<div class="bom-partno" title="Part number from the drawing's parts list">PN ${escapeHtml(c.part_number)}</div>` : ''}
         <div class="bom-qty">Qty: ${c.quantity!=null ? escapeHtml(String(c.quantity)) : '--'}</div>
         ${categorySelect}
       </div>
@@ -72,6 +85,7 @@ function addComponentFormHtml(bucket, blueprintId){
 export function bomListHtml(job){
   if((!job.billOfMaterials || !job.billOfMaterials.length) && !state.bomEditing) return '';
   const editing = !!state.bomEditing;
+  const anyPlaced = (job.billOfMaterials||[]).some(c => c && c.position);
   const groups = {};
   (job.billOfMaterials||[]).forEach(c=>{
     const b = bomBucketFor(c);
@@ -81,7 +95,7 @@ export function bomListHtml(job){
   const sections = bucketsToShow.map(b=>{
     const meta = BOM_BUCKET_META[b];
     const items = groups[b] || [];
-    const rows = items.map((c,i)=>componentRowHtml(c, b, i, items.length, editing)).join('');
+    const rows = items.map((c,i)=>componentRowHtml(c, b, i, items.length, editing, anyPlaced)).join('');
     return `
       <div class="bom-group-head"><span class="model-swatch" style="background:${meta.color};"></span>${escapeHtml(meta.label)} <span class="checklist-badge">${items.length}</span></div>
       <div class="bom-list">${rows || (editing?'<div class="bp-hint" style="margin:4px 0;">Nothing here yet.</div>':'')}</div>

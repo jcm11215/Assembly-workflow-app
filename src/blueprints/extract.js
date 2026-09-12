@@ -14,7 +14,8 @@ import { bomListHtml } from './bom.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { blueprintImageCache } from './images.js';
 import { MAX_PDF_PAGES, fileToBase64Raw, fileToImageBase64Resized, parsePageSelection, pdfFileToImages, shrinkBase64Image } from './pdf.js';
-import { buildPageClassificationPrompt, buildSpecPrompt } from './prompt.js';
+import { buildCalloutPrompt, buildPageClassificationPrompt, buildPartsListPrompt, buildSpecPrompt, pagesByRole } from './prompt.js';
+import { joinPartsAndCallouts, resolveLocations } from './scanJoin.js';
 import {
   normalizeComponentsDetailed, normalizeSpec, validateExtraction,
   computeAggregateConfidence, determineExtractionStatus
@@ -28,48 +29,141 @@ import { showToast } from '../ui/components/toast.js';
 import { escapeHtml } from '../utils/dom.js';
 import { uid } from '../utils/id.js';
 
-/** Shared by both extraction entry points: images in, classification +
- *  spec + components + confidence + status decision out. No DB writes --
- *  callers decide how and when to persist. */
+/** Strips fences a model adds despite being asked not to, then parses.
+ *  Never throws: a pass that came back unreadable reports why and the
+ *  scan carries on with what the other passes found. */
+function parseJsonReply(text, label){
+  const cleaned = String(text || '').trim()
+    .replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+  try {
+    return { parsed: JSON.parse(cleaned), parseError: null };
+  } catch (e) {
+    console.error(`${label}: reply did not parse as JSON`, e, cleaned.slice(0, 600));
+    return {
+      parsed: {},
+      parseError: {
+        pass: label,
+        message: e.message,
+        replyLength: cleaned.length,
+        head: cleaned.slice(0, 200),
+        tail: cleaned.slice(-200)        // a truncated reply shows up here
+      }
+    };
+  }
+}
+
+/** One pass: prompt in, parsed JSON out. A pass that fails outright is
+ *  recorded and returns {} rather than taking the whole scan down with
+ *  it -- three narrow passes mean two good ones are still worth having. */
+async function runPass(label, systemPrompt, blocks, instruction){
+  try {
+    const text = await callClaudeAPI(systemPrompt, [...blocks, {type:'text', text:instruction}]);
+    return { label, ...parseJsonReply(text, label) };
+  } catch (e) {
+    console.error(`${label}: the call itself failed`, e);
+    return { label, parsed: {}, parseError: { pass: label, message: String(e && e.message || e), failed: true } };
+  }
+}
+
+/** Which sheet each image block belongs to. contentBlocksFor labels PDF
+ *  pages with their real sheet number; a single uploaded image is page 1. */
+export function pageOfBlocks(contentBlocks){
+  const pairs = [];
+  let pending = null;
+  for(const b of contentBlocks){
+    if(b.type === 'text'){
+      const m = /PDF page (\d+)/.exec(b.text || '');
+      pending = m ? { page: Number(m[1]), blocks: [b] } : null;
+      continue;
+    }
+    if(b.type !== 'image') continue;
+    if(pending){ pending.blocks.push(b); pairs.push(pending); pending = null; }
+    else pairs.push({ page: pairs.length + 1, blocks: [b] });
+  }
+  return pairs;
+}
+
+/** The subset of the upload a pass needs to see. Fewer pages per pass is
+ *  most of why this is both quicker and more accurate: the parts table
+ *  pass isn't distracted by six view sheets, and the callout pass isn't
+ *  reading a table. Falls back to everything rather than nothing when
+ *  the wanted pages aren't identifiable. */
+export function blocksForPages(pairs, pages){
+  const want = new Set((pages || []).map(Number));
+  const kept = pairs.filter(p => want.has(p.page)).flatMap(p => p.blocks);
+  return kept.length ? kept : pairs.flatMap(p => p.blocks);
+}
+
+/**
+ * Shared by both extraction entry points: images in, spec + components +
+ * confidence + status decision out. No DB writes -- callers decide how
+ * and when to persist.
+ *
+ * Four passes rather than one call, because one call did three unrelated
+ * jobs at once and did all of them worse for it: sixty dimension objects,
+ * a parts table, and a set of screen coordinates, in a single reply long
+ * enough that a truncation came back looking like a drawing with no
+ * hardware on it.
+ *
+ *   1. classify  -- what kind of page is each one (cheap, and the other
+ *                   passes need it to know which pages to read)
+ *   2. parts     -- the parts table, off the BOM sheets \
+ *   3. callouts  -- balloon numbers and positions, off  } in parallel
+ *                   the drawn views                     /
+ *   4. dimensions -- the engineering spec, across the set
+ *
+ * 2, 3 and 4 don't depend on each other, so they run concurrently: the
+ * scan now takes about as long as its slowest pass instead of the sum of
+ * all of them. Parts and callouts are then joined by item number in code
+ * (scanJoin.js), which is the other half of the accuracy win -- the model
+ * is never asked to do the matching it used to get wrong.
+ */
 async function runExtractionPipeline(contentBlocks, includeJobFields){
-  // Preliminary, cheap pass: what kind of page is each one? Its only
-  // purpose is to make the main prompt's instructions page-role-aware.
+  const pairs = pageOfBlocks(contentBlocks);
+  const allPages = pairs.map(p => p.page);
+
+  // Preliminary, cheap pass: what kind of page is each one? Its answer
+  // decides which pages the other three passes are shown.
   let pageClassification = null;
   try {
-    const classifyContent = [...contentBlocks, {type:'text', text:'Classify each page.'}];
-    let classifyText = await callClaudeAPI(buildPageClassificationPrompt(), classifyContent);
-    classifyText = classifyText.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
-    pageClassification = JSON.parse(classifyText);
+    const classifyText = await callClaudeAPI(buildPageClassificationPrompt(),
+      [...contentBlocks, {type:'text', text:'Classify each page.'}]);
+    pageClassification = parseJsonReply(classifyText, 'page classification').parsed;
   } catch (e) {
     console.error('page classification failed -- continuing without it', e);
-    pageClassification = null;   // buildSpecPrompt tolerates null; just loses the page-guide block
+    pageClassification = null;   // pagesByRole/buildSpecPrompt both tolerate null
   }
+  const roles = pagesByRole(pageClassification, allPages);
 
-  const systemPrompt = buildSpecPrompt(includeJobFields, pageClassification);
-  const content = [...contentBlocks, {type:'text', text:'Read this complete drawing set and return the unified engineering specification JSON.'}];
-  let text = await callClaudeAPI(systemPrompt, content);
-  text = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+  const [partsPass, calloutPass, dimsPass] = await Promise.all([
+    runPass('parts list', buildPartsListPrompt(), blocksForPages(pairs, roles.bom),
+      'Transcribe the parts list from these pages.'),
+    runPass('callouts', buildCalloutPrompt(), blocksForPages(pairs, roles.views),
+      'Report every balloon callout on these views and where its leader points.'),
+    runPass('dimensions', buildSpecPrompt(includeJobFields, pageClassification), contentBlocks,
+      'Read this complete drawing set and return the engineering specification JSON.')
+  ]);
 
-  // A parse failure used to be swallowed here, which made a truncated or
-  // fenced-wrong reply indistinguishable from a drawing with no hardware
-  // on it: zero components, no error, nothing recorded. Keep going -- a
-  // half-readable extraction still beats refusing outright -- but carry
-  // the reason out so the caller can record it.
-  let parsed = {}, parseError = null;
-  try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    parsed = {};
-    parseError = {
-      message: e.message,
-      replyLength: text.length,
-      head: text.slice(0, 200),
-      tail: text.slice(-200)          // truncation shows up here
-    };
-    console.error('extraction JSON did not parse', e, text.slice(0, 600));
-  }
+  // Whitelisted and normalized first, so the join only ever has to add
+  // location to parts that were going to be kept anyway.
+  const { components: tableParts, report: filterReport } = normalizeComponentsDetailed(partsPass.parsed);
+  const { components: placed, report: joinReport } = joinPartsAndCallouts(tableParts, calloutPass.parsed);
+  // A table row often doesn't say which end of the machine its part goes
+  // on. Settled here from the part's category and, for the genuinely
+  // ambiguous ones, from where its balloon sits relative to the drive end
+  // -- not by asking the model, which is where drive/tail mixups came
+  // from when one call did all of this at once.
+  const { components, report: locationReport } =
+    resolveLocations(placed, dimsPass.parsed.orientation);
 
-  const { components, report } = normalizeComponentsDetailed(parsed);
+  // The title-block fields live in the dimensions reply; the parts pass
+  // reads the drawing number off it too, and either will do.
+  const parsed = {
+    ...dimsPass.parsed,
+    drawing_number: dimsPass.parsed.drawing_number || partsPass.parsed.drawing_number || '',
+    components
+  };
+
   const spec = normalizeSpec(parsed);
   const validation = spec ? validateExtraction(spec, components) : null;
   const confidence = spec ? computeAggregateConfidence(spec, components) : 0;
@@ -80,9 +174,16 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
   return {
     parsed, spec, components, validation, confidence, decision,
     pageCount: contentBlocks.filter(b => b.type === 'image').length,
-    // Why a scan came back with nothing: the reply didn't parse, the AI
-    // listed no parts, or the whitelist rejected the ones it listed.
-    diagnostics: { ...report, parseError }
+    // Why a scan came back thin: a pass that didn't parse, an AI that
+    // listed nothing, a whitelist that rejected what it did list, or a
+    // parts table whose numbers never met a balloon.
+    diagnostics: {
+      ...filterReport,
+      ...joinReport,
+      ...locationReport,
+      pagesRead: { bom: roles.bom, views: roles.views, total: allPages.length },
+      parseError: [partsPass, calloutPass, dimsPass].map(p => p.parseError).filter(Boolean)
+    }
   };
 }
 
@@ -128,21 +229,32 @@ function pagesToScan(file){
 /**
  * Records why a scan came back thin, so "I scanned it and got nothing"
  * is answerable afterwards instead of needing a console that nobody had
- * open at the time. Only writes when there's something to explain --
- * a clean scan that kept everything it found says nothing.
+ * open at the time. Only writes when there's something to explain -- a
+ * clean scan that placed everything it found says nothing.
  */
-function recordScanDiagnostics(jobNumber, components, diagnostics){
-  if(!diagnostics) return;
-  const { parseError, returnedByAi, kept, positioned, droppedNames } = diagnostics;
-  if(components.length && !droppedNames.length && !parseError) return;
+function recordScanDiagnostics(jobNumber, components, d){
+  if(!d) return;
+  const failures = (d.parseError || []);
+  const worthSaying = !components.length || failures.length
+    || (d.droppedNames || []).length || (d.notVisible || []).length
+    || (d.unmatchedBalloons || []).length || (d.quantityMismatches || []).length;
+  if(!worthSaying) return;
+  const some = list => (list && list.length) ? list : undefined;
   logActivity('Blueprint scan diagnostics', {
     jobNumber,
-    reply: parseError ? 'did not parse as JSON' : 'parsed',
-    parseError: parseError || undefined,
-    partsListedByAi: returnedByAi,
-    partsKept: kept,
-    partsWithALocation: positioned,
-    rejectedByPartsWhitelist: droppedNames.length ? droppedNames : undefined
+    passesThatFailed: some(failures.map(f => f.pass)),
+    passErrors: some(failures),
+    pagesRead: d.pagesRead,
+    partsListedByAi: d.returnedByAi,
+    partsKept: d.kept,
+    partsPlacedOnDrawing: d.placed,
+    calloutsFound: d.calloutsFound,
+    rejectedByPartsWhitelist: some(d.droppedNames),
+    // Listed in the table but not drawn on a view -- normal, not a fault.
+    notVisibleOnDrawing: some(d.notVisible),
+    // Drawn but absent from the table: a missed row, or a misread balloon.
+    balloonsWithNoTableRow: some(d.unmatchedBalloons),
+    quantityDisagreements: some(d.quantityMismatches)
   }, null).catch(()=>{});
 }
 
