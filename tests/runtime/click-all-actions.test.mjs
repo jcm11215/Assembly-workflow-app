@@ -45,6 +45,7 @@ for(const action of [...actions].sort()){
   btn.setAttribute('data-part','trough');
   btn.setAttribute('data-prompt','test');
   btn.setAttribute('data-index','0');
+  btn.setAttribute('data-key','0-0');
   btn.setAttribute('data-provider','gemini');
   btn.setAttribute('data-proposal-id','none');
   const ev = { type:'click', target:{ closest:(sel)=> sel==='[data-action]'?btn:null, hasAttribute:()=>false }, preventDefault(){} };
