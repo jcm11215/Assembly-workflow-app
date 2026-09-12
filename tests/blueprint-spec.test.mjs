@@ -53,6 +53,31 @@ t('conflict overrides high confidence', M.determineExtractionStatus(0.97, { erro
 const goodSpec = M.normalizeSpec({ conveyorType: 'screw', overall: { overall_length: mkDim(480) }, screw: { screw_diameter: mkDim(20) } });
 t('validateSpec unchanged and still works standalone', M.validateSpec(goodSpec).ok === true);
 
+// item_as_drawn -- the drawing's own wording, kept verbatim next to the
+// normalized category name rather than replacing it.
+const drawn = M.normalizeComponents([
+  { item: 'Hanger Bearing', item_as_drawn: 'HNGR BRG ASSY 2-7/16', installation_location: 'hanger' },
+  { item: 'Bearing', item_as_drawn: '  FLG BRG, 2-7/16 BORE  ', installation_location: 'drive_end' },
+  { item: 'Gasket', installation_location: 'trough' },                       // model gave no verbatim wording
+  { item: 'Motor', item_as_drawn: '', installation_location: 'drive_end' }   // explicitly empty
+]);
+t('verbatim drawing wording is preserved exactly', drawn[0].item_as_drawn === 'HNGR BRG ASSY 2-7/16');
+t('category name is NOT overwritten by the drawing wording', drawn[0].item === 'Hanger Bearing');
+t('surrounding whitespace is trimmed but the wording is untouched', drawn[1].item_as_drawn === 'FLG BRG, 2-7/16 BORE');
+t('no verbatim wording falls back to the model item, not a guess', drawn[2].item_as_drawn === 'Gasket');
+t('empty verbatim wording falls back too', drawn[3].item_as_drawn === 'Motor');
+
+// A bare "SHAFT" is the case where the two names must not be conflated:
+// the category becomes Tail Shaft (from where it sits), but the drawing
+// still only says SHAFT, and that is what the assembler will be reading.
+const bareShaft = M.normalizeComponents([{ item: 'Shaft', installation_location: 'tail_end' }]);
+t('bare shaft is categorized as Tail Shaft', bareShaft[0].item === 'Tail Shaft');
+t('...but its drawn wording is still the bare "Shaft" the drawing had', bareShaft[0].item_as_drawn === 'Shaft');
+const bareShaftDrawn = M.normalizeComponents([
+  { item: 'Shaft', item_as_drawn: '1-1/2" DIA SHAFT, C1045', installation_location: 'tail_end' }
+]);
+t('an explicit drawn wording survives the bare-shaft rename', bareShaftDrawn[0].item_as_drawn === '1-1/2" DIA SHAFT, C1045' && bareShaftDrawn[0].item === 'Tail Shaft');
+
 // component position -- for the "where each part goes" map (pins on the
 // real scanned drawing, not a synthesized schematic). Null is a normal,
 // expected outcome (a BOM-table-only entry has nothing to point at), so

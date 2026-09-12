@@ -165,7 +165,9 @@ const WANTED_COMPONENT_RE = new RegExp([
 ].join('|'), 'i');
 
 // A bare "Shaft" doesn't say which one it is -- where it sits does, so
-// it's renamed to the specific shaft before the filter sees it.
+// it's renamed to the specific shaft before the filter sees it. Only
+// `item` (the category) is rewritten; item_as_drawn keeps saying "SHAFT"
+// because that is what the drawing says.
 const SHAFT_NAME_BY_LOCATION = { drive_end:'Drive Shaft', tail_end:'Tail Shaft', hanger:'Coupling Shaft', screw:'Coupling Shaft' };
 function nameBareShaft(c){
   if(!c || !/^\s*shafts?\s*$/i.test(c.item || '')) return c;
@@ -173,8 +175,24 @@ function nameBareShaft(c){
   return name ? { ...c, item: name } : c;
 }
 
+/**
+ * Pins down the part's name in the shop's own words before anything
+ * downstream rewrites `item`. Falls back to the model's own `item` only
+ * when the drawing carried no written description to copy -- and that
+ * fallback has to happen HERE, ahead of nameBareShaft(), or a bare
+ * "SHAFT" on the drawing would come back reading "Tail Shaft", which is
+ * our vocabulary, not the drawing's.
+ */
+function withDrawnName(c){
+  if(!c || typeof c !== 'object') return c;
+  const drawn = typeof c.item_as_drawn === 'string' ? c.item_as_drawn.trim() : '';
+  const fallback = typeof c.item === 'string' ? c.item.trim() : '';
+  return { ...c, item_as_drawn: drawn || fallback };
+}
+
 export function normalizeComponents(parsed){
   const raw = (Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.components) ? parsed.components : []))
+    .map(withDrawnName)
     .map(nameBareShaft);
   // Visibility into the filter: an empty component list is ambiguous
   // between "the AI found nothing" and "the whitelist rejected
@@ -196,6 +214,11 @@ export function normalizeComponents(parsed){
       ? c.installation_location : 'unknown';
     return {
       item: (c && c.item) ? String(c.item) : 'Unspecified item',
+      // The drawing's own wording, kept verbatim alongside the category
+      // name rather than replacing it -- "Hanger Bearing" is what groups
+      // and colours the part, "HNGR BRG ASSY 2-7/16" is what the
+      // assembler matches against the paper in front of them.
+      item_as_drawn: (c && c.item_as_drawn) ? String(c.item_as_drawn) : '',
       specification: (c && c.specification) ? String(c.specification) : '',
       quantity: (c && c.quantity!=null && c.quantity!=='') ? c.quantity : null,
       installation_location: location,

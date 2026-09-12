@@ -675,6 +675,13 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
 .bom-row{background:var(--plate);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
 .bom-item{font-weight:700;font-size:14px;}
 .bom-spec{font-size:13px;color:var(--text-dim);margin-top:2px;}
+/* The drawing's own wording. Monospaced and quoted so it reads as copied
+   text rather than one of our labels -- it should look like the paper. */
+.bom-drawn{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;color:var(--text-dim);margin-top:3px;letter-spacing:.01em;
+  border-left:2px solid var(--steel-600);padding-left:7px;
+}
 .bom-qty{font-family:var(--font-display);font-size:13px;color:var(--text-faint);margin-top:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
 .bp-hint{font-size:12px;color:var(--text-faint);margin-top:6px;line-height:1.4;}
 .bp-preview-img{cursor:zoom-in;}

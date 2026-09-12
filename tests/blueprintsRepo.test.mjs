@@ -80,10 +80,12 @@ t('no spec blob is recorded', savedRow.spec===undefined || savedRow.spec===null)
 
 console.log('\n=== component positions round-trip (component map) ===');
 const withPins = await repo.saveExtraction('job2', {components:[
-  {item:'Drive', stage:'drive', installation_location:'drive_end', source_page:1, position:{x:0.25, y:0.75}},
+  {item:'Drive', item_as_drawn:'SCREW CONV DRIVE, 3/4HP', stage:'drive', installation_location:'drive_end', source_page:1, position:{x:0.25, y:0.75}},
   {item:'Reducer', stage:'drive', installation_location:'drive_end', source_page:1, position:null}
 ]});
 const pinRows = COMPONENTS.filter(c=>c.blueprint_id===withPins.id);
+t('the drawing\'s own wording is persisted verbatim next to the category',
+  (await repo.listComponents(withPins.id)).some(c=>c.item==='Drive' && c.item_as_drawn==='SCREW CONV DRIVE, 3/4HP'));
 t('a pinned component stores its x/y', pinRows.some(c=>c.item==='Drive' && Number(c.position_x)===0.25 && Number(c.position_y)===0.75));
 t('an unpinned component stores nulls, not a guess', pinRows.some(c=>c.item==='Reducer' && c.position_x===null && c.position_y===null));
 

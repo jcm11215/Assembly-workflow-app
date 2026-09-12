@@ -69,7 +69,14 @@ export function componentMapHtml(job){
 
   const pins = byPage[current].map(c=>{
     const meta = BOM_BUCKET_META[bomBucketFor(c)] || BOM_BUCKET_META.other;
-    const title = `${c.item}${c.specification ? ' -- '+c.specification : ''}${c.quantity ? ' (x'+c.quantity+')' : ''}`;
+    // The pin itself stays the short category name (it has to fit on the
+    // drawing); the drawing's own wording rides along in the tooltip.
+    const drawn = (c.item_as_drawn || '').trim();
+    const title = [
+      drawn && drawn.toLowerCase() !== (c.item||'').toLowerCase() ? `${c.item} -- ${drawn}` : c.item,
+      c.specification || '',
+      c.quantity ? `x${c.quantity}` : ''
+    ].filter(Boolean).join(' · ');
     return `
     <div class="bp-pin" style="left:${(c.position.x*100).toFixed(2)}%;top:${(c.position.y*100).toFixed(2)}%;" title="${escapeHtml(title)}">
       <div class="bp-pin-dot" style="background:${meta.color};"></div>

@@ -161,6 +161,7 @@ export function rowToComponent(row){
   return {
     id: row.id || null,
     item: row.item,
+    item_as_drawn: row.item_as_drawn || '',
     specification: row.specification || '',
     quantity: row.quantity ?? null,
     stage: row.stage || 'other',
@@ -179,6 +180,7 @@ export function componentToRow(c, blueprintId){
   return {
     blueprint_id: blueprintId,
     item: c.item || 'Unspecified item',
+    item_as_drawn: c.item_as_drawn || null,
     specification: c.specification || '',
     quantity: c.quantity ?? null,
     stage: c.stage || 'other',

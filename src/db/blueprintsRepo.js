@@ -31,7 +31,7 @@ export async function getForJob(jobId){
 
 export async function listComponents(blueprintId){
   const rows = await db.select('blueprint_components',
-    'select=id,item,specification,quantity,stage,installation_location,source_page,' +
+    'select=id,item,item_as_drawn,specification,quantity,stage,installation_location,source_page,' +
     `source_callout,extraction_method,confidence,sort_order,position_x,position_y&blueprint_id=eq.${blueprintId}&order=sort_order.asc`);
   return rows.map(rowToComponent);
 }

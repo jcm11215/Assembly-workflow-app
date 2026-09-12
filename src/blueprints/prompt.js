@@ -89,7 +89,7 @@ ${includeJobFields ? '  "jobNumber": "<from title block, or \\"\\">",\n  "custom
   "belt": { "belt_width": {...}, "belt_thickness": {...} },
   "head": { "pulley": {"pulley_diameter": {...}, "pulley_width": {...}}, "shaft_diameter": {...}, "bearing_bore": {...} },
   "idlers": { "roller_diameter": {...}, "roller_width": {...}, "roller_spacing": {...}, "count": <integer or null> },
-  "components": [{"item": "<short name>", "specification": "<size/material/spec or \\"\\">", "quantity": <integer or null>, "installation_location": "drive_end"|"tail_end"|"trough"|"screw"|"hanger"|"other"|"unknown", "source_page": <page>, "source_callout": "<the exact text of the label/callout this came from, or \\"\\" if read from a table row with no label text>", "extraction_method": "bom_table"|"callout"|"detail_view"|"general_assembly"|"inferred", "confidence": <0..1>, "position": {"x": <0..1, fraction of the SOURCE PAGE image width, from the left edge>, "y": <0..1, fraction of that page's height, from the top edge>} or null}],
+  "components": [{"item": "<short name>", "item_as_drawn": "<the part's description EXACTLY as the drawing writes it, verbatim>", "specification": "<size/material/spec or \\"\\">", "quantity": <integer or null>, "installation_location": "drive_end"|"tail_end"|"trough"|"screw"|"hanger"|"other"|"unknown", "source_page": <page>, "source_callout": "<the exact text of the label/callout this came from, or \\"\\" if read from a table row with no label text>", "extraction_method": "bom_table"|"callout"|"detail_view"|"general_assembly"|"inferred", "confidence": <0..1>, "position": {"x": <0..1, fraction of the SOURCE PAGE image width, from the left edge>, "y": <0..1, fraction of that page's height, from the top edge>} or null}],
   "conflicts": [{"field": "<dimension name>", "detail": "<page X says A, page Y says B>"}],
   "notes": "<anything an assembler should know that the fields above don't capture, or \\"\\">"
 }
@@ -104,7 +104,12 @@ A shaft, bearing, coupling, or sprocket physically located on the drive-end side
 
 If a drawing has no motor/gearbox visible on any page (e.g. a driveless assembly, or the drive is on a separate sheet not provided), say so honestly in "notes" and mark drive-related fields not_found rather than guessing which end would have been the drive end.
 
-COMPONENTS LIST -- ONLY include these part types, nothing else. Use the name shown as the start of "item" (put sizes and model numbers in "specification"):
+COMPONENTS LIST -- every component carries TWO names, and they are not interchangeable:
+
+- "item_as_drawn" is the shop's own wording, copied VERBATIM: the BOM/parts-table description cell for that row, or the callout text pointing at the part. Keep the drawing's abbreviations, punctuation, spacing and capitalization exactly as printed ("FLG BRG 2-7/16 BORE", "HNGR BRG ASSY", "GEARMOTOR, 3/4HP"). Do NOT tidy it up, expand abbreviations, re-order words, or drop the size out of it. This is what the assembler will be matching against the paper drawing in front of them, so it has to read identically. If a part genuinely has no written description anywhere (you inferred it from a picture alone), use "".
+- "item" is the category name from the fixed list below, used to group and colour-code the part. This is the ONLY field you normalize.
+
+ONLY include these part types, nothing else. Use the name shown as the start of "item" (put sizes and model numbers in "specification"):
 - Drive (the drive unit itself, e.g. a shaft-mount or screw conveyor drive)
 - Motor
 - Reducer (gearbox)

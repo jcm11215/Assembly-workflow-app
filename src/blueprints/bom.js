@@ -13,6 +13,19 @@ import { escapeHtml } from '../utils/dom.js';
 import { state } from '../state/store.js';
 import { tipButtonHtml, tipForComponent, tipSlotHtml } from '../tips/partTips.js';
 
+/** The drawing's own wording for the part, under the category name.
+ *  Hidden when it would just repeat the category (a drawing that really
+ *  does say "GASKET" needs no second line saying so) or when there was
+ *  no written description to copy -- an older scan, or a hand-added part
+ *  that was never on a drawing. */
+function drawnLineHtml(c){
+  const drawn = (c.item_as_drawn || '').trim();
+  if(!drawn) return '';
+  const same = drawn.toLowerCase().replace(/\s+/g,' ') === (c.item || '').toLowerCase().replace(/\s+/g,' ');
+  if(same) return '';
+  return `<div class="bom-drawn" title="Exactly as written on the drawing">${escapeHtml(drawn)}</div>`;
+}
+
 function componentRowHtml(c, bucket, idx, total, editing){
   const editControls = editing ? `
     <div class="bom-row-controls">
@@ -36,6 +49,7 @@ function componentRowHtml(c, bucket, idx, total, editing){
     <div class="bom-row${editing?' bom-row-editing':''}${tip?' bom-row-tip':''}"${tip?` data-tip-group="${escapeHtml(tipGroup)}"`:''}>
       <div class="bom-row-main">
         <div class="bom-item">${escapeHtml(c.item)} ${manualTag}</div>
+        ${drawnLineHtml(c)}
         ${c.specification ? `<div class="bom-spec">${escapeHtml(c.specification)}</div>` : ''}
         <div class="bom-qty">Qty: ${c.quantity!=null ? escapeHtml(String(c.quantity)) : '--'}</div>
         ${categorySelect}
