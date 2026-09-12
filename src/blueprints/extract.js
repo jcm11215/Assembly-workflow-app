@@ -16,7 +16,7 @@ import { blueprintImageCache } from './images.js';
 import { MAX_PDF_PAGES, fileToBase64Raw, fileToImageBase64Resized, parsePageSelection, pdfFileToImages, shrinkBase64Image } from './pdf.js';
 import { buildPageClassificationPrompt, buildSpecPrompt } from './prompt.js';
 import {
-  normalizeComponents, normalizeSpec, validateExtraction,
+  normalizeComponentsDetailed, normalizeSpec, validateExtraction,
   computeAggregateConfidence, determineExtractionStatus
 } from './spec.js';
 import { logActivity, persistJobs } from '../db/repository.js';
@@ -50,10 +50,26 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
   let text = await callClaudeAPI(systemPrompt, content);
   text = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
 
-  let parsed = {};
-  try { parsed = JSON.parse(text); } catch (e) { parsed = {}; }
+  // A parse failure used to be swallowed here, which made a truncated or
+  // fenced-wrong reply indistinguishable from a drawing with no hardware
+  // on it: zero components, no error, nothing recorded. Keep going -- a
+  // half-readable extraction still beats refusing outright -- but carry
+  // the reason out so the caller can record it.
+  let parsed = {}, parseError = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    parsed = {};
+    parseError = {
+      message: e.message,
+      replyLength: text.length,
+      head: text.slice(0, 200),
+      tail: text.slice(-200)          // truncation shows up here
+    };
+    console.error('extraction JSON did not parse', e, text.slice(0, 600));
+  }
 
-  const components = normalizeComponents(parsed);
+  const { components, report } = normalizeComponentsDetailed(parsed);
   const spec = normalizeSpec(parsed);
   const validation = spec ? validateExtraction(spec, components) : null;
   const confidence = spec ? computeAggregateConfidence(spec, components) : 0;
@@ -63,7 +79,10 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
 
   return {
     parsed, spec, components, validation, confidence, decision,
-    pageCount: contentBlocks.filter(b => b.type === 'image').length
+    pageCount: contentBlocks.filter(b => b.type === 'image').length,
+    // Why a scan came back with nothing: the reply didn't parse, the AI
+    // listed no parts, or the whitelist rejected the ones it listed.
+    diagnostics: { ...report, parseError }
   };
 }
 
@@ -106,6 +125,27 @@ function pagesToScan(file){
   return parsePageSelection(input.value, total, MAX_PDF_PAGES);
 }
 
+/**
+ * Records why a scan came back thin, so "I scanned it and got nothing"
+ * is answerable afterwards instead of needing a console that nobody had
+ * open at the time. Only writes when there's something to explain --
+ * a clean scan that kept everything it found says nothing.
+ */
+function recordScanDiagnostics(jobNumber, components, diagnostics){
+  if(!diagnostics) return;
+  const { parseError, returnedByAi, kept, positioned, droppedNames } = diagnostics;
+  if(components.length && !droppedNames.length && !parseError) return;
+  logActivity('Blueprint scan diagnostics', {
+    jobNumber,
+    reply: parseError ? 'did not parse as JSON' : 'parsed',
+    parseError: parseError || undefined,
+    partsListedByAi: returnedByAi,
+    partsKept: kept,
+    partsWithALocation: positioned,
+    rejectedByPartsWhitelist: droppedNames.length ? droppedNames : undefined
+  }, null).catch(()=>{});
+}
+
 function statusToast(componentCount){
   if(componentCount === 0){
     return 'Scan finished but found no matching components. Only drives, motors, reducers, seals, gaskets, bearings, hangers, coupling/tail/drive shafts, augers, coupling bolts and UHMW are pulled in -- check the browser console for what was skipped, or add parts by hand via Blueprint > Edit.';
@@ -128,7 +168,8 @@ export async function extractComponents(jobId){
 
   try{
     const { contentBlocks, originalFile, thumbnail } = await contentBlocksFor(file, selection.pages);
-    const { spec, components, validation } = await runExtractionPipeline(contentBlocks, false);
+    const { spec, components, validation, diagnostics } = await runExtractionPipeline(contentBlocks, false);
+    recordScanDiagnostics(job.jobNumber, components, diagnostics);
     // spec/validation are used ABOVE (inside runExtractionPipeline, via
     // normalizeComponents/validateExtraction) to classify and cross-check
     // components correctly -- the drive/tail safety net depends on
@@ -190,7 +231,8 @@ export async function extractNewJobFromBlueprint(){
 
   try{
     const { contentBlocks, originalFile, thumbnail } = await contentBlocksFor(file, selection.pages);
-    const { parsed, components } = await runExtractionPipeline(contentBlocks, true);
+    const { parsed, components, diagnostics } = await runExtractionPipeline(contentBlocks, true);
+    recordScanDiagnostics('(new job)', components, diagnostics);
     // spec/validation (used inside runExtractionPipeline for classification
     // quality) are deliberately not kept here -- see extractComponents'
     // comment above for why.

@@ -69,14 +69,37 @@ function pageTabsHtml(job, pages, current){
 }
 
 /**
- * Returns '' when there is nothing to draw -- no scan, or a scan whose
- * parts all came off a BOM table with no location on the sheet.
+ * Why an empty diagram explains itself instead of rendering nothing.
+ *
+ * Silence here reads as a broken page: the section vanishes, and with it
+ * the "Show whole sheet" toggle that lives inside this output, so there
+ * is no way to tell a drawing with no callouts from a drawing that
+ * failed to draw. Say which of the two happened, and what to do about
+ * it.
+ */
+function noCalloutsHtml(job){
+  const scanned = (job.billOfMaterials || []).length;
+  const why = scanned
+    ? `The scan found ${scanned} part${scanned===1?'':'s'} but couldn't point at any of them on the sheet,
+       so there's nothing to draw arrows to. Parts read off a BOM table have no place on the drawing.`
+    : `The scan didn't find any parts on this drawing, so there is nothing to call out yet.`;
+  return `
+    <div class="cv-diagram-empty">
+      ${why}
+      The drawing itself is below, under Blueprint &amp; Hardware.
+      Re-scanning sometimes pins the parts; otherwise add them by hand with Blueprint &gt; Edit.
+    </div>`;
+}
+
+/**
+ * Returns '' only when there's no drawing at all -- with a drawing but no
+ * placeable parts it returns a note saying so, never nothing.
  */
 export function calloutDiagramHtml(job){
   if(!job.hasBlueprintImage) return '';
   const byPage = positionedByPage(job);
   const pages = Object.keys(byPage).map(Number).sort((a,b)=>a-b);
-  if(!pages.length) return '';
+  if(!pages.length) return noCalloutsHtml(job);
 
   const remembered = calloutPage[job.id];
   const current = (remembered && byPage[remembered])
@@ -168,10 +191,14 @@ export function calloutDiagramHtml(job){
     : `<img class="cv-sheet" src="data:${cached.mime};base64,${cached.base64}"
             alt="Sheet ${current} of the drawing for ${escapeHtml(job.jobNumber)}">`;
 
-  const viewToggle = `
+  // Only offered when cropping is actually possible. Without the page's
+  // pixel size there's nothing to crop against, so the button would
+  // promise a view it can't produce and then appear to do nothing.
+  const canCrop = cached.width > 0 && cached.height > 0;
+  const viewToggle = canCrop ? `
     <button type="button" class="btn btn-outline btn-sm cv-view-toggle" data-action="cv-whole-sheet" data-id="${job.id}">
       ${cropped ? 'Show whole sheet' : 'Show just the conveyor'}
-    </button>`;
+    </button>` : '';
 
   return `
   ${tabs}
@@ -184,6 +211,6 @@ export function calloutDiagramHtml(job){
     </div>
     ${labels}
   </div>
-  <div class="cv-under">${viewToggle}</div>
+  ${viewToggle ? `<div class="cv-under">${viewToggle}</div>` : ''}
   <ol class="cv-legend">${legend}</ol>`;
 }

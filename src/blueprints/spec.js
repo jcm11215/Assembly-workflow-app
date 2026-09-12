@@ -190,25 +190,47 @@ function withDrawnName(c){
   return { ...c, item_as_drawn: drawn || fallback };
 }
 
-export function normalizeComponents(parsed){
+/**
+ * A part is kept if EITHER of its names looks like a wanted part type.
+ *
+ * Testing only the category name assumes the model always puts the
+ * category there and the drawing's wording in item_as_drawn. When it
+ * swaps them -- and asking for two names invites exactly that -- every
+ * part matches nothing and the whole list vanishes silently, which is
+ * indistinguishable from a blank drawing. The regex is specific enough
+ * to test twice safely: it already refuses "DRIVE END PLATE" and never
+ * matches a bare "screw".
+ */
+function isWantedComponent(c){
+  return WANTED_COMPONENT_RE.test((c && c.item) || '') ||
+         WANTED_COMPONENT_RE.test((c && c.item_as_drawn) || '');
+}
+
+/**
+ * Normalizes the component list AND reports what the filter did, because
+ * an empty list is ambiguous between "the AI found nothing" and "the
+ * whitelist rejected everything it found" -- completely different faults
+ * with completely different fixes. The caller records the report, so this
+ * is answerable after the fact instead of only from a console nobody was
+ * watching at the time.
+ */
+export function normalizeComponentsDetailed(parsed){
   const raw = (Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.components) ? parsed.components : []))
     .map(withDrawnName)
     .map(nameBareShaft);
-  // Visibility into the filter: an empty component list is ambiguous
-  // between "the AI found nothing" and "the whitelist rejected
-  // everything it found", and those need completely different fixes.
-  const dropped = raw.filter(c => c && !WANTED_COMPONENT_RE.test(c.item || '')).map(c => c.item);
+  const dropped = raw.filter(c => c && !isWantedComponent(c));
   if(dropped.length){
-    console.info(`[blueprint] whitelist dropped ${dropped.length} of ${raw.length} extracted items:`, dropped);
+    console.info(`[blueprint] whitelist dropped ${dropped.length} of ${raw.length} extracted items:`,
+      dropped.map(c => c.item));
   }
   if(!raw.length){
     console.warn('[blueprint] the AI returned no components at all -- not a filter issue.');
   }
-  return raw
+  const components = raw
     // Filtered here, not just instructed in the prompt -- a prompt
     // change is one bad extraction away from silently drifting, this
     // filter cannot.
-    .filter(c => c && WANTED_COMPONENT_RE.test(c.item || ''))
+    .filter(c => c && isWantedComponent(c))
     .map(c=>{
     const location = (c && INSTALLATION_LOCATIONS.includes(c.installation_location))
       ? c.installation_location : 'unknown';
@@ -232,6 +254,23 @@ export function normalizeComponents(parsed){
       position: normPosition(c && c.position)
     };
   });
+
+  return {
+    components,
+    report: {
+      returnedByAi: raw.length,
+      kept: components.length,
+      positioned: components.filter(c => c.position).length,
+      // Names only, capped -- enough to see WHY they were dropped without
+      // pushing a whole extraction into the audit log.
+      droppedNames: dropped.slice(0, 12).map(c => c.item || c.item_as_drawn || '(unnamed)')
+    }
+  };
+}
+
+/** The components alone, for callers that don't need the filter report. */
+export function normalizeComponents(parsed){
+  return normalizeComponentsDetailed(parsed).components;
 }
 /* ================================================================
    ENGINEERING SPECIFICATION LAYER

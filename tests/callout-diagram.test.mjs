@@ -23,9 +23,16 @@ console.log('=== nothing to draw ===');
 t('no blueprint image -> nothing rendered', () => {
   if (dia.calloutDiagramHtml(job('g1', [part('Drive', 1, .1, .1)], false)) !== '') throw new Error('expected empty');
 });
-t('a scan with no pinned parts -> nothing rendered', () => {
+t('a scan with no pinned parts explains itself instead of rendering blank', () => {
+  // Rendering nothing takes the whole section away, toggle included, so
+  // a drawing with no callouts looks identical to a page that broke.
   const h = dia.calloutDiagramHtml(job('g2', [{ item: 'Drive', stage: 'drive', source_page: 1, position: null }]));
-  if (h !== '') throw new Error('expected empty, got: ' + h.slice(0, 120));
+  if (!/couldn't point at any of them/.test(h)) throw new Error('expected the located-nothing explanation, got: ' + h.slice(0, 160));
+  if (!/found 1 part\b/.test(h)) throw new Error('should say how many parts the scan did find');
+});
+t('a scan that found no parts at all says that instead', () => {
+  const h = dia.calloutDiagramHtml(job('g3', []));
+  if (!/didn't find any parts/.test(h)) throw new Error('expected the found-nothing explanation, got: ' + h.slice(0, 160));
 });
 
 console.log('\n=== the drawing itself is what gets shown ===');
@@ -71,6 +78,10 @@ t('tag numbers and label numbers are the same set', () => {
 t('a numbered legend is rendered for the phone layout', () => {
   if (!html.includes('cv-legend')) throw new Error('legend missing');
 });
+t('offers the whole-sheet view, since this page can be cropped', () => {
+  if (!html.includes('data-action="cv-whole-sheet"')) throw new Error('crop toggle missing');
+  if (!html.includes('Show whole sheet')) throw new Error('expected the crop to be on by default');
+});
 
 console.log('\n=== multi-sheet scans ===');
 images.componentMapPageCache['d2:1'] = { base64: 'SHEET1', mime: 'image/jpeg', width: 1000, height: 620 };
@@ -111,6 +122,13 @@ t('falls back to marking the part, rather than a number floating free', () => {
   if (!h.includes('cv-tag-on-part')) throw new Error('expected the on-part fallback');
   if (h.includes('<polygon')) throw new Error('drew an arrow without knowing the aspect ratio');
   if (!h.includes('data:image/jpeg;base64,OLD')) throw new Error('sheet still has to render');
+});
+t('no crop toggle offered -- there is nothing to crop against', () => {
+  // The button would promise a view it cannot produce and then look broken.
+  images.componentMapPageCache['d7:1'] = { base64: 'OLD2', mime: 'image/jpeg' };
+  const h = dia.calloutDiagramHtml(job('d7', [part('Drive', 1, .3, .4)]));
+  if (!h.includes('base64,OLD2')) throw new Error('expected the unmeasured sheet to render');
+  if (h.includes('cv-whole-sheet')) throw new Error('offered a crop toggle with no page size');
 });
 
 console.log('\n=== untrusted text is escaped ===');
