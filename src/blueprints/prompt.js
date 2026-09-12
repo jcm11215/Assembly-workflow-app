@@ -86,15 +86,24 @@ export function pagesByRole(pageClassification, allPages){
  * what made it slow, truncation-prone and vague. No positions here: this
  * pass answers "what parts", the callout pass answers "where", and the
  * two are joined by item number in code rather than by the model.
+ *
+ * The title-block fields are asked for here AND in the dimensions pass,
+ * on purpose. They are three short strings, they are what a new job's
+ * form is prefilled from, and having them in only the longest and most
+ * truncation-prone reply meant one bad character cost the job number,
+ * the customer and the description as well as the dimensions. Two cheap
+ * readings of the same corner of the same sheet, and whichever survives
+ * is used.
  */
-export function buildPartsListPrompt(){
+export function buildPartsListPrompt(includeJobFields){
   return `You are a mechanical engineer reading the PARTS LIST (BOM) of a conveyor shop drawing set. The images are pages from ONE drawing set describing ONE machine.
 
-Your only task on this pass is to transcribe the parts table. Do NOT report dimensions. Do NOT report screen positions. Another pass handles those.
+Your only task on this pass is to transcribe the parts table${includeJobFields ? ', plus the few identifying fields from the title block' : ''}. Do NOT report dimensions. Do NOT report screen positions. Another pass handles those.
 
 Respond with ONLY this JSON object, no markdown fences, no commentary:
 {
   "drawing_number": "<from the title block, or \\"\\">",
+${includeJobFields ? '  "jobNumber": "<the job/order number from the title block, or \\"\\">",\n  "customer": "<the customer name from the title block, or \\"\\">",\n  "description": "<the one-line equipment description from the title block>",' : ''}
   "parts": [{
     "balloon": <the ITEM/FIND number printed in the table's first column, as an integer, or null if the table has no item numbers>,
     "item": "<the category name from the fixed list below>",

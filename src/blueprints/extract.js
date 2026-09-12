@@ -15,6 +15,7 @@ import * as blueprintsRepo from '../db/blueprintsRepo.js';
 import { blueprintImageCache } from './images.js';
 import { MAX_PDF_PAGES, fileToBase64Raw, fileToImageBase64Resized, parsePageSelection, pdfFileToImages, shrinkBase64Image } from './pdf.js';
 import { buildCalloutPrompt, buildPageClassificationPrompt, buildPartsListPrompt, buildSpecPrompt, pagesByRole } from './prompt.js';
+import { parseJsonLenient } from './jsonRepair.js';
 import { joinPartsAndCallouts, resolveLocations } from './scanJoin.js';
 import {
   normalizeComponentsDetailed, normalizeSpec, validateExtraction,
@@ -29,27 +30,38 @@ import { showToast } from '../ui/components/toast.js';
 import { escapeHtml } from '../utils/dom.js';
 import { uid } from '../utils/id.js';
 
-/** Strips fences a model adds despite being asked not to, then parses.
- *  Never throws: a pass that came back unreadable reports why and the
- *  scan carries on with what the other passes found. */
+/**
+ * Parses a pass's reply, repairing what can be repaired.
+ *
+ * A drawing is wall-to-wall inch and foot marks, and a model
+ * transcribing 12" DIA X 20' LG into a JSON string gets the escaping
+ * wrong now and then. One bad backslash used to discard the entire
+ * reply -- every dimension and the title block with it -- so a
+ * salvageable reply is now salvaged, and what had to be changed is
+ * reported rather than passing silently. Never throws: a pass that came
+ * back genuinely unreadable says why, and the scan carries on with what
+ * the other passes found.
+ */
 function parseJsonReply(text, label){
-  const cleaned = String(text || '').trim()
-    .replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
-  try {
-    return { parsed: JSON.parse(cleaned), parseError: null };
-  } catch (e) {
-    console.error(`${label}: reply did not parse as JSON`, e, cleaned.slice(0, 600));
-    return {
-      parsed: {},
-      parseError: {
-        pass: label,
-        message: e.message,
-        replyLength: cleaned.length,
-        head: cleaned.slice(0, 200),
-        tail: cleaned.slice(-200)        // a truncated reply shows up here
-      }
-    };
+  const { parsed, repairs, reason } = parseJsonLenient(text);
+  if(repairs.length){
+    console.warn(`${label}: reply needed repair before it would parse:`, repairs);
   }
+  if(parsed) return { parsed, parseError: null, repairs };
+  const cleaned = String(text || '').trim();
+  console.error(`${label}: reply could not be salvaged --`, reason, cleaned.slice(0, 600));
+  return {
+    parsed: {},
+    repairs,
+    parseError: {
+      pass: label,
+      message: reason,
+      repairsAttempted: repairs.length ? repairs : undefined,
+      replyLength: cleaned.length,
+      head: cleaned.slice(0, 200),
+      tail: cleaned.slice(-200)          // a truncated reply shows up here
+    }
+  };
 }
 
 /** One pass: prompt in, parsed JSON out. A pass that fails outright is
@@ -63,6 +75,27 @@ async function runPass(label, systemPrompt, blocks, instruction){
     console.error(`${label}: the call itself failed`, e);
     return { label, parsed: {}, parseError: { pass: label, message: String(e && e.message || e), failed: true } };
   }
+}
+
+/**
+ * The job number, customer and description, from whichever pass got them.
+ *
+ * Both the parts and dimensions passes are asked for these, because
+ * having them in only the longest and most truncation-prone reply meant
+ * one bad escape character cost the job number, the customer AND the
+ * description along with the dimensions -- a new job's form came up
+ * blank off a drawing the scan had actually read fine. Dimensions wins
+ * where it has a value, since it is looking at the title block most
+ * directly; parts fills the gaps.
+ */
+export function mergeTitleBlock(dims, parts){
+  const a = dims || {}, b = parts || {};
+  const out = {};
+  for(const field of ['jobNumber', 'customer', 'description', 'drawing_number']){
+    const pick = [a[field], b[field]].find(v => v != null && String(v).trim() !== '');
+    out[field] = pick != null ? String(pick).trim() : '';
+  }
+  return out;
 }
 
 /** Which sheet each image block belongs to. contentBlocksFor labels PDF
@@ -136,7 +169,7 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
   const roles = pagesByRole(pageClassification, allPages);
 
   const [partsPass, calloutPass, dimsPass] = await Promise.all([
-    runPass('parts list', buildPartsListPrompt(), blocksForPages(pairs, roles.bom),
+    runPass('parts list', buildPartsListPrompt(includeJobFields), blocksForPages(pairs, roles.bom),
       'Transcribe the parts list from these pages.'),
     runPass('callouts', buildCalloutPrompt(), blocksForPages(pairs, roles.views),
       'Report every balloon callout on these views and where its leader points.'),
@@ -156,13 +189,7 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
   const { components, report: locationReport } =
     resolveLocations(placed, dimsPass.parsed.orientation);
 
-  // The title-block fields live in the dimensions reply; the parts pass
-  // reads the drawing number off it too, and either will do.
-  const parsed = {
-    ...dimsPass.parsed,
-    drawing_number: dimsPass.parsed.drawing_number || partsPass.parsed.drawing_number || '',
-    components
-  };
+  const parsed = { ...dimsPass.parsed, ...mergeTitleBlock(dimsPass.parsed, partsPass.parsed), components };
 
   const spec = normalizeSpec(parsed);
   const validation = spec ? validateExtraction(spec, components) : null;
@@ -182,7 +209,13 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
       ...joinReport,
       ...locationReport,
       pagesRead: { bom: roles.bom, views: roles.views, total: allPages.length },
-      parseError: [partsPass, calloutPass, dimsPass].map(p => p.parseError).filter(Boolean)
+      parseError: [partsPass, calloutPass, dimsPass].map(p => p.parseError).filter(Boolean),
+      // A reply that only parsed after repair is worth seeing: it means
+      // the model is mis-escaping, which is one bad character away from
+      // costing a whole pass.
+      repairedPasses: [partsPass, calloutPass, dimsPass]
+        .filter(p => p.repairs && p.repairs.length)
+        .map(p => `${p.label}: ${p.repairs.join('; ')}`)
     }
   };
 }
@@ -244,6 +277,9 @@ function recordScanDiagnostics(jobNumber, components, d){
     jobNumber,
     passesThatFailed: some(failures.map(f => f.pass)),
     passErrors: some(failures),
+    // Replies that only parsed after repair -- the model is mis-escaping,
+    // which is one character away from costing a whole pass.
+    passesRepaired: some(d.repairedPasses),
     pagesRead: d.pagesRead,
     partsListedByAi: d.returnedByAi,
     partsKept: d.kept,
