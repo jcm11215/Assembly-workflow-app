@@ -314,11 +314,28 @@ function recordScanDiagnostics(jobNumber, components, d){
   }, null).catch(()=>{});
 }
 
-function statusToast(componentCount){
-  if(componentCount === 0){
-    return 'Scan finished but found no matching components. Only drives, motors, reducers, seals, gaskets, bearings, hangers, coupling/tail/drive shafts, augers, coupling bolts and UHMW are pulled in -- check the browser console for what was skipped, or add parts by hand via Blueprint > Edit.';
+/**
+ * What to tell them when a scan comes back with nothing.
+ *
+ * "Check the browser console" is not an answer on a shop floor, and the
+ * three reasons for an empty scan need three different actions: a pass
+ * that never completed is worth retrying, a whitelist that rejected
+ * everything means the drawing lists parts we deliberately skip, and an
+ * AI that listed nothing means there was nothing there to find. The
+ * diagnostics already know which -- so say it.
+ */
+function statusToast(componentCount, d){
+  if(componentCount > 0){
+    return `Extracted ${componentCount} component${componentCount===1?'':'s'} from the drawing.`;
   }
-  return `Extracted ${componentCount} component${componentCount===1?'':'s'} from the drawing.`;
+  const failed = ((d && d.parseError) || []).map(f => f.pass);
+  if(failed.includes('parts list')){
+    return `The parts list couldn't be read from this drawing (${failed.join(' and ')} failed). Try the scan again -- it often works on a second attempt.`;
+  }
+  if(d && d.droppedNames && d.droppedNames.length && !d.kept){
+    return `Scan found ${d.returnedByAi} items but none are parts we track -- ${d.droppedNames.slice(0,3).join(', ')} and similar are skipped on purpose. Add what you need by hand via Blueprint > Edit.`;
+  }
+  return 'Scan finished but found no parts on this drawing. Re-scanning sometimes helps; otherwise add them by hand via Blueprint > Edit.';
 }
 
 /** Re-scan an EXISTING job's blueprint. Saves directly since the job's
@@ -365,7 +382,7 @@ export async function extractComponents(jobId){
     if(resultArea) resultArea.innerHTML = bomListHtml(job);
     if(btn){ btn.disabled = false; btn.textContent = 'Re-Extract from New Photo'; }
     logActivity('Blueprint scanned', `${job.jobNumber}: v${saved.version}, ${components.length} components`);
-    showToast(statusToast(components.length), 5000);
+    showToast(statusToast(components.length, diagnostics), components.length ? 5000 : 8000);
     if(originalFile && !saved.storage_path){
       showToast('Components saved, but the original file could not be attached -- the thumbnail works, but "Open PDF" won\'t. Try Re-Scan.', 7000);
     }
@@ -421,7 +438,7 @@ export async function extractNewJobFromBlueprint(){
     openJobForm(null, prefill);
     showToast(components.length
       ? `Read the blueprint -- found ${components.length} components. Review and save.`
-      : 'Read the blueprint, but found no components -- fill in details manually.');
+      : statusToast(0, diagnostics), components.length ? 5000 : 8000);
   }catch(err){
     console.error(err);
     const detail = explainFetchError(err);
@@ -431,3 +448,13 @@ export async function extractNewJobFromBlueprint(){
     if(btn){ btn.disabled = false; btn.textContent = 'Read Blueprint & Create Job'; }
   }
 }
+
+/** The pipeline, for the end-to-end scan test. Production callers go
+ *  through extractComponents / extractNewJobFromBlueprint, which own the
+ *  file handling and the saving; this is the middle of that, exposed so
+ *  a test can drive all four passes without a real File or a real key. */
+export const runExtractionPipelineForTest = runExtractionPipeline;
+
+/** The empty-scan message, for the test that pins its wording -- what it
+ *  says is the whole point of it. */
+export const statusToastForTest = statusToast;

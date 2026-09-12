@@ -32,7 +32,12 @@ function match(row, filters){
 
 globalThis.fetch = async (url, opt={}) => {
   const u = String(url); const m = (opt.method||'GET').toUpperCase();
-  const body = opt.body ? JSON.parse(opt.body) : null;
+  // Storage uploads send a Blob, not JSON -- parsing it threw and made a
+  // successful upload look like a failure in the test log.
+  let body = null;
+  if(typeof opt.body === 'string'){
+    try { body = JSON.parse(opt.body); } catch { body = null; }
+  }
   CALLS.push(`${m} ${u.split('?')[0].split('/').pop()}`);
   const ok = d => ({ ok:true, status:200, text:async()=>JSON.stringify(d), json:async()=>d, blob:async()=>new Blob(['x']) });
 

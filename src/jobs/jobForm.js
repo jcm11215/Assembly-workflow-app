@@ -67,6 +67,7 @@ export function openJobForm(jobId, prefill){
     const vals = Object.fromEntries(fd.entries());
     vals.percentComplete = parseInt(vals.percentComplete,10)||0;
     let pendingBlueprint = null;
+    let newJob = null;
     if(job){
       if(state.jobs.some(j=>j.id!==job.id && j.jobNumber===vals.jobNumber)){
         showToast('Job number already exists'); return;
@@ -77,7 +78,7 @@ export function openJobForm(jobId, prefill){
       if(state.jobs.some(j=>j.jobNumber===vals.jobNumber)){
         showToast('Job number already exists'); return;
       }
-      const newJob = {id:(prefill && prefill.id) || uid('job'), ...vals};
+      newJob = {id:(prefill && prefill.id) || uid('job'), ...vals};
       const hadExtraction = !!(prefill && ((prefill.billOfMaterials && prefill.billOfMaterials.length) || prefill.hasBlueprintImage));
       if(prefill && prefill.billOfMaterials && prefill.billOfMaterials.length){
         newJob.billOfMaterials = prefill.billOfMaterials;
@@ -98,7 +99,15 @@ export function openJobForm(jobId, prefill){
     }
     await persistJobs();
     if(pendingBlueprint){
-      const created = state.jobs[state.jobs.length-1];
+      // The object pushed above, not whatever happens to be last in the
+      // list. persistJobs() awaits a round trip, and during it the job's
+      // id changes from the client placeholder to the real one -- so the
+      // realtime echo of this very insert arrives with an id that does
+      // not match yet and gets appended as a second entry. Reading the
+      // last element then hung the blueprint, and the components read
+      // back from it, on that echo instead of on the job the person is
+      // about to open.
+      const created = newJob;
       try {
         const saved = await blueprintsRepo.saveExtraction(created.id, pendingBlueprint);
         created.hasBlueprintImage = true;
@@ -107,6 +116,10 @@ export function openJobForm(jobId, prefill){
         delete blueprintImageCache[created.id];
         if(pendingBlueprint.originalFile && !saved.storage_path){
           showToast('Job saved, but the original file could not be attached -- the thumbnail works, but "Open PDF" won\'t. Try Re-Scan.', 7000);
+        } else if(!created.billOfMaterials.length){
+          // The drawing is attached but carries no parts. Saying nothing
+          // here is how a job ends up looking like it was never scanned.
+          showToast('Job saved with the drawing attached, but the scan found no parts on it. Open the job and use Re-Scan Blueprint.', 7000);
         }
       } catch (e) {
         console.error('deferred blueprint save failed', e);

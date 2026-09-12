@@ -117,6 +117,21 @@ export function blockerToRow(b, jobId){
   };
 }
 
+/**
+ * The columns a component read must select, in one place.
+ *
+ * There are two places components are read -- blueprintsRepo (one
+ * blueprint) and jobsRepo (every job's latest) -- and they were two
+ * hand-kept lists. A column added to one and missed in the other is
+ * invisible: the field is right there after a scan and silently blank
+ * after a refresh, which is how `balloon` and `part_number` went
+ * missing. rowToComponent reads these, so they belong next to it.
+ */
+export const COMPONENT_COLS =
+  'id,item,item_as_drawn,specification,quantity,stage,installation_location,source_page,' +
+  'source_callout,extraction_method,confidence,sort_order,balloon,part_number,' +
+  'position_x,position_y';
+
 /* ---------------- job errors ---------------- */
 
 /**

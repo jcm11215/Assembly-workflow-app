@@ -8,7 +8,7 @@
  * based on, so a stale write is rejected instead of destroying data.
  */
 import { db, DbError, currentUserId } from './supabaseClient.js';
-import { rowToJob, jobToRow, rowToComponent } from './mappers.js';
+import { COMPONENT_COLS, rowToJob, jobToRow, rowToComponent } from './mappers.js';
 import { listChecklistForJobs } from './checklistRepo.js';
 
 const JOB_COLS = 'id,job_number,customer,description,due_date,priority,stage,' +
@@ -143,9 +143,7 @@ async function loadBlueprintFields(jobIds){
   const bpIds = Object.values(newest).map(b => b.id);
   const comps = bpIds.length
     ? await db.select('blueprint_components',
-        `select=id,blueprint_id,item,item_as_drawn,specification,quantity,stage,installation_location,` +
-        `source_page,source_callout,extraction_method,confidence,sort_order,position_x,position_y` +
-        `&blueprint_id=in.(${bpIds.join(',')})&order=sort_order.asc`)
+        `select=blueprint_id,${COMPONENT_COLS}&blueprint_id=in.(${bpIds.join(',')})&order=sort_order.asc`)
     : [];
 
   const byBp = {};

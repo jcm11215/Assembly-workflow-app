@@ -16,6 +16,32 @@ import { setCurrentJobId } from '../ui/components/modal.js';
 import { daysUntil, fmtDate } from '../utils/date.js';
 import { escapeHtml } from '../utils/dom.js';
 
+/** A drawing is attached, whether or not the scan found any parts on it. */
+function hasBlueprint(job){
+  return !!(job.hasBlueprintImage || job.blueprintId || job.blueprintExtractedAt
+    || (job.billOfMaterials && job.billOfMaterials.length));
+}
+
+/**
+ * What to say when the hardware list is empty.
+ *
+ * "No blueprint scanned yet" was shown in both cases, which on a job
+ * that HAS a drawing attached is simply untrue -- the scan ran, the PDF
+ * is right there above this line, and the message sent people looking
+ * for a scan they had already done. The two cases need different
+ * sentences because they need different actions: one is "scan it", the
+ * other is "the scan found nothing, try again or add parts by hand".
+ */
+function noHardwareHtml(job){
+  if(!hasBlueprint(job)){
+    return `<div class="bp-hint" style="margin-bottom:10px;">No blueprint scanned yet for this job.</div>`;
+  }
+  return `<div class="bp-hint" style="margin-bottom:10px;">
+    The drawing is attached, but the scan didn't pull any parts off it. Re-scanning often works on a
+    second try; otherwise add them by hand with Blueprint &gt; Edit.
+  </div>`;
+}
+
 export function jobPageHtml(job){
   const ds = dueStatus(job);
   const du = daysUntil(job.dueDate);
@@ -104,9 +130,9 @@ export function jobPageHtml(job){
 
     <div class="section-title">Blueprint &amp; Hardware</div>
     ${blueprintImageSectionHtml(job)}
-    ${bomListHtml(job) || `<div class="bp-hint" style="margin-bottom:10px;">No blueprint scanned yet for this job.</div>`}
+    ${bomListHtml(job) || noHardwareHtml(job)}
     <div class="fab-row">
-      <button class="btn btn-outline btn-block" data-action="open-blueprint" data-id="${job.id}">&#128208; ${job.billOfMaterials && job.billOfMaterials.length ? 'Re-Scan Blueprint' : 'Scan Blueprint'}</button>
+      <button class="btn btn-outline btn-block" data-action="open-blueprint" data-id="${job.id}">&#128208; ${hasBlueprint(job) ? 'Re-Scan Blueprint' : 'Scan Blueprint'}</button>
     </div>
 
     <div class="section-title">Open Blockers</div>

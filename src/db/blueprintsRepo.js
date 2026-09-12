@@ -10,7 +10,7 @@
  */
 import { db, storage, BLUEPRINT_BUCKET, base64ToBlob, blobToBase64, currentUserId }
   from './supabaseClient.js';
-import { rowToComponent, componentToRow } from './mappers.js';
+import { COMPONENT_COLS, rowToComponent, componentToRow } from './mappers.js';
 
 const SEL = 'select=id,job_id,storage_path,original_filename,original_mime_type,' +
             'status,version,extracted_at';
@@ -31,9 +31,7 @@ export async function getForJob(jobId){
 
 export async function listComponents(blueprintId){
   const rows = await db.select('blueprint_components',
-    'select=id,item,item_as_drawn,specification,quantity,stage,installation_location,source_page,' +
-    'source_callout,extraction_method,confidence,sort_order,balloon,part_number,position_x,position_y' +
-    `&blueprint_id=eq.${blueprintId}&order=sort_order.asc`);
+    `select=${COMPONENT_COLS}&blueprint_id=eq.${blueprintId}&order=sort_order.asc`);
   return rows.map(rowToComponent);
 }
 
