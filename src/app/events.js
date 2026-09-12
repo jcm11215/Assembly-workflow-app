@@ -13,6 +13,7 @@ import { setCalloutPage, toggleWholeSheet } from '../blueprints/calloutDiagram.j
 import { blueprintImageCache, fetchBlueprintImage } from '../blueprints/images.js';
 import { logActivity, persistBlockers, persistJobs, reloadFromStorage } from '../db/repository.js';
 import { openErrorForm, removeError, toggleErrorStatus } from '../errors/index.js';
+import { loadOpenRouterModels, testAiProvider } from '../ui/settings.js';
 import { attemptAdvance, confirmAdvance, moveJobToStage, openMover, stepStage } from '../jobs/actions.js';
 import { updateDashboardList } from '../jobs/dashboard.js';
 import { closeJobPage, openJobDetail } from '../jobs/detail.js';
@@ -317,6 +318,12 @@ export function initEventRouter(){
         break;
       case 'new-blocker':
         openBlockerForm(null);
+        break;
+      case 'test-ai-provider':
+        testAiProvider();
+        break;
+      case 'load-openrouter-models':
+        loadOpenRouterModels();
         break;
       case 'log-error':
         // data-jobnumber is present on a job's page and absent on the

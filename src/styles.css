@@ -1129,3 +1129,27 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
 .err-breakdown{
   border-left:2px solid var(--line);padding-left:10px;margin:2px 0 4px;
 }
+
+/* ---------- AI provider connection test ---------- */
+.ai-test{
+  background:var(--plate);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px;margin-bottom:10px;box-shadow:var(--plate-shadow);
+}
+.ai-test-title{
+  font-family:var(--font-display);font-size:13px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:8px;
+}
+.ai-test-row{border-left:2px solid var(--line);padding:0 0 0 9px;margin-bottom:9px;}
+.ai-test-row.ok{border-left-color:var(--green);}
+.ai-test-row.bad{border-left-color:var(--red);}
+.ai-test-head{font-size:13px;font-weight:700;}
+.ai-test-row.ok .ai-test-head{color:var(--green);}
+.ai-test-row.bad .ai-test-head{color:var(--red);}
+.ai-test-detail{font-size:12px;color:var(--text-dim);line-height:1.45;margin-top:2px;}
+/* The provider's own words, monospaced and selectable so they can be
+   copied into a search or a support ticket verbatim. */
+.ai-test-raw{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11px;color:var(--text-faint);line-height:1.45;margin-top:4px;
+  white-space:pre-wrap;word-break:break-word;user-select:text;
+}
