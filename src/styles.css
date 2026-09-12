@@ -702,7 +702,13 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
    SVG stretched over the whole box, so its user units are percentages
    and the line ends line up with the absolutely-positioned labels. */
 .cv-diagram{position:relative;margin-bottom:10px;}
-.cv-sheet-wrap{position:relative;display:block;}
+/* Stacking matters here: a leader line runs from the margin to a part in
+   the middle of the sheet, so nearly all of it lies OVER the drawing. The
+   sheet comes first in the DOM and would otherwise paint on top of every
+   line, hiding the lot. */
+.cv-sheet-wrap{position:relative;display:block;z-index:1;}
+.cv-leaders{z-index:2;}
+.cv-balloon,.cv-label{z-index:3;}
 .cv-sheet{
   display:block;width:100%;height:auto;border-radius:6px;
   background:var(--steel-950);border:1px solid var(--line);
@@ -732,7 +738,7 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
   display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   font-size:10px;color:var(--text-faint);word-break:break-word;
 }
-.cv-label-qty{display:block;color:var(--text-faint);font-size:10px;}
+.cv-label-qty{color:var(--text-faint);font-weight:600;font-variant-numeric:tabular-nums;}
 .cv-diagram-empty{
   padding:16px;text-align:center;font-size:12px;color:var(--text-faint);
   border:1px dashed var(--line);border-radius:8px;margin-bottom:10px;

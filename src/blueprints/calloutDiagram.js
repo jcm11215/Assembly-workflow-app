@@ -35,16 +35,21 @@ function colorFor(component){
   return (BOM_BUCKET_META[bomBucketFor(component)] || BOM_BUCKET_META.other).color;
 }
 
-/** Category name plus, when it adds something, the drawing's own wording. */
-function labelInnerHtml(c, number){
+/**
+ * @param full  margins get the compact form -- a name and a count, one or
+ *              two lines. The drawing's own wording is long and set in
+ *              mono; in a margin it pushes labels into each other, so it
+ *              rides in the legend and the hardware list instead, where
+ *              there's a full column to hold it.
+ */
+function labelInnerHtml(c, number, full){
   const drawn = (c.item_as_drawn || '').trim();
   const sameAsCategory = drawn.toLowerCase().replace(/\s+/g, ' ') === (c.item || '').toLowerCase().replace(/\s+/g, ' ');
   return `
     <span class="cv-num" style="background:${colorFor(c)};">${number}</span>
     <span class="cv-label-text">
-      <span class="cv-label-item">${escapeHtml(c.item)}</span>
-      ${drawn && !sameAsCategory ? `<span class="cv-label-drawn">${escapeHtml(drawn)}</span>` : ''}
-      ${c.quantity ? `<span class="cv-label-qty">&times;${escapeHtml(String(c.quantity))}</span>` : ''}
+      <span class="cv-label-item">${escapeHtml(c.item)}${c.quantity ? ` <span class="cv-label-qty">&times;${escapeHtml(String(c.quantity))}</span>` : ''}</span>
+      ${full && drawn && !sameAsCategory ? `<span class="cv-label-drawn">${escapeHtml(drawn)}</span>` : ''}
     </span>`;
 }
 
@@ -82,7 +87,7 @@ export function calloutDiagramHtml(job){
     return `${tabs}<div class="cv-diagram-empty">Could not load the drawing for this scan.</div>`;
   }
 
-  const { callouts } = layoutCallouts(byPage[current]);
+  const { callouts, minHeightPx } = layoutCallouts(byPage[current]);
 
   const leaders = callouts.map(c => `
     <line x1="${c.anchorX.toFixed(2)}" y1="${c.labelY.toFixed(2)}"
@@ -99,15 +104,15 @@ export function calloutDiagramHtml(job){
 
   const labels = callouts.map(c => `
     <div class="cv-label cv-label-${c.side}" style="top:${c.labelY.toFixed(2)}%;">
-      ${labelInnerHtml(c.component, c.number)}
+      ${labelInnerHtml(c.component, c.number, false)}
     </div>`).join('');
 
   const legend = callouts.map(c => `
-    <li class="cv-legend-row">${labelInnerHtml(c.component, c.number)}</li>`).join('');
+    <li class="cv-legend-row">${labelInnerHtml(c.component, c.number, true)}</li>`).join('');
 
   return `
   ${tabs}
-  <div class="cv-diagram" style="--cv-gutter:${GUTTER}%;">
+  <div class="cv-diagram" style="--cv-gutter:${GUTTER}%;min-height:${minHeightPx}px;">
     <svg class="cv-leaders" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${leaders}</svg>
     <div class="cv-sheet-wrap" style="margin-left:${IMAGE_LEFT}%;width:${IMAGE_WIDTH}%;">
       <img class="cv-sheet" src="data:${cached.mime};base64,${cached.base64}"

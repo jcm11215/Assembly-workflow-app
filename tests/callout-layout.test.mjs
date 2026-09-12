@@ -66,6 +66,27 @@ t('a clearly lower part numbers after a higher one, whatever its x', () => {
   const n = Object.fromEntries(callouts.map(c => [c.component.item, c.number]));
   if (n.high !== 1 || n.low !== 2) throw new Error(JSON.stringify(n));
 });
+t('a run of parts at the same height numbers straight across, left to right', () => {
+  // The case that matters on a real drawing: a conveyor elevation puts
+  // almost every part at nearly the same height, with only millimetres of
+  // y between them. Ordering must still read across the sheet, not jump
+  // around it -- which is what a non-transitive "close enough" comparator
+  // produces, since the sort result then depends on input order.
+  const run = [
+    { item: 'tail',   position: { x: 0.17, y: 0.545 } },
+    { item: 'hanger', position: { x: 0.35, y: 0.500 } },
+    { item: 'auger',  position: { x: 0.46, y: 0.455 } },
+    { item: 'cplg',   position: { x: 0.62, y: 0.545 } },
+    { item: 'drive',  position: { x: 0.87, y: 0.400 } }
+  ];
+  const expected = 'tail,hanger,auger,cplg,drive';
+  // Any input order must give the same answer; a cyclic comparator won't.
+  for (const perm of [run, [...run].reverse(), [run[2], run[4], run[0], run[3], run[1]]]) {
+    const order = layoutCallouts(perm).callouts
+      .sort((a, b) => a.number - b.number).map(c => c.component.item).join(',');
+    if (order !== expected) throw new Error('got ' + order);
+  }
+});
 t('numbers are 1..n with no gaps or repeats', () => {
   const comps = Array.from({ length: 9 }, (_, i) => at((i % 3) / 3 + 0.1, Math.floor(i / 3) / 3 + 0.1, 'P' + i));
   const nums = layoutCallouts(comps).callouts.map(c => c.number).sort((a, b) => a - b);

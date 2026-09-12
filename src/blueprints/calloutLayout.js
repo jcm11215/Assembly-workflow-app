@@ -23,7 +23,19 @@ const BOTTOM = 96;
 // A label needs roughly this much vertical room before two of them start
 // touching. Below it, the band is expanded rather than the labels
 // overlapped -- a cramped-but-readable diagram beats a tidy unreadable one.
-export const MIN_LABEL_GAP = 7.5;
+export const MIN_LABEL_GAP = 9;
+
+// ...but a percentage gap is only as tall as the sheet it's measured
+// against, and a wide, shallow drawing gives a short container in which
+// 9% is a few pixels. The diagram is held to at least this many pixels
+// per label on its busiest side so the margins always have room.
+export const PX_PER_LABEL = 38;
+
+// Two parts belong to the same row while the vertical step between them
+// stays under this. It's a gap between neighbours, not a fixed band:
+// bands put boundaries at arbitrary heights, and two parts a millimetre
+// apart that straddle one get read in the wrong order.
+export const ROW_GAP = 0.08;
 
 /**
  * Spreads n labels down a band, keeping them in the given order and at
@@ -59,11 +71,29 @@ export function layoutCallouts(components){
   // Number them the way a person reads a drawing -- left to right, top to
   // bottom -- so the legend order matches scanning the sheet, not the
   // order the extractor happened to emit.
-  const ordered = [...list].sort((a, b) => {
-    const dy = a.position.y - b.position.y;
-    if(Math.abs(dy) > 0.08) return dy;        // same "row" if within 8%
-    return a.position.x - b.position.x;
-  });
+  //
+  // Parts are grouped into rows first, because a conveyor elevation puts
+  // almost all the hardware at roughly the same height -- ordering on raw
+  // y would scramble one run into near-random order over millimetres.
+  //
+  // Rows come from walking a y-sorted list and breaking where the step
+  // exceeds ROW_GAP, which keeps the whole thing a function of a total
+  // order (y, then x) and so independent of the order parts arrived in.
+  // Comparing "is this one within 8% of that one" directly would not:
+  // that test isn't transitive, so the sort's result would be arbitrary
+  // and the numbers would jump around the sheet.
+  const byHeight = [...list].sort((a, b) => (a.position.y - b.position.y) || (a.position.x - b.position.x));
+  const rows = [];
+  for(const c of byHeight){
+    const row = rows[rows.length - 1];
+    if(row && c.position.y - row.lastY <= ROW_GAP){
+      row.items.push(c);
+      row.lastY = c.position.y;
+    }else{
+      rows.push({ lastY: c.position.y, items: [c] });
+    }
+  }
+  const ordered = rows.flatMap(r => r.items.sort((a, b) => a.position.x - b.position.x));
   ordered.forEach((c, i) => { c._n = i + 1; });
 
   // A part on the left half gets a left-hand label: the leader line then
@@ -91,5 +121,11 @@ export function layoutCallouts(components){
 
   callouts.sort((a, b) => a.number - b.number);
   ordered.forEach(c => { delete c._n; });
-  return { image: { left: IMAGE_LEFT, width: IMAGE_WIDTH }, callouts };
+  return {
+    image: { left: IMAGE_LEFT, width: IMAGE_WIDTH },
+    callouts,
+    // What the diagram has to be tall enough for: whichever margin is
+    // carrying more labels.
+    minHeightPx: Math.max(left.length, right.length) * PX_PER_LABEL
+  };
 }
