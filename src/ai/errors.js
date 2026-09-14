@@ -21,6 +21,12 @@ export function explainFetchError(err){
   if(/invalid authentication|API key not valid|API_KEY_INVALID|unauthorized|401|403|permission denied/i.test(msg)){
     return `${providerName} rejected the API key. Open Settings (the gear icon, top right) and paste a current key, or switch providers.`;
   }
+  // "High demand" is about that model at that moment, not about the
+  // setup, so it must not read like something the person broke.
+  if(/overloaded|high demand|currently experiencing|503/i.test(msg)){
+    return `The AI model is too busy to answer right now -- that is ${providerName}'s load, not your key or your drawing. ` +
+           `It already retried and tried other models. Give it a few minutes, or pick a different model in Settings.`;
+  }
   if(/quota|rate limit|RESOURCE_EXHAUSTED|429/i.test(msg)){
     // The app already waited and retried several times before this
     // surfaced, so "try again" on its own would be poor advice. A free

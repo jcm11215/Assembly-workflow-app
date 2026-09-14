@@ -13,7 +13,8 @@ import { setCalloutPage, toggleWholeSheet } from '../blueprints/calloutDiagram.j
 import { blueprintImageCache, fetchBlueprintImage } from '../blueprints/images.js';
 import { logActivity, persistBlockers, persistJobs, reloadFromStorage } from '../db/repository.js';
 import { openErrorForm, removeError, toggleErrorStatus } from '../errors/index.js';
-import { loadOpenRouterModels, testAiProvider } from '../ui/settings.js';
+import { loadGeminiModels, loadOpenRouterModels, testAiProvider } from '../ui/settings.js';
+import { setGeminiModel } from '../ai/keys.js';
 import { attemptAdvance, confirmAdvance, moveJobToStage, openMover, stepStage } from '../jobs/actions.js';
 import { updateDashboardList } from '../jobs/dashboard.js';
 import { closeJobPage, openJobDetail } from '../jobs/detail.js';
@@ -140,6 +141,16 @@ function refreshBom(){
   refreshOpenModal();
   render();
 }
+
+  // Picking a Gemini model saves immediately -- there is no form around
+  // it, and a picker that needs a separate Save is a picker people think
+  // they used.
+  document.addEventListener('change', e => {
+    const sel = e.target.closest && e.target.closest('[data-action="set-gemini-model"]');
+    if(!sel || !sel.value) return;
+    setGeminiModel(sel.value);
+    showToast(`Blueprint scans will use ${sel.value}`);
+  });
 
   // <select> fires 'change', not 'click', so category moves need their
   // own delegated listener rather than a case in the click switch.
@@ -353,6 +364,9 @@ function refreshBom(){
         break;
       case 'load-openrouter-models':
         loadOpenRouterModels();
+        break;
+      case 'load-gemini-models':
+        loadGeminiModels();
         break;
       case 'log-error':
         // data-jobnumber is present on a job's page and absent on the

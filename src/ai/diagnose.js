@@ -19,7 +19,7 @@
  * is still in front of the person reading it.
  */
 import { getAiProvider, getApiKey, getOpenRouterKey, getOpenRouterModel } from './keys.js';
-import { GEMINI_MODEL } from './providers.js';
+import { getGeminiModel } from './keys.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
@@ -86,6 +86,7 @@ async function diagnoseGemini(){
     const { json, text } = await readJson(res);
     if(!res.ok){
       const msg = providerMessage(json, text, res.status);
+      const busy = res.status === 503 || /overloaded|high demand|currently experiencing/i.test(msg);
       const reason = json && json.error && json.error.status;
       const isWrongType = res.status === 401 || /Expected OAuth 2|unregistered callers/i.test(msg);
       if(!shape.ok) steps.push(step('Key format', false, shape.why));
@@ -112,7 +113,7 @@ async function diagnoseGemini(){
     return { provider: 'Google Gemini', steps, models: [] };
   }
 
-  const configured = GEMINI_MODEL;
+  const configured = getGeminiModel();
   const exists = models.includes(configured);
   steps.push(step(`Model "${configured}" exists`, exists,
     exists ? 'The configured model is available to this key.'
@@ -127,6 +128,7 @@ async function diagnoseGemini(){
       });
       const { json, text } = await readJson(res);
       const msg = providerMessage(json, text, res.status);
+      const busy = res.status === 503 || /overloaded|high demand|currently experiencing/i.test(msg);
       // A quota error is not a broken setup and must not read like one:
       // everything above it passed, and the fix is time, not a new key.
       const quota = res.status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(msg);
@@ -134,7 +136,9 @@ async function diagnoseGemini(){
       steps.push(res.ok
         ? step('A real request works', true, 'Google answered a test prompt.')
         : step('A real request works', false,
-               quota
+               busy
+                 ? `Nothing is wrong with the key or the model -- "${configured}" is just too busy right now, which is a property of the hour rather than of your setup. Scans retry and then move to another model on their own; if this keeps happening, pick a different one under Model below.`
+                 : quota
                  ? `Nothing is wrong with the key or the model -- this account is simply out of free-tier requests for the moment${cap ? ` (cap: ${cap[1]} per minute)` : ''}. A scan spends three or four, and testing spends two. Wait a minute and try again, scan fewer pages at once, or switch to OpenRouter in Settings. Scans now wait and retry on their own, so this is a pause rather than a failure.`
                  : 'The key and model are fine but the call was refused.',
                `HTTP ${res.status} -- ${msg}`));

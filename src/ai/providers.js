@@ -6,9 +6,23 @@
  */
 
 
-import { getAiProvider, getApiKey, getOpenRouterKey, getOpenRouterModel } from './keys.js';
+import { DEFAULT_GEMINI_MODEL, getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel } from './keys.js';
 
-export const GEMINI_MODEL = 'gemini-3.6-flash';
+/** Kept as a live getter, not a constant: the model is a setting now,
+ *  because an overloaded model is fixed by using a different one. */
+export { DEFAULT_GEMINI_MODEL };
+export const GEMINI_MODEL = DEFAULT_GEMINI_MODEL;
+
+/**
+ * Models to fall back to when the chosen one is too busy to answer.
+ *
+ * Ordered by how close each is to the default's job -- reading a dense
+ * engineering drawing -- so a substitution degrades gently rather than
+ * landing on whatever happened to be free. Only used when the provider
+ * says the model itself is overloaded, never to paper over a bad key or
+ * a genuine refusal.
+ */
+const GEMINI_FALLBACKS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-pro-latest'];
 
 // Two interchangeable AI backends, picked in Settings -- Google's free
 // Gemini API by default, or OpenRouter as a backup/alternative (useful if
@@ -58,10 +72,10 @@ export function retryAfterMs(data, headers){
   return null;
 }
 
-async function callGeminiOnce(systemPrompt, content){
+async function callGeminiOnce(systemPrompt, content, model){
   const apiKey = getApiKey();
   if(!apiKey) throw new Error('NO_API_KEY');
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -78,6 +92,7 @@ async function callGeminiOnce(systemPrompt, content){
     err.status = response.status;
     // Carried so the retry loop can wait exactly as long as told to.
     if(response.status === 429) err.retryAfterMs = retryAfterMs(data, response.headers);
+    err.model = model;
     throw err;
   }
   const candidate = data && data.candidates && data.candidates[0];
@@ -85,30 +100,86 @@ async function callGeminiOnce(systemPrompt, content){
   return parts ? parts.map(p=>p.text||'').filter(Boolean).join('\n') : '';
 }
 
+/** A server-side wobble, as opposed to anything about the request. The
+ *  provider's own advice for these is to try again. */
+function isTransientServerError(status){
+  return status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+/** The model itself is too busy, which no amount of retrying the SAME
+ *  model reliably fixes -- a different one does. */
+function isModelOverloaded(status, message){
+  return status === 503 || /overloaded|high demand|currently experiencing/i.test(message || '');
+}
+
 /**
- * Gemini had no retry at all, which made the free tier's per-minute cap
- * fatal to a scan rather than a short pause: one 429 and the pass was
- * lost. A quota error is the most retryable failure there is -- the
- * server even says how long to wait -- so it waits and tries again.
- * A rejected key or a missing model is not retried, since neither
- * resolves itself and retrying only delays the real message.
+ * Gemini had no retry at all, which made a passing failure fatal to a
+ * scan rather than a short pause: one 429 and the reading was lost.
+ *
+ * Three kinds of failure, three responses:
+ *   - rate limited (429): wait exactly as long as the server says, and
+ *     try the same model again. The quota clears on its own.
+ *   - server wobble (500/502/503/504): back off briefly and retry. The
+ *     provider's own advice for these is to try again.
+ *   - model overloaded: retrying the same model is what Google is
+ *     telling us not to do -- "spikes in demand are usually temporary"
+ *     is about that model. So after a couple of attempts it moves to
+ *     another model the key can use, and says which one answered rather
+ *     than silently changing what read the drawing.
+ *   - a rejected key or a missing model is never retried, since neither
+ *     resolves itself and retrying only delays the real message.
  */
 export async function callGeminiAPI(systemPrompt, content){
-  const MAX_ATTEMPTS = 4;
+  const preferred = getGeminiModel();
+  const chain = [preferred, ...GEMINI_FALLBACKS.filter(m => m !== preferred)];
+  const MAX_ATTEMPTS = 3;
   let lastErr;
-  for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
-    try {
-      return await callGeminiOnce(systemPrompt, content);
-    } catch (err) {
-      lastErr = err;
-      if(err.message === 'NO_API_KEY' || err.status !== 429 || attempt === MAX_ATTEMPTS) throw err;
-      // Google's own number, plus a little, and never less than a second.
-      const wait = Math.max(1000, (err.retryAfterMs || 2000 * attempt) + 250);
-      console.warn(`Gemini rate-limited; waiting ${wait}ms before attempt ${attempt + 1}`);
-      await new Promise(r => setTimeout(r, wait));
+
+  for(let m = 0; m < chain.length; m++){
+    const model = chain[m];
+    for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
+      try {
+        const out = await callGeminiOnce(systemPrompt, content, model);
+        if(model !== preferred){
+          console.warn(`Gemini: "${preferred}" was unavailable; "${model}" answered instead`);
+          lastSubstitution = { asked: preferred, used: model };
+        }
+        return out;
+      } catch (err) {
+        lastErr = err;
+        if(err.message === 'NO_API_KEY') throw err;
+
+        const status = err.status;
+        const overloaded = isModelOverloaded(status, err.message);
+        const retryable = status === 429 || isTransientServerError(status);
+        if(!retryable) throw err;                       // bad key, missing model, refusal
+
+        // Out of attempts on this model. An overloaded one is worth
+        // swapping; a plain wobble means the whole service is unhappy
+        // and another model will not help.
+        if(attempt === MAX_ATTEMPTS){
+          if(overloaded && m < chain.length - 1) break; // try the next model
+          throw err;
+        }
+
+        const wait = status === 429
+          ? Math.max(1000, (err.retryAfterMs || 2000 * attempt) + 250)
+          : 800 * attempt;
+        console.warn(`Gemini ${status} on "${model}"; waiting ${wait}ms before attempt ${attempt + 1}`);
+        await new Promise(r => setTimeout(r, wait));
+      }
     }
   }
   throw lastErr;
+}
+
+// Which model actually answered, when it was not the one asked for. Read
+// by the scan so a substitution is reported rather than silent.
+let lastSubstitution = null;
+export function takeModelSubstitution(){
+  const s = lastSubstitution;
+  lastSubstitution = null;
+  return s;
 }
 
 export function toOpenRouterContent(content){

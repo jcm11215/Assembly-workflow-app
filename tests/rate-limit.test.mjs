@@ -100,6 +100,59 @@ await t('it gives up rather than retrying forever', async () => {
   if (calls() > 4) throw new Error('too many attempts: ' + calls());
 });
 
+console.log('\n=== a model that is simply too busy ===');
+// The real 503, from the device: "This model is currently experiencing
+// high demand. Spikes in demand are usually temporary."
+function mockStatus(sequence){
+  let i = 0;
+  globalThis.fetch = async (url) => {
+    const model = /models\/([^:]+):/.exec(String(url));
+    const next = sequence[Math.min(i++, sequence.length - 1)];
+    if (next === 'ok'){
+      const body = JSON.stringify({ candidates: [{ content: { parts: [{ text: 'from ' + (model && model[1]) }] } }] });
+      return { ok: true, status: 200, text: async () => body, headers: { get: () => null } };
+    }
+    const body = JSON.stringify({ error: { code: next, status: 'UNAVAILABLE',
+      message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.' } });
+    return { ok: false, status: next, text: async () => body, headers: { get: () => null } };
+  };
+  return () => i;
+}
+
+await t('a 503 is retried rather than losing the reading', async () => {
+  // Only 429 was retried before, so a passing server wobble was fatal.
+  const calls = mockStatus([503, 'ok']);
+  const out = await callGeminiAPI('sys', 'hi');
+  if (!/from /.test(out)) throw new Error('no answer: ' + out);
+  if (calls() < 2) throw new Error('did not retry the 503');
+});
+await t('a model that stays busy is swapped for one that answers', async () => {
+  // Retrying the same model is what Google is telling us not to do --
+  // "spikes in demand" is about THAT model.
+  const { takeModelSubstitution } = await import('../src/ai/providers.js');
+  takeModelSubstitution();
+  mockStatus([503, 503, 503, 'ok']);
+  const out = await callGeminiAPI('sys', 'hi');
+  const swap = takeModelSubstitution();
+  if (!swap) throw new Error('no substitution reported -- it must not change models silently');
+  if (swap.used === swap.asked) throw new Error('reported a swap to the same model');
+  if (!out.includes(swap.used)) throw new Error('the answer did not come from the model it claims');
+});
+await t('a rejected key is still never retried or swapped', async () => {
+  globalThis.fetch = async () => {
+    const body = JSON.stringify({ error: { code: 400, message: 'API key not valid. Please pass a valid API key.' } });
+    return { ok: false, status: 400, text: async () => body, headers: { get: () => null } };
+  };
+  let threw = null;
+  try { await callGeminiAPI('sys', 'hi'); } catch (e) { threw = e; }
+  if (!threw || !/API key not valid/.test(threw.message)) throw new Error('lost the real message');
+});
+await t('"too busy" is never described as something the person broke', () => {
+  const m = explainFetchError(new Error('This model is currently experiencing high demand.'));
+  if (!/too busy/i.test(m)) throw new Error('unclear: ' + m);
+  if (/rejected the API key|free tier is out/i.test(m)) throw new Error('blamed the wrong thing: ' + m);
+});
+
 console.log('\n=== what the person is told when it still fails ===');
 await t('the quota message says the cap and that waiting already happened', () => {
   const m = explainFetchError(new Error(realQuotaBody.error.message));

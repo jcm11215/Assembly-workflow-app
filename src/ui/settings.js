@@ -1,6 +1,6 @@
 /** Settings: name, AI provider, keys. */
 
-import { getAiProvider, getApiKey, getOpenRouterKey, getOpenRouterModel, setApiKey, setOpenRouterKey, setOpenRouterModel, hasPersonalApiKey, hasPersonalOpenRouterKey } from '../ai/keys.js';
+import { getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel, setApiKey, setGeminiModel, setOpenRouterKey, setOpenRouterModel, hasPersonalApiKey, hasPersonalOpenRouterKey } from '../ai/keys.js';
 import { getUserName, setUserName } from '../auth/identity.js';
 import { AUTH_ENABLED, currentUser, signOut } from '../auth/authService.js';
 import { getCachedProfile } from '../auth/profileService.js';
@@ -89,6 +89,22 @@ export function settingsModalHtml(){
       ${hasPersonalApiKey()
         ? `<div class="bp-file-chip">Key saved: ${escapeHtml(masked)}</div>`
         : `<div class="bp-file-chip">No key set on this device yet.</div>`}
+      <div class="field">
+        <label>Model</label>
+        <select id="gmModelSelect" data-action="set-gemini-model">
+          <option value="${escapeHtml(getGeminiModel())}" selected>${escapeHtml(getGeminiModel())}</option>
+        </select>
+        <div class="bp-hint">
+          A model can be perfectly valid and still refuse to work -- "currently experiencing high demand" is
+          about the hour, not your key. Scans retry and then move to another model on their own; if one keeps
+          being busy, load the list and pick a different one.
+        </div>
+        <div class="fab-row">
+          <button type="button" class="btn btn-outline btn-sm" data-action="load-gemini-models">
+            Load models from Google
+          </button>
+        </div>
+      </div>
       <form id="apiKeyForm">
         <div class="field">
           <label>API Key</label>
@@ -312,6 +328,49 @@ export async function loadOpenRouterModels(){
   } catch (e) {
     select.value = previous;
     showToast(`Could not load the model list: ${String(e && e.message || e)}`, 6000);
+  } finally {
+    select.disabled = false;
+  }
+}
+
+/**
+ * Fills the Gemini model list with what this key can actually see.
+ *
+ * Hardcoding one model is what left a scan stuck when that model got
+ * busy: "gemini-3.6-flash is experiencing high demand" has no fix in the
+ * app if the app only knows one model. Google will say which ones this
+ * key can use, so it asks rather than guesses -- the same reason the
+ * OpenRouter list is loaded rather than written down.
+ */
+export async function loadGeminiModels(){
+  const select = document.getElementById('gmModelSelect');
+  if(!select) return;
+  const key = getApiKey();
+  if(!key){ showToast('Add a Gemini key first, then load the list'); return; }
+  select.disabled = true;
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+    const data = await res.json();
+    if(!res.ok){
+      const msg = (data && data.error && data.error.message) || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    const usable = (data.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => String(m.name || '').replace(/^models\//, ''))
+      // Drop the ones that cannot read a drawing however good they are.
+      .filter(id => !/-tts$|embedding|aqa|imagen|veo/i.test(id))
+      .sort();
+    if(!usable.length) throw new Error('this key has no models that can read a drawing');
+
+    const current = getGeminiModel();
+    select.innerHTML = usable.map(id =>
+      `<option value="${escapeHtml(id)}"${id === current ? ' selected' : ''}>${escapeHtml(id)}</option>`).join('');
+    showToast(usable.includes(current)
+      ? `${usable.length} models available. "${current}" is still one of them.`
+      : `"${current}" is not on this key's list -- pick one above.`, 5000);
+  } catch (e) {
+    showToast(`Could not load Google's model list: ${String(e && e.message || e)}`, 6000);
   } finally {
     select.disabled = false;
   }

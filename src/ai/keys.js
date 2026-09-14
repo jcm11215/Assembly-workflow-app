@@ -18,6 +18,25 @@ export function getApiKey(){
 
 export function setApiKey(key){ localStorage.setItem('awt_geminiKey', (key||'').trim()); }
 
+/**
+ * Which Gemini model reads the drawings.
+ *
+ * Stored rather than hardcoded because a model can be perfectly valid
+ * and still refuse to work: "this model is currently experiencing high
+ * demand" is a property of the hour, not of the key, and the only way
+ * out is to use a different one. The default is the newest flash model;
+ * Settings lists what this particular key can actually see.
+ */
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
+
+export function getGeminiModel(){
+  return (localStorage.getItem('awt_geminiModel') || '').trim() || DEFAULT_GEMINI_MODEL;
+}
+
+export function setGeminiModel(model){
+  localStorage.setItem('awt_geminiModel', (model || '').trim());
+}
+
 export function getOpenRouterKey(){
   return (localStorage.getItem('awt_openrouterKey') || '').trim();
 }

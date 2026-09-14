@@ -8,7 +8,7 @@
  */
 
 import { explainFetchError } from '../ai/errors.js';
-import { callClaudeAPI } from '../ai/providers.js';
+import { callClaudeAPI, takeModelSubstitution } from '../ai/providers.js';
 import { requestRender as render } from '../app/bus.js';
 import { bomListHtml } from './bom.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
@@ -253,6 +253,10 @@ async function runExtractionPipeline(contentBlocks, includeJobFields){
       requestsMade: tally.requests,
       readingsReused: tally.reused,
       timesDivided: tally.splits,
+      // A busy model gets swapped for one that answers. Said out loud,
+      // because which model read the drawing is worth knowing when the
+      // results look different from usual.
+      modelSubstitution: takeModelSubstitution(),
       // A reading that came back for most of its sheets but not all.
       // Without this an incomplete answer reads as a complete one, which
       // is how a drawing quietly loses a sheet's worth of parts.
@@ -329,6 +333,8 @@ function recordScanDiagnostics(jobNumber, components, d){
     partsPlacedOnDrawing: d.placed,
     calloutsFound: d.calloutsFound,
     rejectedByPartsWhitelist: some(d.droppedNames),
+    readByADifferentModel: d.modelSubstitution
+      ? `${d.modelSubstitution.asked} was busy; ${d.modelSubstitution.used} read it instead` : undefined,
     // What the scan cost, and what it did not have to pay twice for.
     requestsMade: d.requestsMade,
     readingsReusedFromLastTime: d.readingsReused || undefined,
