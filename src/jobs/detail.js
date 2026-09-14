@@ -117,7 +117,7 @@ export function jobPageHtml(job){
     <div class="fab-row">
       <button class="btn btn-outline btn-sm" data-action="edit-job" data-id="${job.id}">Edit Details</button>
       <button class="btn btn-outline btn-sm" data-action="report-blocker" data-jobnumber="${escapeHtml(job.jobNumber)}">Report Blocker</button>
-      ${canLogErrors() ? `<button class="btn btn-outline btn-sm" data-action="log-error" data-jobnumber="${escapeHtml(job.jobNumber)}">Log Error</button>` : ''}
+      ${canLogErrors() ? `<button class="btn btn-outline btn-sm" data-action="log-error" data-jobnumber="${escapeHtml(job.jobNumber)}">Engineering Notes</button>` : ''}
     </div>
 
     ${diagram ? `

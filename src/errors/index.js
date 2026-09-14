@@ -74,7 +74,7 @@ function errorCardHtml(e, showJob){
 /**
  * The section for a job's page: what has gone wrong on this job, listed.
  *
- * Read-only on purpose -- logging one is a "Log Error" button in the
+ * Read-only on purpose -- logging one is an "Engineering Notes" button in the
  * action row at the top of the page, next to Report Blocker, where the
  * other things you DO to a job live. A second button down here would be
  * two entry points to one form, and this section is six deep on the
