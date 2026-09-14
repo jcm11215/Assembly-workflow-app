@@ -97,8 +97,7 @@ export function initEventRouter(){
     if(!item){ showToast('Enter a part name'); return; }
     const bucket = form.getAttribute('data-bucket');
     const blueprintId = form.getAttribute('data-blueprint-id');
-    const jobId = currentJobId;
-    const job = state.jobs.find(j=>j.id===jobId);
+    const job = bomJob();
     if(!job){ showToast('Could not find the job to add this to'); return; }
     blueprintsRepo.addComponent(blueprintId, {
       item, specification: (fd.get('specification')||'').trim(),
@@ -107,10 +106,40 @@ export function initEventRouter(){
     }).then(created=>{
       job.billOfMaterials = [...(job.billOfMaterials||[]), created];
       logActivity('Component added', { jobNumber: job.jobNumber, item }, {type:'blueprint', id:blueprintId});
-      refreshOpenModal();
+      refreshBom();
       showToast('Component added');
     }).catch(err=>showToast(`Could not add: ${err.message}`, 5000));
   });
+
+/**
+ * The job whose hardware list is on screen.
+ *
+ * The BOM used to live only inside a modal, so `currentJobId` was the
+ * whole answer. It is now a section of the job's own page, and two
+ * things broke with the move: the page sets `state.openJobId`, not the
+ * modal's id, and `closeModal()` nulls `currentJobId` -- so opening and
+ * closing any modal on a job page (Report Blocker, Log Error, Edit
+ * Details) left every BOM control reporting "could not find the job".
+ * The page is asked first, the modal second.
+ */
+function bomJob(){
+  const id = (state.tab === 'job' && state.openJobId) || currentJobId;
+  return id ? (state.jobs.find(j => j.id === id) || null) : null;
+}
+
+/**
+ * Redraws whichever surface the hardware list is on.
+ *
+ * refreshOpenModal() only repaints when a modal is actually open, so on
+ * the job page every BOM action changed state and the database and left
+ * the screen exactly as it was -- which reads as the button being dead.
+ * A render() with a modal open is harmless: it repaints the page behind
+ * it, which is what the page wants anyway.
+ */
+function refreshBom(){
+  refreshOpenModal();
+  render();
+}
 
   // <select> fires 'change', not 'click', so category moves need their
   // own delegated listener rather than a case in the click switch.
@@ -118,7 +147,7 @@ export function initEventRouter(){
     const sel = e.target.closest && e.target.closest('[data-action="bom-set-category"]');
     if(!sel) return;
     const componentId = sel.getAttribute('data-component-id');
-    const job = state.jobs.find(j=>j.id===currentJobId);
+    const job = bomJob();
     if(!job){ showToast('Could not find the job for this component'); return; }
     const comp = (job.billOfMaterials||[]).find(c=>c.id===componentId);
     if(!comp) return;
@@ -129,11 +158,11 @@ export function initEventRouter(){
       logActivity('Component recategorized',
         { jobNumber: job.jobNumber, item: comp.item, from: prevStage, to: newStage },
         {type:'blueprint', id: job.blueprintId});
-      refreshOpenModal();
+      refreshBom();
       showToast(`Moved to ${sel.options[sel.selectedIndex].text}`);
     }).catch(err=>{
       comp.stage = prevStage;
-      refreshOpenModal();
+      refreshBom();
       showToast(`Could not move: ${err.message}`, 5000);
     });
   });
@@ -189,7 +218,7 @@ export function initEventRouter(){
         break;
       case 'bom-toggle-edit':
         state.bomEditing = !state.bomEditing;
-        refreshOpenModal();
+        refreshBom();
         break;
       case 'bom-remove-component': {
         const componentId = btn.getAttribute('data-component-id');
@@ -198,13 +227,13 @@ export function initEventRouter(){
         if(!componentId || componentId === 'undefined' || componentId === 'null'){
           showToast('This component has no saved id yet -- refresh and try again', 5000); break;
         }
-        const job = state.jobs.find(j=>j.id===currentJobId);
+        const job = bomJob();
         if(!job) break;
         const removed = (job.billOfMaterials||[]).find(c=>c.id===componentId);
         blueprintsRepo.deleteComponent(componentId).then(()=>{
           job.billOfMaterials = (job.billOfMaterials||[]).filter(c=>c.id!==componentId);
           logActivity('Component removed', { jobNumber: job.jobNumber, item: removed && removed.item }, {type:'blueprint', id: job.blueprintId});
-          refreshOpenModal();
+          refreshBom();
           showToast('Component removed');
         }).catch(err=>showToast(`Could not remove: ${err.message}`, 5000));
         break;
@@ -215,7 +244,7 @@ export function initEventRouter(){
         if(!componentId || componentId === 'undefined' || componentId === 'null'){
           showToast('This component has no saved id yet -- refresh and try again', 5000); break;
         }
-        const job = state.jobs.find(j=>j.id===currentJobId);
+        const job = bomJob();
         if(!job){ showToast('Could not find the job for this component'); break; }
         const list = job.billOfMaterials || [];
         const bucketOf = c => bomBucketFor(c);
@@ -232,9 +261,9 @@ export function initEventRouter(){
         const others = list.filter(c=>bucketOf(c)!==bucketOf(target));
         job.billOfMaterials = [...others, ...siblings];
         blueprintsRepo.reorderComponents(siblings.map(c=>c.id))
-          .then(()=>refreshOpenModal())
+          .then(()=>refreshBom())
           .catch(err=>showToast(`Could not reorder: ${err.message}`, 5000));
-        refreshOpenModal();   // optimistic -- don't wait on the round trip to feel responsive
+        refreshBom();   // optimistic -- don't wait on the round trip to feel responsive
         break;
       }
       case 'cv-page':
