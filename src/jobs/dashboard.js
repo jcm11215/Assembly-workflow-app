@@ -4,6 +4,7 @@
 import { STAGES, stageChecklistProgress, stageLabel } from './procedure.js';
 import { computeFocusJobs, computeMetrics, dueStatus, dueStatusLabel, getJobFilters, openBlockerJobSet } from './selectors.js';
 import { state } from '../state/store.js';
+import { isLeadOrAdmin } from '../auth/permissions.js';
 import { completedKeySet, isDone, isOverdue, isRecurring, tasksDueOn } from '../models/taskMeta.js';
 import { daysUntil, fmtDate, todayISO } from '../utils/date.js';
 import { escapeHtml } from '../utils/dom.js';
@@ -71,7 +72,17 @@ export function todayTasksHtml(){
   const due = tasksDueOn(state.tasks, today);
   const overdue = state.tasks.filter(t => isOverdue(t, done, today));
   const list = [...overdue, ...due];
-  if(!list.length) return '';
+
+  // Only the people who may actually create one get the button -- the
+  // database refuses the insert from anyone else, so offering it would
+  // just be a button that fails.
+  const addBtn = isLeadOrAdmin()
+    ? `<button class="btn btn-outline btn-block task-add-btn" data-action="new-task">+ Add Task</button>`
+    : '';
+  // The empty day is precisely when the button has to still be there:
+  // with nothing due, a button that lived inside the list would vanish
+  // exactly when someone wanted to add the first task.
+  if(!list.length) return addBtn;
 
   const outstanding = list.filter(t => !isDone(done, t.id, isRecurring(t) ? today : t.dueDate));
   const rows = list.map(t => {
@@ -88,6 +99,7 @@ export function todayTasksHtml(){
   }).join('');
 
   return `
+  ${addBtn}
   <div class="today-tasks">
     <div class="today-tasks-head">
       <span>Today's Tasks</span>
