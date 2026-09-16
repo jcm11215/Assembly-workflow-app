@@ -77,7 +77,7 @@ export function todayTasksHtml(){
   // database refuses the insert from anyone else, so offering it would
   // just be a button that fails.
   const addBtn = isLeadOrAdmin()
-    ? `<button class="btn btn-outline btn-block task-add-btn" data-action="new-task">+ Add Task</button>`
+    ? `<button class="btn btn-outline task-add-btn" data-action="new-task">+ Add Task</button>`
     : '';
   // The empty day is precisely when the button has to still be there:
   // with nothing due, a button that lived inside the list would vanish
