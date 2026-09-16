@@ -267,3 +267,55 @@ export function componentToRow(c, blueprintId){
     position_y: c.position ? c.position.y : null
   };
 }
+
+/* ---------------- daily tasks ---------------- */
+
+export function rowToTask(row){
+  return {
+    id: row.id,
+    title: row.title || '',
+    details: row.details || '',
+    jobId: row.job_id || null,
+    jobNumber: row.job_number || '',          // joined; '' means shop-wide
+    assignedTo: row.assigned_to || null,
+    assigneeName: row.assignee_name || '',    // joined; '' means anyone
+    recurrence: row.recurrence || 'none',
+    dueDate: row.due_date || '',
+    weekday: row.weekday == null ? null : Number(row.weekday),
+    startsOn: row.starts_on || '',
+    active: row.active !== false
+  };
+}
+
+/**
+ * Only the columns that apply to this task's kind are sent. A one-off
+ * carries no weekday or start, and a recurring task carries no due date
+ * -- the table's CHECK constraints reject the mixtures, and clearing the
+ * stale side matters when a task is edited from one kind into another.
+ */
+export function taskToRow(t, jobId){
+  const recurrence = t.recurrence || 'none';
+  const recurring = recurrence !== 'none';
+  return {
+    title: (t.title || '').trim(),
+    details: t.details ? t.details.trim() : null,
+    job_id: jobId ?? t.jobId ?? null,
+    assigned_to: t.assignedTo || null,
+    recurrence,
+    due_date: recurring ? null : (t.dueDate || null),
+    weekday: recurrence === 'weekly' ? Number(t.weekday) : null,
+    starts_on: recurring ? (t.startsOn || new Date().toISOString().slice(0, 10)) : null,
+    active: t.active !== false
+  };
+}
+
+export function rowToTaskCompletion(row){
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    dueOn: row.due_on || '',
+    doneBy: row.done_by || null,
+    doneByName: row.done_by_name || '',
+    doneAt: row.done_at || ''
+  };
+}

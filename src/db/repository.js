@@ -22,6 +22,8 @@ import { requestRender } from '../app/bus.js';
 import { supabaseReady, db } from './supabaseClient.js';
 import { tracked, recordStaleConflict, recordFailure } from './telemetry.js';
 import { USE_RELATIONAL_READS, USE_LEGACY_FALLBACK, getMode, MODE } from './cutover.js';
+import { completionWindow } from '../models/taskMeta.js';
+import { todayISO } from '../utils/date.js';
 
 import * as jobsRepo from './jobsRepo.js';
 import * as blockersRepo from './blockersRepo.js';
@@ -30,6 +32,7 @@ import * as notesRepo from './notesRepo.js';
 import * as checklistRepo from './checklistRepo.js';
 import * as activityRepo from './activityRepo.js';
 import * as blueprintsRepo from './blueprintsRepo.js';
+import * as tasksRepo from './tasksRepo.js';
 
 // Namespace re-exports removed in Phase 11: every consumer imports each
 // repo directly from its own file (db/jobsRepo.js etc.); nothing imported
@@ -57,6 +60,7 @@ function changedRecords(list, prev){
 export async function loadAll(){
   if(!supabaseReady()){
     state.jobs = []; state.blockers = []; state.notes = []; state.jobErrors = [];
+    state.tasks = []; state.taskCompletions = [];
     return;
   }
 
@@ -72,7 +76,7 @@ export async function loadAll(){
     // No legacy blob (already archived) -- fall through to relational.
   }
 
-  const [jobs, blockers, notes, jobErrors] = await Promise.all([
+  const [jobs, blockers, notes, jobErrors, tasks] = await Promise.all([
     tracked('jobs', 'read', () => jobsRepo.listJobs()),
     tracked('blockers', 'read', () => blockersRepo.listBlockers()),
     tracked('notes', 'read', () => notesRepo.listNotes()),
@@ -82,13 +86,45 @@ export async function loadAll(){
     tracked('job_errors', 'read', () => errorsRepo.listJobErrors()).catch(e => {
       console.error('could not load the error log', e);
       return [];
+    }),
+    // Same treatment as the error log: written row at a time through its
+    // own repo, so it stays out of the diff-and-persist snapshot below,
+    // and a failed read must not take the whole app down with it. Before
+    // phase16_tasks.sql has been run the table does not exist yet, and
+    // this is exactly what keeps the rest of the app working meanwhile.
+    tracked('shop_tasks', 'read', () => tasksRepo.listTasks()).catch(e => {
+      console.error('could not load the task list', e);
+      return [];
     })
   ]);
   state.jobs = jobs;
   state.blockers = blockers;
   state.notes = notes;
   state.jobErrors = jobErrors;
+  state.tasks = tasks;
+  state.taskCompletions = await loadTaskCompletions(tasks);
   snapshot = { jobs: snap(jobs), blockers: snap(blockers), notes: snap(notes) };
+}
+
+/**
+ * Ticks for the span the views can actually show. Depends on the tasks,
+ * so it cannot join the parallel batch above.
+ */
+async function loadTaskCompletions(tasks){
+  if(!tasks.length) return [];
+  const { from, to } = completionWindow(tasks, todayISO());
+  return tracked('shop_task_completions', 'read', () => tasksRepo.listCompletions(from, to))
+    .catch(e => {
+      console.error('could not load task completions', e);
+      return [];
+    });
+}
+
+/** Re-reads tasks and their ticks alone, after a write. */
+export async function reloadTasks(){
+  if(!supabaseReady()) return;
+  state.tasks = await tasksRepo.listTasks();
+  state.taskCompletions = await loadTaskCompletions(state.tasks);
 }
 
 /**

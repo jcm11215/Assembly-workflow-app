@@ -21,6 +21,7 @@ import { closeJobPage, openJobDetail } from '../jobs/detail.js';
 import { openJobForm } from '../jobs/jobForm.js';
 import { toggleStageChecklistItem } from '../jobs/stageGate.js';
 import { openNoteForm, updateNotesList } from '../notes/index.js';
+import { editTask, openTaskForm, removeTask, toggleTaskActive, toggleTaskDone, updateTasksList } from '../tasks/index.js';
 import { setSelectedBlueprintFile, state } from '../state/store.js';
 import { closeModal, currentJobId, modalRefresh, refreshOpenModal, setModalRefresh } from '../ui/components/modal.js';
 import { acceptConfirm, confirmAction, dismissConfirm } from '../ui/components/confirm.js';
@@ -314,6 +315,34 @@ function refreshBom(){
         document.querySelectorAll('#blockerFilterChips .chip').forEach(c=>c.classList.toggle('active', c.getAttribute('data-filter')===state.blockerFilter));
         updateBlockersList();
         break;
+      case 'filter-tasks':
+        state.taskFilter = btn.getAttribute('data-filter');
+        document.querySelectorAll('#taskFilterChips .chip').forEach(c=>c.classList.toggle('active', c.getAttribute('data-filter')===state.taskFilter));
+        updateTasksList();
+        break;
+      case 'new-task':
+        openTaskForm(null);
+        break;
+      case 'edit-task':
+        editTask(id);
+        break;
+      case 'toggle-task-done':
+        toggleTaskDone(id, btn.getAttribute('data-date'));
+        break;
+      case 'toggle-task-active':
+        toggleTaskActive(id);
+        break;
+      case 'delete-task': {
+        const delTask = state.tasks.find(t=>t.id===id);
+        if(!delTask) break;
+        confirmAction({
+          title: 'Delete Task',
+          message: `Delete "${delTask.title}"? Everything already ticked off against it goes too. This cannot be undone.`,
+          confirmLabel: 'Delete Task',
+          onConfirm(){ removeTask(id); }
+        });
+        break;
+      }
       case 'new-job':
         openJobForm(null);
         break;

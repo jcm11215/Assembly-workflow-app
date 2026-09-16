@@ -19,6 +19,17 @@ DB.notes.push({ id:'n1', job_id:'j1', note_type:'Progress', body:'Trough section
 DB.activity_log.push({ id:1, actor:null, actor_name:'Test Lead', action:'Job created',
   entity_type:'job', entity_id:'j1', detail:{}, at:'2026-08-01T00:00:00Z' });
 DB.job_checklist.push({ id:'c1', job_id:'j2', step_index:0, item_index:0, done:true });
+// One of each kind of task, so the views render both an occurrence that
+// is computed from a rule and a plain dated one.
+DB.shop_tasks = [
+  { id:'t1', title:'Sweep the assembly bays', details:null, job_id:null, assigned_to:'u-lead',
+    recurrence:'weekdays', due_date:null, weekday:null, starts_on:'2026-01-01', active:true,
+    created_by:'u-lead', created_at:'2026-01-01T00:00:00Z' },
+  { id:'t2', title:'Chase the gearmotor ETA', details:'Supplier said Friday', job_id:'j1',
+    assigned_to:null, recurrence:'none', due_date:'2026-09-16', weekday:null, starts_on:null,
+    active:true, created_by:'u-lead', created_at:'2026-09-15T00:00:00Z' }
+];
+DB.shop_task_completions = [];
 
 const results = [];
 function step(name, fn){
@@ -50,7 +61,7 @@ await step('loadAll populated state', async ()=>{
 });
 
 // ---- render every tab ----
-for(const tab of ['dashboard','board','blockers','notes','assistant','activity']){
+for(const tab of ['dashboard','board','blockers','tasks','notes','assistant','activity']){
   await step(`render tab: ${tab}`, async ()=>{
     state.tab = tab;
     render.render();

@@ -11,6 +11,7 @@ import { renderBoard } from '../jobs/board.js';
 import { renderDashboard, renderMetrics } from '../jobs/dashboard.js';
 import { renderJobPage } from '../jobs/detail.js';
 import { renderNotes } from '../notes/index.js';
+import { renderTasks } from '../tasks/index.js';
 import { state } from '../state/store.js';
 
 /**
@@ -81,6 +82,7 @@ export function render(){
   else if(state.tab==='board') renderBoard();
   else if(state.tab==='blockers') renderBlockers();
   else if(state.tab==='errors') renderErrors();
+  else if(state.tab==='tasks') renderTasks();
   else if(state.tab==='notes') renderNotes();
   else if(state.tab==='assistant') renderAssistantLazy();
   else if(state.tab==='activity') renderActivity();

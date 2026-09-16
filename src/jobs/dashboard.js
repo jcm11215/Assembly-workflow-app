@@ -4,7 +4,8 @@
 import { STAGES, stageChecklistProgress, stageLabel } from './procedure.js';
 import { computeFocusJobs, computeMetrics, dueStatus, dueStatusLabel, getJobFilters, openBlockerJobSet } from './selectors.js';
 import { state } from '../state/store.js';
-import { daysUntil, fmtDate } from '../utils/date.js';
+import { completedKeySet, isDone, isOverdue, isRecurring, tasksDueOn } from '../models/taskMeta.js';
+import { daysUntil, fmtDate, todayISO } from '../utils/date.js';
 import { escapeHtml } from '../utils/dom.js';
 
 export function renderMetrics(){
@@ -59,10 +60,48 @@ export function focusBannerHtml(){
   </div>`;
 }
 
+/**
+ * Today's tasks, above the job list. The Tasks tab is where they are
+ * managed; this is so nobody has to remember to go looking. Hidden
+ * entirely when there is nothing due, rather than sitting there empty.
+ */
+export function todayTasksHtml(){
+  const today = todayISO();
+  const done = completedKeySet(state.taskCompletions);
+  const due = tasksDueOn(state.tasks, today);
+  const overdue = state.tasks.filter(t => isOverdue(t, done, today));
+  const list = [...overdue, ...due];
+  if(!list.length) return '';
+
+  const outstanding = list.filter(t => !isDone(done, t.id, isRecurring(t) ? today : t.dueDate));
+  const rows = list.map(t => {
+    const on = isRecurring(t) ? today : t.dueDate;
+    const ticked = isDone(done, t.id, on);
+    return `
+    <div class="today-task${ticked ? ' done' : ''}">
+      <button class="task-tick" data-action="toggle-task-done" data-id="${t.id}" data-date="${on}"
+              aria-pressed="${ticked}" title="${ticked ? 'Undo' : 'Mark done'}">${ticked ? '&#10003;' : ''}</button>
+      <span class="today-task-title">${escapeHtml(t.title)}</span>
+      ${t.assigneeName ? `<span class="today-task-who">${escapeHtml(t.assigneeName)}</span>` : ''}
+      ${on < today ? `<span class="today-task-late">${fmtDate(on)}</span>` : ''}
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="today-tasks">
+    <div class="today-tasks-head">
+      <span>Today's Tasks</span>
+      <span class="count-badge">${outstanding.length} left</span>
+    </div>
+    ${rows}
+  </div>`;
+}
+
 export function renderDashboard(){
   const filters = getJobFilters();
   document.getElementById('content').innerHTML = `
     ${focusBannerHtml()}
+    ${todayTasksHtml()}
     <div class="sticky-bar">
       <input type="search" class="search-input" id="dashSearch" placeholder="Search job # or customer..." value="${escapeHtml(state.jobSearch)}">
       <div class="chip-row" id="jobFilterChips">

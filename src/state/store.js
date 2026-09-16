@@ -25,6 +25,12 @@ export const state = {
   // default so the errors themselves are above the fold.
   errorBreakdownOpen: false,
   noteSearch: '',
+  // Daily tasks: the definitions, and the per-day ticks against them.
+  // Kept apart for the same reason the tables are -- one recurring task
+  // has many days, and a `done` flag could not hold them.
+  tasks: [],
+  taskCompletions: [],
+  taskFilter: 'today',
   activity: [],
   activitySearch: '',
   chat: [],

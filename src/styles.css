@@ -249,7 +249,8 @@ main > *{max-width:1100px;margin-left:auto;margin-right:auto;}
   color:var(--text);margin:16px 0 8px 0;padding-left:9px;border-left:4px solid var(--accent);line-height:1.2;
   display:flex;align-items:center;gap:8px;
 }
-.section-title .count-badge{
+.section-title .count-badge,
+.today-tasks-head .count-badge{
   background:#0b0d0f;color:var(--accent);font-size:13px;padding:2px 9px;border-radius:4px;
   border:1px solid #2c3238;font-variant-numeric:tabular-nums;
 }
@@ -1156,3 +1157,53 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
   font-size:11px;color:var(--text-faint);line-height:1.45;margin-top:4px;
   white-space:pre-wrap;word-break:break-word;user-select:text;
 }
+
+/* ---------- Daily tasks ---------- */
+/* The tick is the whole point of the row, so it's a proper glove-sized
+   target on the left rather than a checkbox tucked into the text. */
+.task-card{
+  display:flex;gap:12px;align-items:flex-start;
+  background:linear-gradient(180deg,#1a1e22,#14171a);border:1px solid #2c3238;
+  border-radius:var(--radius);padding:12px;margin-bottom:8px;
+}
+.task-card.done{opacity:.55;}
+.task-card.done .task-title{text-decoration:line-through;}
+.task-card.late{border-color:var(--red);}
+.task-card.stopped{opacity:.5;border-style:dashed;}
+.task-body{flex:1;min-width:0;}
+.task-title{font-weight:700;font-size:15px;color:var(--text);line-height:1.3;}
+.task-details{font-size:13px;color:var(--text-dim);margin-top:3px;line-height:1.4;}
+.task-meta{font-size:12px;color:var(--text-dim);margin-top:6px;text-transform:uppercase;letter-spacing:.04em;}
+.task-late{color:var(--red);}
+.task-tick{
+  flex-shrink:0;width:34px;height:34px;border-radius:8px;
+  border:2px solid var(--steel-600);background:#0b0d0f;color:var(--green);
+  font-size:19px;line-height:1;cursor:pointer;-webkit-appearance:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.task-tick:active{background:var(--steel-700);}
+.task-card.done .task-tick{border-color:var(--green);}
+
+/* Dashboard strip. Denser than the Tasks tab -- it sits above the job
+   list and must not push the jobs off the screen. */
+.today-tasks{
+  background:linear-gradient(180deg,#1a1e22,#14171a);border:1px solid #2c3238;
+  border-left:4px solid var(--accent);border-radius:var(--radius);
+  padding:10px 12px;margin-bottom:10px;
+}
+.today-tasks-head{
+  display:flex;align-items:center;gap:8px;margin-bottom:8px;
+  font-family:var(--font-display);font-size:13px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--text);
+}
+.today-task{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:14px;color:var(--text);}
+.today-task + .today-task{border-top:1px solid #23282d;}
+.today-task.done{opacity:.5;}
+.today-task.done .today-task-title{text-decoration:line-through;}
+.today-task .task-tick{width:26px;height:26px;font-size:15px;border-width:2px;}
+.today-task-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.today-task-who{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;}
+.today-task-late{font-size:11px;color:var(--red);font-weight:700;}
+
+.field-opt{font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;}
+.field-hint{font-size:11px;color:var(--text-dim);margin-top:4px;}
