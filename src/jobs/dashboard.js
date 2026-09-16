@@ -69,7 +69,6 @@ export function renderDashboard(){
         ${filters.map(f=>`<button class="chip ${state.jobFilter===f.id?'active':''}" data-action="filter-jobs" data-filter="${f.id}">${f.label}</button>`).join('')}
       </div>
     </div>
-    <div class="section-title">Jobs <span class="count-badge" id="jobCountBadge">0</span></div>
     <div id="jobCardsList"></div>
     <div class="fab-row">
       <button class="btn btn-primary btn-block" data-action="new-job">+ Add Job</button>
@@ -146,8 +145,6 @@ export function updateDashboardList(){
   }).join('') : `<div class="empty-state"><div class="big">&#128203;</div>No jobs match this filter.</div>`;
 
   document.getElementById('jobCardsList').innerHTML = cardsHtml;
-  const badge = document.getElementById('jobCountBadge');
-  if(badge) badge.textContent = jobs.length;
 }
 
 /* ================= BOARD ================= */
