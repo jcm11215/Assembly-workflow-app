@@ -83,22 +83,33 @@ t('offers the whole-sheet view, since this page can be cropped', () => {
   if (!html.includes('Show whole sheet')) throw new Error('expected the crop to be on by default');
 });
 
-console.log('\n=== multi-sheet scans ===');
+console.log('\n=== multi-sheet scans: this section is sheet 1 and only sheet 1 ===');
 images.componentMapPageCache['d2:1'] = { base64: 'SHEET1', mime: 'image/jpeg', width: 1000, height: 620 };
 images.componentMapPageCache['d2:2'] = { base64: 'SHEET2', mime: 'image/jpeg', width: 1000, height: 620 };
+// Sheet 2 carries more parts, which is what the old behaviour followed.
 const twoSheets = [part('Drive', 1, .2, .2), part('Reducer', 2, .3, .3), part('Auger', 2, .6, .6)];
 const h2 = dia.calloutDiagramHtml(job('d2', twoSheets));
-t('offers a tab per sheet that has parts on it', () => {
-  if ((h2.match(/data-action="cv-page"/g) || []).length !== 2) throw new Error('expected 2 sheet tabs');
+t('draws sheet 1 even when another sheet has more parts on it', () => {
+  if (!h2.includes('SHEET1')) throw new Error('did not draw the first sheet');
+  if (h2.includes('SHEET2')) throw new Error('drew a later sheet');
 });
-t('opens on the sheet with the most parts', () => {
-  if (!h2.includes('SHEET2')) throw new Error('did not open on the busier sheet');
-  if (h2.includes('SHEET1')) throw new Error('should not render the other sheet at the same time');
+t('only the parts pinned on sheet 1 are called out', () => {
+  if (!h2.includes('Drive')) throw new Error('sheet 1 part missing');
+  if (h2.includes('Reducer') || h2.includes('Auger')) throw new Error('called out a part from another sheet');
 });
-t('a chosen sheet is remembered on the next render', () => {
-  dia.setCalloutPage('d2', 1);
-  const h3 = dia.calloutDiagramHtml(job('d2', twoSheets));
-  if (!h3.includes('SHEET1')) throw new Error('sheet choice not honoured');
+t('no sheet switcher is offered any more', () => {
+  if (h2.includes('data-action="cv-page"')) throw new Error('sheet tabs should be gone');
+});
+
+console.log('\n=== nothing pinned on sheet 1, but parts elsewhere ===');
+images.componentMapPageCache['d7:2'] = { base64: 'SHEET2', mime: 'image/jpeg', width: 1000, height: 620 };
+const laterOnly = dia.calloutDiagramHtml(job('d7', [part('Reducer', 2, .3, .3)]));
+t('says so without claiming the scan failed to pin anything', () => {
+  if (!/sheet 2/.test(laterOnly)) throw new Error('should name the sheet the parts are on');
+  if (/didn't find any parts/.test(laterOnly)) throw new Error('must not report a failed scan');
+});
+t('does not fall back to drawing that other sheet', () => {
+  if (laterOnly.includes('SHEET2')) throw new Error('drew a sheet other than 1');
 });
 
 console.log('\n=== loading and failure states ===');

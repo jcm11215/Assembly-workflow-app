@@ -18,10 +18,8 @@ import { layoutCallouts, frameForParts, frameImageStyle, arrowHead, GUTTER, IMAG
 import { BOM_BUCKET_META, bomBucketFor } from '../models/stageMeta.js';
 import { escapeHtml } from '../utils/dom.js';
 
-// jobId -> which source_page is on screen, when one scan pinned parts
-// across more than one sheet.
-let calloutPage = {};
-export function setCalloutPage(jobId, page){ calloutPage[jobId] = page; }
+/** The general-arrangement sheet, and the only one this section draws. */
+const FIRST_SHEET = 1;
 
 // jobId -> true when they've asked to see the whole sheet instead of just
 // the machine. Off by default: the conveyor is the point, and a sheet is
@@ -60,14 +58,6 @@ function labelInnerHtml(c, number, full){
     </span>`;
 }
 
-function pageTabsHtml(job, pages, current){
-  if(pages.length < 2) return '';
-  return `
-    <div class="fab-row cv-pages">
-      ${pages.map(p => `<button type="button" class="btn btn-sm ${p===current?'btn-primary':'btn-outline'}" data-action="cv-page" data-id="${job.id}" data-index="${p}">Sheet ${p}</button>`).join('')}
-    </div>`;
-}
-
 /**
  * Why an empty diagram explains itself instead of rendering nothing.
  *
@@ -92,6 +82,21 @@ function noCalloutsHtml(job){
 }
 
 /**
+ * Page 1 had nothing to point at, but other sheets did. Saying "the scan
+ * couldn't point at any parts" here would be untrue and would send
+ * someone off to re-scan a drawing that scanned fine.
+ */
+function noCalloutsOnFirstSheetHtml(job, pages){
+  const sheets = pages.join(', ');
+  return `
+    <div class="cv-diagram-empty">
+      Nothing on sheet ${FIRST_SHEET} could be pointed at, so there's nothing to draw here.
+      The scan did pin parts on sheet${pages.length === 1 ? '' : 's'} ${sheets};
+      those parts are listed under Blueprint &amp; Hardware, with the drawing itself.
+    </div>`;
+}
+
+/**
  * Returns '' only when there's no drawing at all -- with a drawing but no
  * placeable parts it returns a note saying so, never nothing.
  */
@@ -101,20 +106,20 @@ export function calloutDiagramHtml(job){
   const pages = Object.keys(byPage).map(Number).sort((a,b)=>a-b);
   if(!pages.length) return noCalloutsHtml(job);
 
-  const remembered = calloutPage[job.id];
-  const current = (remembered && byPage[remembered])
-    ? remembered
-    : pages.reduce((best,p) => byPage[p].length > byPage[best].length ? p : best, pages[0]);
-  calloutPage[job.id] = current;
+  // Always the first sheet. A scan can pin parts across several sheets,
+  // and this section used to show whichever had the most -- so the
+  // picture at the top of a job could be a detail sheet, which is not
+  // what "what you're building" means. Page 1 is the general arrangement.
+  const current = FIRST_SHEET;
+  if(!byPage[current]) return noCalloutsOnFirstSheetHtml(job, pages);
 
-  const tabs = pageTabsHtml(job, pages, current);
   const cached = componentMapPageCache[`${job.id}:${current}`];
   if(cached === undefined){
     ensureComponentMapPageLoaded(job.id, current);
-    return `${tabs}<div class="cv-diagram-empty">Loading the drawing...</div>`;
+    return `<div class="cv-diagram-empty">Loading the drawing...</div>`;
   }
   if(!cached){
-    return `${tabs}<div class="cv-diagram-empty">Could not load the drawing for this scan.</div>`;
+    return `<div class="cv-diagram-empty">Could not load the drawing for this scan.</div>`;
   }
 
   // Crop to the machine unless they've asked for the whole sheet, or we
@@ -201,7 +206,6 @@ export function calloutDiagramHtml(job){
     </button>` : '';
 
   return `
-  ${tabs}
   <div class="cv-diagram" style="--cv-gutter:${GUTTER}%;">
     <svg class="cv-leaders" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${leaders}</svg>
     <div class="cv-sheet-wrap" style="margin-left:${IMAGE_LEFT}%;width:${IMAGE_WIDTH}%;">
