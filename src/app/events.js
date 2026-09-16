@@ -120,7 +120,7 @@ export function initEventRouter(){
  * whole answer. It is now a section of the job's own page, and two
  * things broke with the move: the page sets `state.openJobId`, not the
  * modal's id, and `closeModal()` nulls `currentJobId` -- so opening and
- * closing any modal on a job page (Report Blocker, Engineering Notes, Edit
+ * closing any modal on a job page (Report Blocker, Report Engineering Error, Edit
  * Details) left every BOM control reporting "could not find the job".
  * The page is asked first, the modal second.
  */
