@@ -8,7 +8,7 @@
  * phone would show about four rows of it.
  */
 import { requestRender } from '../app/bus.js';
-import { currentUser } from '../auth/authService.js';
+import { adminCreateUser, currentUser } from '../auth/authService.js';
 import { ASSIGNABLE_ROLES, isAdmin, roleBlurb, roleLabel, roleTagClass } from '../auth/permissions.js';
 import * as adminRepo from '../db/adminRepo.js';
 import { logActivity } from '../db/repository.js';
@@ -31,8 +31,16 @@ const view = {
   codes: null,
   codesError: null,
   loading: false,
-  filters: { actor: '', action: '', entityType: '', from: '', to: '', text: '' }
+  filters: { actor: '', action: '', entityType: '', from: '', to: '', text: '' },
+  /* The "add someone" form. Held here rather than read off the DOM at
+     submit time because the Team section repaints whenever the roster
+     reloads, and a half-typed name should survive that. */
+  newPerson: blankPerson()
 };
+
+function blankPerson(){
+  return { fullName: '', loginId: '', password: '', role: 'assembler_b', busy: false };
+}
 
 /* ---------------- helpers ---------------- */
 
@@ -171,6 +179,114 @@ function teamRowHtml(p, meId){
     </div>`;
 }
 
+/**
+ * Make someone a login without them typing an access code.
+ *
+ * The password here is a starting one, handed over verbally along with
+ * the username. Nothing forces a change afterwards, so it is worth
+ * saying plainly on the screen that whoever types it will know it.
+ */
+function addPersonHtml(){
+  const f = view.newPerson;
+  return `
+    <div class="section-title">Add Someone</div>
+    <div class="tip-card" style="display:grid;gap:10px;">
+      <div class="bp-hint" style="margin:0;">
+        Creates the login yourself, no access code needed. Give them the username and starting password
+        in person &mdash; they can change the password later in Settings, and until they do, it is one you
+        also know.
+      </div>
+      <div class="field">
+        <label for="npName">Their Name</label>
+        <input id="npName" value="${escapeHtml(f.fullName)}" placeholder="e.g. D. Reyes"
+               autocomplete="off" ${f.busy ? 'disabled' : ''}>
+      </div>
+      <div class="field">
+        <label for="npLogin">Username Or Work Email</label>
+        <input id="npLogin" value="${escapeHtml(f.loginId)}" placeholder="e.g. dreyes"
+               autocomplete="off" spellcheck="false" ${f.busy ? 'disabled' : ''}>
+        <div class="note">A plain username is fine &mdash; no email address needed.</div>
+      </div>
+      <div class="field">
+        <label for="npPass">Starting Password</label>
+        <input id="npPass" value="${escapeHtml(f.password)}" placeholder="at least 8 characters"
+               autocomplete="off" spellcheck="false" ${f.busy ? 'disabled' : ''}>
+        <button class="btn btn-outline btn-sm" data-action="admin-suggest-password" style="margin-top:6px;"
+                ${f.busy ? 'disabled' : ''}>Suggest One</button>
+      </div>
+      <div class="field">
+        <label for="npRole">Role</label>
+        <select id="npRole" ${f.busy ? 'disabled' : ''}>
+          ${ASSIGNABLE_ROLES.map(r => `
+            <option value="${r}" ${f.role === r ? 'selected' : ''}>${escapeHtml(roleLabel(r))}</option>`).join('')}
+        </select>
+        <div class="note">${escapeHtml(roleBlurb(f.role))}</div>
+      </div>
+      <button class="btn btn-primary btn-block" data-action="admin-add-person" ${f.busy ? 'disabled' : ''}>
+        ${f.busy ? 'Creating...' : 'Create Login'}
+      </button>
+    </div>
+  `;
+}
+
+/** Readable out loud and over a noisy shop floor: no l/1/O/0 to confuse. */
+function suggestPassword(){
+  const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
+  const bytes = new Uint32Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
+}
+
+const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{2,29}$/;
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Mirrors signupView's checks, so the same input is rejected the same
+ *  way whichever door it came through. */
+function newPersonProblem({ fullName, loginId, password }){
+  if(!fullName) return 'Enter their name.';
+  if(!loginId) return 'Enter a username or work email.';
+  if(loginId.includes('@')){
+    if(!EMAIL_RE.test(loginId)) return 'That email address is not valid.';
+  } else if(!USERNAME_RE.test(loginId)){
+    return 'A username is 3-30 characters: letters, numbers, dot, dash or underscore.';
+  }
+  if(password.length < 8) return 'The password must be at least 8 characters.';
+  return null;
+}
+
+async function addPerson(){
+  const f = view.newPerson;
+  if(f.busy) return;
+
+  const fields = {
+    fullName: f.fullName.trim(),
+    loginId: f.loginId.trim().toLowerCase(),
+    password: f.password,
+    role: f.role
+  };
+  const problem = newPersonProblem(fields);
+  if(problem){ showToast(problem, 5000); return; }
+
+  f.busy = true;
+  renderAdmin();
+  try {
+    const result = await adminCreateUser(fields);
+    logActivity('Login created', { login: fields.loginId, role: result.role },
+      { type: 'profile', id: result.id });
+    view.newPerson = blankPerson();
+    await loadTeam(true);
+    renderAdmin();
+    showToast(result.warning
+      ? result.warning
+      : `${fields.fullName} can now sign in as ${fields.loginId}`, 8000);
+  } catch (e) {
+    console.error('could not create login', e);
+    f.busy = false;
+    renderAdmin();
+    showToast(e.message || 'Could not create the login.', 6000);
+  }
+}
+
 function teamHtml(){
   if(view.teamError){
     return `<div class="val-box val-bad"><div class="val-head">Could not load the team</div>
@@ -180,6 +296,8 @@ function teamHtml(){
   if(!team) return `<div class="empty-state"><div class="big">&#8987;</div>Loading team...</div>`;
   const meId = (currentUser() || {}).id;
   return `
+    ${addPersonHtml()}
+    <div class="section-title">The Team <span class="count-badge">${team.length}</span></div>
     ${team.map(p => teamRowHtml(p, meId)).join('') || `<div class="empty-state">No accounts yet.</div>`}
     <div class="section-title">What Each Role Can Do</div>
     ${ASSIGNABLE_ROLES.map(r => `
@@ -188,8 +306,9 @@ function teamHtml(){
         <div class="tip-line" style="grid-template-columns:1fr;">${escapeHtml(roleBlurb(r))}</div>
       </div>`).join('')}
     <div class="bp-hint">
-      Everyone who creates an account starts as ${escapeHtml(roleLabel('assembler_b'))} until you change it here.
-      Role changes take effect the next time that person's app loads.
+      Anyone who signs up with the shop access code starts as ${escapeHtml(roleLabel('assembler_b'))} until you
+      change it here; a login you create above starts as whatever role you picked. Role changes take effect the
+      next time that person's app loads.
     </div>
   `;
 }
@@ -361,6 +480,25 @@ function bindInputs(){
   document.querySelectorAll('[data-action="admin-set-role"]').forEach(sel => {
     sel.addEventListener('change', () => changeRole(sel.getAttribute('data-id'), sel.value));
   });
+
+  /* The add-someone form. Typing only updates the held value -- no
+     repaint, so the caret stays where it is. The role select does
+     repaint, because its blurb underneath has to follow it. */
+  const onField = (id, key) => {
+    const node = document.getElementById(id);
+    if(node) node.addEventListener('input', () => { view.newPerson[key] = node.value; });
+  };
+  onField('npName', 'fullName');
+  onField('npLogin', 'loginId');
+  onField('npPass', 'password');
+
+  const role = document.getElementById('npRole');
+  if(role){
+    role.addEventListener('change', () => {
+      view.newPerson.role = role.value;
+      renderAdmin();
+    });
+  }
 }
 
 async function refresh(){
@@ -524,6 +662,13 @@ export function handleAdminAction(action, btn){
       break;
     case 'admin-toggle-code':
       toggleCode(btn.getAttribute('data-code'));
+      break;
+    case 'admin-suggest-password':
+      view.newPerson.password = suggestPassword();
+      renderAdmin();
+      break;
+    case 'admin-add-person':
+      addPerson();
       break;
   }
 }

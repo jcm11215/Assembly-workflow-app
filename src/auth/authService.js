@@ -116,6 +116,37 @@ export async function createAccount({ fullName, loginId, password, accessCode })
   return signIn(toLoginEmail(loginId), password);
 }
 
+/**
+ * An admin creates a login for someone else, via the admin-create-user
+ * Edge Function.
+ *
+ * Unlike createAccount() this does NOT sign the new person in -- the
+ * admin stays signed in as themselves, which is the whole point. The
+ * caller's own token is what authorizes it; the shop access code is not
+ * involved.
+ *
+ * Resolves to { id, role, warning? }. A warning means the login exists
+ * but is still a trainee, because the role change was refused.
+ */
+export async function adminCreateUser({ fullName, loginId, password, role }){
+  const session = getSession();
+  if(!session || !session.access_token) throw new Error('Sign in again to do that.');
+
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-create-user`, {
+    method: 'POST',
+    headers: authHeaders({ Authorization: `Bearer ${session.access_token}` }),
+    body: JSON.stringify({
+      full_name: fullName,
+      email: toLoginEmail(loginId),
+      password,
+      role
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(data.error || 'Could not create the login.');
+  return data;
+}
+
 export async function signOut(){
   const token = getSession() && getSession().access_token;
   clearTimeout(refreshTimer);
