@@ -441,7 +441,7 @@ export async function extractComponents(jobId){
     job.blueprintExtractedAt = new Date().toISOString();
     await persistJobs();
 
-    const saved = await blueprintsRepo.saveExtraction(job.id, { components, originalFile, thumbnail });
+    const saved = await blueprintsRepo.saveExtraction(job.id, { components, originalFile, thumbnail, jobNumber: job.jobNumber });
     job.hasBlueprintImage = true;
     delete blueprintImageCache[job.id];
 

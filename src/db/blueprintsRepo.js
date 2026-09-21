@@ -10,9 +10,11 @@
  */
 import { db, storage, BLUEPRINT_BUCKET, base64ToBlob, blobToBase64, currentUserId }
   from './supabaseClient.js';
+import { localFileStore, sanitizeForPath } from './localFileStore.js';
+import { getLocalBlueprintStorageEnabled } from '../ai/keys.js';
 import { COMPONENT_COLS, rowToComponent, componentToRow } from './mappers.js';
 
-const SEL = 'select=id,job_id,storage_path,original_filename,original_mime_type,' +
+const SEL = 'select=id,job_id,storage_path,storage_backend,original_filename,original_mime_type,' +
             'status,version,extracted_at';
 
 /**
@@ -65,6 +67,20 @@ const EXT_BY_MIME = {
   'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic'
 };
 
+/** Falls back to whatever extension the upload already had, for a mime
+ *  type EXT_BY_MIME doesn't know -- only reached on the local backend,
+ *  where the extension is part of a name someone will actually see. */
+function extFromFilename(filename){
+  const m = /\.([A-Za-z0-9]{1,8})$/.exec(String(filename || ''));
+  return m ? m[1].toLowerCase() : '';
+}
+
+/** The filename minus its extension, so re-adding one from EXT_BY_MIME
+ *  doesn't produce "drawing.pdf.pdf". */
+function stripExt(filename){
+  return String(filename || '').replace(/\.[A-Za-z0-9]{1,8}$/, '');
+}
+
 /**
  * Saves an extraction: the components (the one thing that matters going
  * forward) plus the ORIGINAL uploaded file, unmodified, so it can be
@@ -74,27 +90,51 @@ const EXT_BY_MIME = {
  * reviews or displays them anymore.
  */
 export async function saveExtraction(jobId, {
-  components, originalFile, thumbnail   // { base64, mimeType, filename }, small base64 jpeg or null
+  components, originalFile, thumbnail,   // { base64, mimeType, filename }, small base64 jpeg or null
+  jobNumber   // for the local backend's folder name; Supabase keeps using jobId regardless
 }){
+  const version = await nextVersion(jobId);
+  const useLocal = getLocalBlueprintStorageEnabled();
   let storagePath = null;
+  let storageBackend = useLocal ? 'local' : 'supabase';
+
   if(originalFile && originalFile.base64){
-    const ext = EXT_BY_MIME[originalFile.mimeType] || 'bin';
-    storagePath = `${jobId}/${Date.now()}.${ext}`;
-    try {
-      await storage.upload(BLUEPRINT_BUCKET, storagePath,
-        base64ToBlob(originalFile.base64), originalFile.mimeType || 'application/octet-stream');
-    } catch (e) {
-      console.error('blueprint file upload failed', e);
-      storagePath = null;
+    const ext = EXT_BY_MIME[originalFile.mimeType] || extFromFilename(originalFile.filename) || 'bin';
+    if(useLocal){
+      // A folder per job, a name a person would recognize -- the whole
+      // point of storing these on a machine someone can open a file
+      // browser to. Version 1 keeps the plain name; a re-scan gets a
+      // "(v2)" suffix so it lands beside the last one instead of
+      // silently replacing it.
+      const folder = sanitizeForPath(jobNumber || jobId, 'job');
+      const stem = sanitizeForPath(stripExt(originalFile.filename) || 'blueprint', 'blueprint');
+      const name = version > 1 ? `${stem} (v${version}).${ext}` : `${stem}.${ext}`;
+      storagePath = `${folder}/${sanitizeForPath(name, `blueprint.${ext}`)}`;
+      try {
+        await localFileStore.upload(storagePath,
+          base64ToBlob(originalFile.base64), originalFile.mimeType || 'application/octet-stream');
+      } catch (e) {
+        console.error('blueprint file upload to local storage failed', e);
+        storagePath = null;
+      }
+    } else {
+      storagePath = `${jobId}/${Date.now()}.${ext}`;
+      try {
+        await storage.upload(BLUEPRINT_BUCKET, storagePath,
+          base64ToBlob(originalFile.base64), originalFile.mimeType || 'application/octet-stream');
+      } catch (e) {
+        console.error('blueprint file upload failed', e);
+        storagePath = null;
+      }
     }
   }
-
-  const version = await nextVersion(jobId);
+  if(!storagePath) storageBackend = 'supabase';   // nothing was actually written anywhere; keep the not-null column meaningful
 
   const row = {
     job_id: jobId,
     version,
     storage_path: storagePath,
+    storage_backend: storageBackend,
     original_filename: (originalFile && originalFile.filename) || null,
     original_mime_type: (originalFile && originalFile.mimeType) || null,
     thumbnail_base64: thumbnail || null,
@@ -180,7 +220,9 @@ export async function compareVersions(blueprintIdA, blueprintIdB){
 export async function getOriginalFile(jobId){
   const bp = await getForJob(jobId);
   if(!bp || !bp.storage_path) return null;
-  const blob = await storage.download(BLUEPRINT_BUCKET, bp.storage_path);
+  const blob = bp.storage_backend === 'local'
+    ? await localFileStore.download(bp.storage_path)
+    : await storage.download(BLUEPRINT_BUCKET, bp.storage_path);
   if(!blob) return null;
   return {
     base64: await blobToBase64(blob),
@@ -197,10 +239,13 @@ export async function getImage(jobId){
 }
 
 export async function deleteForJob(jobId){
-  const rows = await db.select('blueprints', `select=id,storage_path&job_id=eq.${jobId}`);
+  const rows = await db.select('blueprints', `select=id,storage_path,storage_backend&job_id=eq.${jobId}`);
   await Promise.all(rows
     .filter(r => r.storage_path)
-    .map(r => storage.remove(BLUEPRINT_BUCKET, r.storage_path).catch(() => {})));
+    .map(r => (r.storage_backend === 'local'
+      ? localFileStore.remove(r.storage_path)
+      : storage.remove(BLUEPRINT_BUCKET, r.storage_path)
+    ).catch(() => {})));
   await db.remove('blueprints', `job_id=eq.${jobId}`);
 }
 

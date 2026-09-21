@@ -121,6 +121,21 @@ export function setLocalAiKey(key){ localStorage.setItem('awt_localAiKey', (key 
 export function getLocalAiFallback(){ return localStorage.getItem('awt_localAiFallback') !== 'off'; }
 export function setLocalAiFallback(on){ localStorage.setItem('awt_localAiFallback', on ? 'on' : 'off'); }
 
+/**
+ * Store uploaded blueprint files on the shop's own server instead of in
+ * Supabase Storage -- same address and access key as Local AI above,
+ * since it is the same machine, but a separate switch: someone may want
+ * Gemini or OpenRouter doing the reading while files still land on a
+ * server they own, or the reverse. Off by default, and only meaningful
+ * once an address and key are saved.
+ */
+export function getLocalBlueprintStorageEnabled(){
+  return localStorage.getItem('awt_localBlueprintStorage') === 'on';
+}
+export function setLocalBlueprintStorageEnabled(on){
+  localStorage.setItem('awt_localBlueprintStorage', on ? 'on' : 'off');
+}
+
 export function activeProviderHasKey(){
   const p = getAiProvider();
   if(p === 'local') return !!getLocalAiUrl() && !!getLocalAiKey();

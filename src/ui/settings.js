@@ -1,7 +1,8 @@
 /** Settings: name, AI provider, keys. */
 
 import { getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel, setApiKey, setGeminiModel, setOpenRouterKey, setOpenRouterModel, hasPersonalApiKey, hasPersonalOpenRouterKey,
-         getLocalAiUrl, getLocalAiKey, getLocalAiFallback, setLocalAiUrl, setLocalAiKey, setLocalAiFallback, localAiUrlProblem, normalizeLocalAiUrl } from '../ai/keys.js';
+         getLocalAiUrl, getLocalAiKey, getLocalAiFallback, setLocalAiUrl, setLocalAiKey, setLocalAiFallback, localAiUrlProblem, normalizeLocalAiUrl,
+         getLocalBlueprintStorageEnabled, setLocalBlueprintStorageEnabled } from '../ai/keys.js';
 import { getUserName, setUserName } from '../auth/identity.js';
 import { AUTH_ENABLED, currentUser, signOut } from '../auth/authService.js';
 import { getCachedProfile } from '../auth/profileService.js';
@@ -71,6 +72,35 @@ function localAiSectionHtml(provider){
       </label>
       ${url || key ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-local-ai">Remove Local AI Settings</button></div>` : ''}
     </div>`;
+}
+
+/**
+ * Where uploaded drawings themselves are kept -- independent of which AI
+ * reads them. Shown regardless of the provider chip above: someone might
+ * want Gemini or OpenRouter doing the reading while the files still land
+ * on a server they own, or the reverse. Reuses the same address and key
+ * as Local AI, since it is the same machine; the checkbox below is
+ * disabled until those are saved.
+ */
+function blueprintStorageSectionHtml(){
+  const configured = !!(getLocalAiUrl() && getLocalAiKey());
+  const on = getLocalBlueprintStorageEnabled();
+  return `
+    <div class="section-title">Blueprint Storage</div>
+    <div class="bp-hint" style="margin-bottom:10px;">
+      Where uploaded drawings themselves are kept, separate from which AI reads them. By default they go into
+      this app's own cloud storage. Turning this on sends them instead to a folder on the shop's own server --
+      the same one Local AI (below) can talk to -- so they stay on a machine you own and can open directly.
+    </div>
+    <label class="bp-hint" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:4px;${configured ? 'cursor:pointer;' : 'opacity:.6;'}">
+      <input type="checkbox" id="localBlueprintStorage" ${on ? 'checked' : ''} ${configured ? '' : 'disabled'} style="margin-top:2px;">
+      <span><b>Store new blueprint files on the shop's server.</b> ${configured
+        ? 'Uses the address and access key set below.'
+        : 'Set an address and access key below first -- this is the same server Local AI uses.'}</span>
+    </label>
+    ${on ? `<div class="bp-hint" style="margin-bottom:10px;">Existing drawings already saved in the cloud stay there and still open normally -- only new
+      scans and uploads go to the local folder from now on.</div>` : ''}
+  `;
 }
 
 export function settingsModalHtml(){
@@ -209,6 +239,7 @@ export function settingsModalHtml(){
       ${hasPersonalOpenRouterKey() ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-openrouter-key">Remove Key</button></div>` : ''}
     </div>
 
+    ${blueprintStorageSectionHtml()}
     ${localAiSectionHtml(provider)}
 
     ${AUTH_ENABLED && isAdmin() ? `
@@ -293,6 +324,16 @@ export function openSettingsModal(){
       setLocalAiFallback(fallbackBox.checked);
       showToast(fallbackBox.checked ? 'OpenRouter will cover for the local AI when it\'s off'
                                     : 'Scans will fail while the local AI is off');
+    });
+  }
+  const blueprintStorageBox = document.getElementById('localBlueprintStorage');
+  if(blueprintStorageBox){
+    blueprintStorageBox.addEventListener('change', ()=>{
+      setLocalBlueprintStorageEnabled(blueprintStorageBox.checked);
+      openSettingsModal();   // repaints the "existing drawings stay put" note in/out
+      showToast(blueprintStorageBox.checked
+        ? 'New blueprint files will be saved to the shop\'s server.'
+        : 'New blueprint files will be saved to this app\'s cloud storage again.');
     });
   }
   if(orForm){

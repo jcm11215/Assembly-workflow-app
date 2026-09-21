@@ -109,7 +109,7 @@ export function openJobForm(jobId, prefill){
       // about to open.
       const created = newJob;
       try {
-        const saved = await blueprintsRepo.saveExtraction(created.id, pendingBlueprint);
+        const saved = await blueprintsRepo.saveExtraction(created.id, { ...pendingBlueprint, jobNumber: created.jobNumber });
         created.hasBlueprintImage = true;
         created.blueprintId = saved.id;   // needed for Edit and "already scanned" detection
         created.billOfMaterials = await blueprintsRepo.listComponents(saved.id);   // real ids, not the raw AI output

@@ -25,7 +25,8 @@ export async function saveBlueprintImage(jobId, originalFile){
   try {
     await blueprintsRepo.saveExtraction(jobId, {
       components: job ? job.billOfMaterials || [] : [],
-      originalFile
+      originalFile,
+      jobNumber: job && job.jobNumber
     });
     delete blueprintImageCache[jobId];   // force a refetch of the new file
     return true;
