@@ -6,7 +6,8 @@
  */
 
 
-import { DEFAULT_GEMINI_MODEL, getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel } from './keys.js';
+import { DEFAULT_GEMINI_MODEL, getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel,
+         getLocalAiUrl, getLocalAiKey, getLocalAiFallback } from './keys.js';
 
 /** Kept as a live getter, not a constant: the model is a setting now,
  *  because an overloaded model is fixed by using a different one. */
@@ -267,15 +268,176 @@ export async function callOpenRouterAPI(systemPrompt, content){
   }
   throw lastErr;
 }
-// Every call site in the app goes through this one function -- it routes
-// to whichever provider is currently selected, so nothing else needs to
-// know or care which backend is active.
+/* ============================ Local AI ============================
+ *
+ * The shop's own server. It speaks the same OpenAI chat shape OpenRouter
+ * does, so the request is built the same way -- with one addition: the
+ * PDF's selectable text travels next to each page image. A small local
+ * vision model squinting at a 1600px render of a D-size sheet misreads
+ * part numbers that the PDF states outright; handing it the exact
+ * characters (and letting the image settle where they sit) is the
+ * cheapest accuracy there is. Cloud providers never see this text --
+ * their conversions ignore the field -- so their behaviour is unchanged.
+ */
+
+/** Longest a request may run before it's treated as hung. A 10-sheet
+ *  set on a desktop GPU is a minute or two; this is only for true hangs. */
+export const LOCAL_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** After the local AI turns out to be unreachable, how long later calls
+ *  skip straight to the fallback rather than each waiting to fail. */
+export const LOCAL_DOWN_MS = 60 * 1000;
+let localDownUntil = 0;
+
+/** Test hook: forget that the local AI was recently down. */
+export function resetLocalAiState(){ localDownUntil = 0; lastSubstitution = null; }
+
+export function textLayerNote(layer){
+  return `Selectable text in the PDF on page ${layer.page} -- the exact characters, but reading ` +
+    `order can be jumbled, and anything drawn as lines rather than text is missing. Use it to ` +
+    `get part numbers, sizes and table entries exactly right; the image shows where each one sits:\n` +
+    layer.text;
+}
+
+export function toLocalContent(content){
+  if(typeof content === 'string') return content;
+  const out = [];
+  for(const block of content){
+    if(block.type === 'image'){
+      out.push({ type:'image_url', image_url:{ url:`data:${block.source.media_type};base64,${block.source.data}` } });
+      // After its image, before the next page's label, so the server's
+      // "images in order: PDF page 1; PDF page 2" still pairs up.
+      if(block.textLayer && block.textLayer.text) out.push({ type:'text', text: textLayerNote(block.textLayer) });
+    }else{
+      out.push({ type:'text', text: block.text || '' });
+    }
+  }
+  return out;
+}
+
+function localError(message, extra){
+  const err = new Error(message);
+  err.provider = 'local';
+  return Object.assign(err, extra || {});
+}
+
+async function callLocalOnce(systemPrompt, content){
+  const base = getLocalAiUrl();
+  const key = getLocalAiKey();
+  if(!base || !key) throw localError('NO_API_KEY');
+
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), LOCAL_TIMEOUT_MS) : null;
+  let response;
+  try{
+    response = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({
+        model: 'auto',            // the server picks: its vision model for drawings, chat model otherwise
+        stream: false,
+        messages: [
+          { role:'system', content: systemPrompt },
+          { role:'user', content: toLocalContent(content) }
+        ]
+      }),
+      signal: ctrl ? ctrl.signal : undefined
+    });
+  }catch(e){
+    const hung = e && e.name === 'AbortError';
+    throw localError(hung
+      ? `The local AI took longer than ${LOCAL_TIMEOUT_MS / 60000} minutes to answer.`
+      : `Couldn't reach the local AI at ${base} (${(e && e.message) || 'network error'}).`,
+      { unreachable: true });
+  }finally{
+    if(timer) clearTimeout(timer);
+  }
+
+  const raw = await response.text();
+  let data = null;
+  try{ data = JSON.parse(raw); }catch(e){ /* handled below */ }
+
+  if(!response.ok || (data && data.error)){
+    const msg = (data && data.error && data.error.message) || `Request failed (${response.status})`;
+    const kind = data && data.error && data.error.type;
+    // 502/504 are Tailscale saying the desktop (or the service on it)
+    // didn't answer; 503 is the server saying Ollama didn't.
+    const unreachable = [502, 503, 504].includes(response.status) || kind === 'upstream_unavailable';
+    throw localError(msg, { status: response.status, kind, unreachable });
+  }
+  if(!data){
+    throw localError('Unexpected response from the local AI (not JSON).', { status: response.status, unreachable: true });
+  }
+  const choice = data.choices && data.choices[0];
+  if(!choice || !choice.message) throw localError('The local AI returned no answer.');
+  return choice.message.content || '';
+}
+
+/** Worth answering from OpenRouter instead: the server is gone, or the
+ *  model on it keeps falling over. A wrong key, a request that's too big
+ *  (the scan splits those) or a missing vision model are setup problems
+ *  and are shown as they are -- quietly routing around them would hide
+ *  a broken setup behind scans that seem to work. */
+function localNeedsFallback(err){
+  return !!(err && (err.unreachable || err.status === 500));
+}
+
+function canFallBack(){
+  return getLocalAiFallback() && !!getOpenRouterKey();
+}
+
+async function fallBackToOpenRouter(systemPrompt, content, why){
+  try{
+    const out = await callOpenRouterAPI(systemPrompt, content);
+    lastSubstitution = { asked: 'the local AI', used: `OpenRouter (${getOpenRouterModel()})`, reason: why };
+    console.warn(`Local AI ${why}; OpenRouter answered instead`);
+    return out;
+  }catch(err){
+    // Both failed. The OpenRouter error is the actionable one now, but
+    // the person needs to know it's the backup that failed.
+    err.provider = 'openrouter';
+    err.afterLocalFallback = why;
+    throw err;
+  }
+}
+
+export async function callLocalAPI(systemPrompt, content){
+  if(Date.now() < localDownUntil && canFallBack()){
+    return fallBackToOpenRouter(systemPrompt, content, 'was unreachable a moment ago');
+  }
+  let lastErr;
+  for(let attempt = 1; attempt <= 2; attempt++){
+    try{
+      const out = await callLocalOnce(systemPrompt, content);
+      localDownUntil = 0;
+      return out;
+    }catch(err){
+      lastErr = err;
+      if(err.message === 'NO_API_KEY') throw err;
+      if(err.unreachable){
+        localDownUntil = Date.now() + LOCAL_DOWN_MS;
+        break;                                 // retrying a machine that's off only delays the fallback
+      }
+      // A model error can be a one-off (it was being swapped out of
+      // memory); once more, then give up on it.
+      if(err.status !== 500 || attempt === 2) break;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+  if(localNeedsFallback(lastErr) && canFallBack()){
+    return fallBackToOpenRouter(systemPrompt, content,
+      lastErr.unreachable ? 'was unreachable' : `failed (${lastErr.message})`);
+  }
+  throw lastErr;
+}
 
 // Every call site in the app goes through this one function -- it routes
 // to whichever provider is currently selected, so nothing else needs to
 // know or care which backend is active.
 export async function callClaudeAPI(systemPrompt, content){
-  return getAiProvider()==='openrouter'
+  const p = getAiProvider();
+  if(p === 'local') return callLocalAPI(systemPrompt, content);
+  return p === 'openrouter'
     ? callOpenRouterAPI(systemPrompt, content)
     : callGeminiAPI(systemPrompt, content);
 }

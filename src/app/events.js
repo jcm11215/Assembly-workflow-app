@@ -4,7 +4,7 @@
  * Handlers here only orchestrate; every mutation lives in a feature module.
  */
 import { loadActivity, updateActivityList } from '../activity/index.js';
-import { setAiProvider, setApiKey, setOpenRouterKey } from '../ai/keys.js';
+import { setAiProvider, setApiKey, setOpenRouterKey, setLocalAiUrl, setLocalAiKey } from '../ai/keys.js';
 import { render } from './render.js';
 import { openBlockerForm, updateBlockersList } from '../blockers/index.js';
 import { extractComponents, extractNewJobFromBlueprint } from '../blueprints/extract.js';
@@ -223,6 +223,12 @@ function refreshBom(){
         setOpenRouterKey('');
         closeModal();
         showToast('OpenRouter key removed');
+        break;
+      case 'clear-local-ai':
+        setLocalAiUrl('');
+        setLocalAiKey('');
+        closeModal();
+        showToast('Local AI settings removed from this browser');
         break;
       case 'set-ai-provider':
         setAiProvider(btn.getAttribute('data-provider'));

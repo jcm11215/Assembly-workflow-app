@@ -9,6 +9,7 @@
 
 import { explainFetchError } from '../ai/errors.js';
 import { callClaudeAPI, takeModelSubstitution } from '../ai/providers.js';
+import { getAiProvider } from '../ai/keys.js';
 import { requestRender as render } from '../app/bus.js';
 import { bomListHtml } from './bom.js';
 import * as blueprintsRepo from '../db/blueprintsRepo.js';
@@ -274,7 +275,10 @@ async function contentBlocksFor(file, pageNumbers){
     // The pages picked in "Pages to scan" (default: every page, up to the
     // cap). Rendered a little smaller/softer than a single page would be
     // so a 20-sheet set stays a reasonable upload for the AI provider.
-    const images = await pdfFileToImages(file, MAX_PDF_PAGES, 1600, 0.75, pageNumbers);
+    // The selectable text rides along for the local AI only (see
+    // providers.js); the cloud providers' request conversions ignore it.
+    const images = await pdfFileToImages(file, MAX_PDF_PAGES, 1600, 0.75, pageNumbers,
+      { textLayer: getAiProvider() === 'local' });
     if(!images.length) throw new Error('The PDF has no readable pages.');
     const thumbnail = await shrinkBase64Image(images[0].base64, images[0].mime).catch(()=>null);
     return {
@@ -283,7 +287,10 @@ async function contentBlocksFor(file, pageNumbers){
       // would otherwise read back as pages 1, 2, 3).
       contentBlocks: images.flatMap(img=>[
         {type:'text', text:`PDF page ${img.page}:`},
-        {type:'image', source:{type:'base64', media_type:img.mime, data:img.base64}}
+        img.text
+          ? {type:'image', source:{type:'base64', media_type:img.mime, data:img.base64},
+             textLayer:{page: img.page, text: img.text}}
+          : {type:'image', source:{type:'base64', media_type:img.mime, data:img.base64}}
       ]),
       originalFile, thumbnail
     };
@@ -333,8 +340,7 @@ function recordScanDiagnostics(jobNumber, components, d){
     partsPlacedOnDrawing: d.placed,
     calloutsFound: d.calloutsFound,
     rejectedByPartsWhitelist: some(d.droppedNames),
-    readByADifferentModel: d.modelSubstitution
-      ? `${d.modelSubstitution.asked} was busy; ${d.modelSubstitution.used} read it instead` : undefined,
+    readByADifferentModel: substitutionText(d.modelSubstitution),
     // What the scan cost, and what it did not have to pay twice for.
     requestsMade: d.requestsMade,
     readingsReusedFromLastTime: d.readingsReused || undefined,
@@ -370,7 +376,25 @@ function retryCostLine(err){
   return ` ${banked.length} of the ${TOTAL} readings of this drawing are already saved, so trying again re-reads only the other ${left}.`;
 }
 
+/** "X was busy; Y read it instead", or why the local AI was passed over. */
+export function substitutionText(sub){
+  if(!sub) return undefined;
+  return `${sub.asked} ${sub.reason || 'was busy'}; ${sub.used} read it instead`;
+}
+
 function statusToast(componentCount, d){
+  return statusToastBody(componentCount, d) + fallbackNote(d);
+}
+
+/** A scan the local AI didn't read is worth a word in the toast, not just
+ *  the activity log: otherwise the desktop can sit switched off for a
+ *  week while every drawing quietly goes to the cloud. */
+function fallbackNote(d){
+  const sub = d && d.modelSubstitution;
+  return sub && /local AI/.test(sub.asked) ? ` (Read by OpenRouter -- the local AI ${sub.reason}.)` : '';
+}
+
+function statusToastBody(componentCount, d){
   const reused = (d && d.reusedPasses) || [];
   const carried = reused.length
     ? ` (${reused.length} section${reused.length===1?'':'s'} carried over from the last attempt, so this retry re-read only what failed)`
@@ -487,7 +511,7 @@ export async function extractNewJobFromBlueprint(){
     closeModal();
     openJobForm(null, prefill);
     showToast(components.length
-      ? `Read the blueprint -- found ${components.length} components. Review and save.`
+      ? `Read the blueprint -- found ${components.length} components. Review and save.${fallbackNote(diagnostics)}`
       : statusToast(0, diagnostics), components.length ? 5000 : 8000);
   }catch(err){
     console.error(err);

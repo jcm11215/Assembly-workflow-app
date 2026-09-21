@@ -667,6 +667,90 @@ body:has(.auth-screen) .cv-incline{opacity:.24;}
   position:absolute;top:4px;right:calc(50% - 20px);width:8px;height:8px;background:var(--red);
   border-radius:50%;box-shadow:0 0 6px var(--red);
 }
+/* Section headings only mean something in the sidebar; the bottom bar
+   has no room for them. */
+.nav-group{display:none;}
+
+/* ---------- Sidebar navigation (desktop / landscape tablet) ----------
+   The bottom bar is right for a phone -- it's where a thumb already is --
+   but on a monitor it puts eight targets as far from the content as the
+   screen allows, and stretches each one to an eighth of the width. From
+   900px up the same buttons become a left sidebar: labelled rows, grouped,
+   with the active page marked by an edge bar as well as colour.
+
+   Same DOM, same .tab-btn / .active hooks as before -- render.js and the
+   click handler in events.js don't know the layout changed. */
+@media (min-width: 900px){
+  #app{
+    display:grid;
+    grid-template-columns:232px minmax(0,1fr);
+    grid-template-rows:auto auto minmax(0,1fr);
+    grid-template-areas:
+      "bar     bar"
+      "nav     metrics"
+      "nav     main";
+  }
+  .appbar{grid-area:bar;}
+  .metrics-strip{grid-area:metrics;}
+  main{grid-area:main;min-height:0;padding-bottom:28px;}
+
+  .tabbar{
+    grid-area:nav;position:static;
+    flex-direction:column;gap:2px;
+    overflow-y:auto;scrollbar-width:thin;
+    padding:14px 12px 20px;
+    background:linear-gradient(180deg,#15181c,#0f1215);
+    border-top:none;border-right:1px solid #000;
+    box-shadow:inset -1px 0 0 rgba(255,255,255,.04),6px 0 18px rgba(0,0,0,.25);
+  }
+
+  .nav-group{
+    display:block;
+    font-family:var(--font-display);font-size:11px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);
+    padding:16px 12px 6px;
+  }
+  .nav-group:first-child{padding-top:4px;}
+
+  .tab-btn{
+    flex:none;flex-direction:row;justify-content:flex-start;align-items:center;gap:12px;
+    min-height:44px;                 /* the shop's glove-friendly minimum */
+    padding:0 12px 0 14px;border-radius:8px;
+    font-size:15px;font-weight:600;letter-spacing:.06em;
+    color:#a3abb3;text-align:left;cursor:pointer;
+    transition:background-color .12s ease,color .12s ease;
+  }
+  .tab-btn .ic{width:20px;height:20px;opacity:.85;}
+  .tab-btn .tab-lbl{flex:1;min-width:0;}
+
+  .tab-btn:hover{background:rgba(255,255,255,.045);color:var(--text);}
+  .tab-btn:hover .ic{opacity:1;}
+  .tab-btn:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+
+  .tab-btn.active{
+    color:var(--text);
+    background:linear-gradient(90deg,rgba(245,130,32,.16),rgba(245,130,32,.05));
+    box-shadow:inset 0 0 0 1px rgba(245,130,32,.22);
+  }
+  .tab-btn.active .ic{color:var(--accent);opacity:1;filter:none;}
+  /* Edge bar instead of the bottom bar's top bar */
+  .tab-btn.active::before{
+    top:9px;bottom:9px;left:0;right:auto;width:3px;height:auto;
+    border-radius:0 3px 3px 0;
+  }
+
+  /* The open-blockers marker sits at the row's end rather than on the icon */
+  .tab-btn .dot{
+    position:static;flex-shrink:0;margin-left:auto;
+    width:9px;height:9px;
+  }
+}
+
+/* Wide monitors: a little more room, and the content column stays capped
+   by main > * so lines don't stretch across the screen. */
+@media (min-width: 1400px){
+  #app{grid-template-columns:256px minmax(0,1fr);}
+}
 
 .empty-state{text-align:center;padding:40px 20px;color:var(--text-faint);}
 .empty-state .big{font-size:32px;margin-bottom:8px;}

@@ -18,7 +18,8 @@
  * always included, so if the reasoning below is wrong the raw evidence
  * is still in front of the person reading it.
  */
-import { getAiProvider, getApiKey, getOpenRouterKey, getOpenRouterModel } from './keys.js';
+import { getAiProvider, getApiKey, getOpenRouterKey, getOpenRouterModel,
+         getLocalAiUrl, getLocalAiKey, getLocalAiFallback, localAiUrlProblem } from './keys.js';
 import { getGeminiModel } from './keys.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -233,13 +234,117 @@ async function diagnoseOpenRouter(){
   return { provider: 'OpenRouter', steps, models: visionFree };
 }
 
+/* =========================== Local AI =========================== */
+
+/**
+ * Each step fails for a different reason with a different fix: the
+ * address, the desktop being off, the key, no vision model, Ollama
+ * down. "Failed to fetch" covers the first two alike, so the unguarded
+ * health check runs before anything that needs the key.
+ */
+export async function diagnoseLocal(){
+  const PROVIDER = 'Local AI';
+  const steps = [];
+  const base = getLocalAiUrl();
+  const key = getLocalAiKey();
+
+  const problem = base ? localAiUrlProblem(base) : 'No address saved on this device.';
+  steps.push(step('Address', !problem, problem || `Using ${base}`));
+  if(problem) return { provider: PROVIDER, steps, models: [] };
+
+  try {
+    const res = await fetch(`${base}/api/health`);
+    const { json, text } = await readJson(res);
+    if(!res.ok || !(json && json.ok)){
+      steps.push(step('Reach the local AI', false,
+        res.status === 502 || res.status === 504
+          ? 'Tailscale answered but the local AI behind it did not -- the service is stopped, or the desktop is asleep. On the desktop: sudo systemctl restart localai'
+          : 'Something answered at that address, but not the local AI. Check the address.',
+        `HTTP ${res.status} -- ${providerMessage(json, text, res.status)}`));
+      return { provider: PROVIDER, steps, models: [] };
+    }
+    steps.push(step('Reach the local AI', true, 'The server is up.'));
+  } catch (e) {
+    steps.push(step('Reach the local AI', false,
+      'The request never completed. Either the desktop is off or off Tailscale, the address is wrong, ' +
+      `or the local AI doesn't allow this page's address (${(typeof location !== 'undefined' && location.origin) || 'this site'}) ` +
+      '-- that is "tracker_origin" in its config.json.',
+      String(e && e.message || e)));
+    return { provider: PROVIDER, steps, models: [] };
+  }
+
+  if(!key){
+    steps.push(step('Access key accepted', false, 'No access key saved on this device. Copy it from the local AI (System tab, "Tracker connection").'));
+    return { provider: PROVIDER, steps, models: [] };
+  }
+
+  let info;
+  try {
+    const res = await fetch(`${base}/v1/models`, { headers: { Authorization: `Bearer ${key}` } });
+    const { json, text } = await readJson(res);
+    if(!res.ok){
+      steps.push(step('Access key accepted', false,
+        res.status === 401 ? 'The local AI rejected the key. Copy the current one from its System tab -- it changes when rotated.'
+                           : 'The local AI refused the request.',
+        `HTTP ${res.status} -- ${providerMessage(json, text, res.status)}`));
+      return { provider: PROVIDER, steps, models: [] };
+    }
+    info = json || {};
+    steps.push(step('Access key accepted', true, 'The key is right.'));
+  } catch (e) {
+    steps.push(step('Access key accepted', false, 'The request never completed.', String(e && e.message || e)));
+    return { provider: PROVIDER, steps, models: [] };
+  }
+
+  const models = ((info.data) || []).map(m => m.id);
+  if(!info.ollama_up){
+    steps.push(step('Ollama running', false,
+      'The local AI is up but Ollama, which runs the models, is not answering. On the desktop: sudo systemctl restart ollama'));
+    return { provider: PROVIDER, steps, models };
+  }
+  const vision = info.vision_model || '';
+  const visionInstalled = !!vision && models.includes(vision);
+  steps.push(step('Vision model for drawings', visionInstalled,
+    !vision ? 'No vision model is set, so blueprint scans will be refused (the assistant still works). Pick one on the local AI under System -> Vision; minicpm-v runs well on this desktop.'
+    : visionInstalled ? `Scans are read by ${vision}.`
+    : `The vision model is set to "${vision}" but it isn't installed. Pull it from the local AI's Models tab.`));
+
+  try {
+    const res = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: 'auto', max_tokens: 8, stream: false,
+        messages: [{ role: 'user', content: 'Reply with the single word: ready' }] })
+    });
+    const { json, text } = await readJson(res);
+    const failed = !res.ok || (json && json.error);
+    steps.push(failed
+      ? step('A real request works', false, `The chat model (${info.chat_model || 'unset'}) refused the call.`,
+             `HTTP ${res.status} -- ${providerMessage(json, text, res.status)}`)
+      : step('A real request works', true, `${info.chat_model || 'The chat model'} answered a test prompt.`));
+  } catch (e) {
+    steps.push(step('A real request works', false, 'The request never completed.', String(e && e.message || e)));
+  }
+
+  // Not a pass/fail: whether a dead desktop stops scans or not.
+  const backup = getLocalAiFallback() && !!getOpenRouterKey();
+  steps.push(step('Backup when the desktop is off', true,
+    backup ? 'OpenRouter reads drawings when the local AI can\'t be reached.'
+           : getLocalAiFallback() ? 'None -- add an OpenRouter key to keep scanning while the desktop is off.'
+           : 'Off -- scans fail while the desktop is off.'));
+
+  return { provider: PROVIDER, steps, models };
+}
+
 /**
  * @returns {{provider, steps, models, ok, firstFailure}} steps in the
  *          order they were tried; the first failing one is the thing to
  *          fix, since each step depends on the ones before it.
  */
 export async function diagnoseActiveProvider(){
-  const result = getAiProvider() === 'openrouter' ? await diagnoseOpenRouter() : await diagnoseGemini();
+  const p = getAiProvider();
+  const result = p === 'local' ? await diagnoseLocal()
+    : p === 'openrouter' ? await diagnoseOpenRouter() : await diagnoseGemini();
   const firstFailure = result.steps.find(s => !s.ok) || null;
   return { ...result, ok: !firstFailure, firstFailure };
 }

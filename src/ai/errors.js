@@ -1,11 +1,38 @@
 /** Provider-aware error explanation. */
 
 
-import { getAiProvider } from './keys.js';
+import { getAiProvider, providerLabel } from './keys.js';
+
+/** The local AI fails in its own ways, with its own fixes. */
+function explainLocalError(err, msg){
+  if(msg === 'NO_API_KEY'){
+    return 'Add the local AI\'s address and access key in Settings (the gear icon, top right), or switch providers.';
+  }
+  if(err.status === 401){
+    return 'The local AI rejected the access key. Copy the current key from the local AI (System tab, "Tracker connection") ' +
+           'into Settings here -- it changes if someone rotates it.';
+  }
+  if(err.unreachable){
+    return `${msg} Is the desktop on and the local AI running? ` +
+           'Turn on "Use OpenRouter when the local AI is off" in Settings to keep scanning while it\'s down.';
+  }
+  // The server's own sentences (no vision model set, too many pages for
+  // its context) already say what to do; nothing to add.
+  return msg || 'Please try again.';
+}
 
 export function explainFetchError(err){
   const msg = (err && err.message) || '';
-  const providerName = getAiProvider()==='openrouter' ? 'OpenRouter' : 'Google Gemini';
+  const who = (err && err.provider) || getAiProvider();
+  if(who === 'local') return explainLocalError(err, msg);
+  // The local AI was down and the backup failed too: say both, or the
+  // person goes looking for a fault in OpenRouter settings they never use.
+  const prefix = err && err.afterLocalFallback
+    ? `The local AI ${err.afterLocalFallback}, so OpenRouter was tried instead -- and: ` : '';
+  return prefix + explainCloudError(msg, providerLabel(who));
+}
+
+function explainCloudError(msg, providerName){
   if(msg === 'NO_API_KEY'){
     return `Add your ${providerName} API key in Settings (the gear icon, top right) to use AI features.`;
   }

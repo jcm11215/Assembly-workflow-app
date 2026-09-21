@@ -51,12 +51,80 @@ export function setOpenRouterModel(model){ localStorage.setItem('awt_openrouterM
 // by Google's own API for this account (confirmed directly against
 // Google's endpoint, no app involved -- see ARCHITECTURE.md/commit notes
 // if this needs revisiting later).
-export function getAiProvider(){ return localStorage.getItem('awt_aiProvider') || 'openrouter'; }
+const PROVIDERS = ['gemini', 'openrouter', 'local'];
 
-export function setAiProvider(p){ localStorage.setItem('awt_aiProvider', p==='openrouter' ? 'openrouter' : 'gemini'); }
+export function getAiProvider(){
+  const p = localStorage.getItem('awt_aiProvider');
+  return PROVIDERS.includes(p) ? p : 'openrouter';
+}
+
+export function setAiProvider(p){
+  localStorage.setItem('awt_aiProvider', PROVIDERS.includes(p) ? p : 'gemini');
+}
+
+/** How a provider is named in messages. */
+export function providerLabel(p){
+  const which = p || getAiProvider();
+  return which === 'openrouter' ? 'OpenRouter' : which === 'local' ? 'the local AI' : 'Google Gemini';
+}
+
+/* ---------------- Local AI (the shop's own server) ----------------
+ *
+ * The desktop running the local AI, reached at its Tailscale https
+ * address. Same rule as the cloud keys: the address and the access key
+ * are typed in once per device and live only in this browser -- the repo
+ * is public, and the access key is what stands between the internet and
+ * every drawing on that server.
+ */
+
+/** Tidies a pasted address: adds https://, drops a trailing slash or a
+ *  pasted-in API path, so "host/v1/chat/completions" and "host/" both
+ *  become the base address the app adds paths to. */
+export function normalizeLocalAiUrl(url){
+  let u = String(url || '').trim();
+  if(!u) return '';
+  if(!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  u = u.replace(/\/+$/, '').replace(/\/v1(\/chat\/completions|\/models)?$/i, '').replace(/\/+$/, '');
+  return u;
+}
+
+/**
+ * Why an address can't work from here, or null.
+ *
+ * The tracker is served over https, and browsers refuse plain-http
+ * requests from an https page ("mixed content") without saying much --
+ * the LAN address that works in the desktop's own browser fails here
+ * with nothing but "Failed to fetch". Said up front instead.
+ */
+export function localAiUrlProblem(url){
+  const u = normalizeLocalAiUrl(url);
+  if(!u) return 'No address entered.';
+  let parsed;
+  try { parsed = new URL(u); } catch { return `"${url}" isn't a web address.`; }
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(parsed.hostname);
+  if(parsed.protocol === 'http:' && !local){
+    return 'This page is served over https, so the browser blocks plain http:// addresses. ' +
+           'Use the server\'s https address -- the Tailscale one ending in .ts.net.';
+  }
+  return null;
+}
+
+export function getLocalAiUrl(){ return normalizeLocalAiUrl(localStorage.getItem('awt_localAiUrl') || ''); }
+export function setLocalAiUrl(url){ localStorage.setItem('awt_localAiUrl', normalizeLocalAiUrl(url)); }
+
+export function getLocalAiKey(){ return (localStorage.getItem('awt_localAiKey') || '').trim(); }
+export function setLocalAiKey(key){ localStorage.setItem('awt_localAiKey', (key || '').trim()); }
+
+/** When the local AI can't be reached (desktop off, service down), use
+ *  OpenRouter instead of failing the scan. On unless turned off; only
+ *  possible when an OpenRouter key is saved too. */
+export function getLocalAiFallback(){ return localStorage.getItem('awt_localAiFallback') !== 'off'; }
+export function setLocalAiFallback(on){ localStorage.setItem('awt_localAiFallback', on ? 'on' : 'off'); }
 
 export function activeProviderHasKey(){
-  return getAiProvider()==='openrouter' ? !!getOpenRouterKey() : !!getApiKey();
+  const p = getAiProvider();
+  if(p === 'local') return !!getLocalAiUrl() && !!getLocalAiKey();
+  return p === 'openrouter' ? !!getOpenRouterKey() : !!getApiKey();
 }
 
 /** No shared default anymore, so "personal key" and "has a key at all"

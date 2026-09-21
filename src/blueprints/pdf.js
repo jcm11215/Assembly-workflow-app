@@ -102,10 +102,56 @@ export function parsePageSelection(text, numPages, maxPages){
   return { pages: [...pages].sort((x, y) => x - y) };
 }
 
+/** Per-page cap on selectable text. A parts table is a few thousand
+ *  characters; past this it's usually a notes block or a vendor datasheet
+ *  bound into the set, and the model's context is better spent on images. */
+export const MAX_TEXT_LAYER_CHARS = 4000;
+
+/**
+ * A page's selectable text, one line per row of the sheet.
+ *
+ * pdf.js hands back text runs in drawing order, which on a CAD export is
+ * whatever order the CAD program wrote them in -- a parts table comes
+ * back as every item number, then every description, then every
+ * quantity. Grouping runs by their height on the page and sorting each
+ * row left to right puts a table row back on one line, which is what
+ * makes the text worth sending. Pure function of pdf.js's items, so it
+ * can be tested without a PDF.
+ */
+export function textItemsToLines(items){
+  const runs = (items || [])
+    .filter(it => it && typeof it.str === 'string' && it.str.trim() && Array.isArray(it.transform))
+    .map(it => ({ str: it.str.trim(), x: it.transform[4], y: it.transform[5],
+                  h: Math.abs(it.height || it.transform[3] || 0) }));
+  // Top of the sheet first (PDF y grows upward), then left to right.
+  runs.sort((a, b) => (b.y - a.y) || (a.x - b.x));
+  const lines = [];
+  for(const r of runs){
+    const line = lines[lines.length - 1];
+    const tol = Math.max(2, Math.min(line ? line.h : r.h, r.h || 0) * 0.5);
+    if(line && Math.abs(line.y - r.y) <= tol){ line.runs.push(r); line.h = Math.max(line.h, r.h); }
+    else lines.push({ y: r.y, h: r.h, runs: [r] });
+  }
+  return lines
+    .map(l => l.runs.sort((a, b) => a.x - b.x).map(r => r.str).join(' ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+export function textLayerFromItems(items, maxChars){
+  maxChars = maxChars || MAX_TEXT_LAYER_CHARS;
+  const text = textItemsToLines(items).join('\n');
+  // A scanned sheet has no text, and CAD fonts exported as outlines leave
+  // only stray characters: nothing worth the tokens.
+  if(text.replace(/\s/g, '').length < 20) return '';
+  return text.length > maxChars ? text.slice(0, maxChars) + '\n[... more text on this page, cut off here]' : text;
+}
+
 /** Renders the given 1-based pages (default: every page, up to maxPages).
  *  Each image carries its real page number, so the AI can be told which
- *  sheet it's looking at even when pages are skipped. */
-export async function pdfFileToImages(file, maxPages, maxDim, quality, pageNumbers){
+ *  sheet it's looking at even when pages are skipped. With
+ *  opts.textLayer, each also carries the page's selectable text. */
+export async function pdfFileToImages(file, maxPages, maxDim, quality, pageNumbers, opts){
+  opts = opts || {};
   maxPages = maxPages || 10; maxDim = maxDim || 1700; quality = quality || 0.82;
   const pdfjsLib = await ensurePdfJs();
   const buf = await file.arrayBuffer();
@@ -131,8 +177,13 @@ export async function pdfFileToImages(file, maxPages, maxDim, quality, pageNumbe
     // Real pixel size travels with the page: cropping to a region of it
     // needs the aspect ratio, and the canvas is the only place it's known
     // without decoding the image again.
+    let text = '';
+    if(opts.textLayer){
+      // Never worth failing a scan over: the image is the real input.
+      try { text = textLayerFromItems((await page.getTextContent()).items); } catch (e) { text = ''; }
+    }
     images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg', page: i,
-                 width: canvas.width, height: canvas.height});
+                 width: canvas.width, height: canvas.height, text});
   }
   return images;
 }

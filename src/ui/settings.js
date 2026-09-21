@@ -1,6 +1,7 @@
 /** Settings: name, AI provider, keys. */
 
-import { getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel, setApiKey, setGeminiModel, setOpenRouterKey, setOpenRouterModel, hasPersonalApiKey, hasPersonalOpenRouterKey } from '../ai/keys.js';
+import { getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel, setApiKey, setGeminiModel, setOpenRouterKey, setOpenRouterModel, hasPersonalApiKey, hasPersonalOpenRouterKey,
+         getLocalAiUrl, getLocalAiKey, getLocalAiFallback, setLocalAiUrl, setLocalAiKey, setLocalAiFallback, localAiUrlProblem, normalizeLocalAiUrl } from '../ai/keys.js';
 import { getUserName, setUserName } from '../auth/identity.js';
 import { AUTH_ENABLED, currentUser, signOut } from '../auth/authService.js';
 import { getCachedProfile } from '../auth/profileService.js';
@@ -24,6 +25,52 @@ function accountSectionHtml(){
     </div>
     <div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="account-sign-out">Sign Out</button></div>
   `;
+}
+
+/**
+ * The shop's own server. The address isn't a secret (it's shown so it can
+ * be checked); the access key is, and is never echoed back into the page.
+ */
+function localAiSectionHtml(provider){
+  const url = getLocalAiUrl();
+  const key = getLocalAiKey();
+  const keyMasked = key ? ('...' + key.slice(-4)) : '';
+  const fallback = getLocalAiFallback();
+  const hasOr = hasPersonalOpenRouterKey();
+  return `
+    <div id="localAiSection" ${provider!=='local'?'class="hidden"':''}>
+      <div class="section-title" style="margin-top:0;">Local AI</div>
+      <div class="bp-hint" style="margin-bottom:10px;">
+        The AI running on the shop desktop. No usage limits and nothing leaves your own machine -- but the desktop
+        has to be on. Enter its <b>https</b> address (the Tailscale one ending in <b>.ts.net</b>) and the access key
+        from the local AI's <b>System</b> tab, under <b>Tracker connection</b>. Both are stored only in this browser.
+      </div>
+      ${url && key
+        ? `<div class="bp-file-chip">Set up: ${escapeHtml(url)} &middot; key ${escapeHtml(keyMasked)}</div>`
+        : `<div class="bp-file-chip">Not set up on this device yet.</div>`}
+      <form id="localAiForm">
+        <div class="field">
+          <label>Address</label>
+          <input type="url" name="localAiUrl" placeholder="https://justin-desktop.your-tailnet.ts.net" autocomplete="off"
+            spellcheck="false" inputmode="url" value="${escapeHtml(url)}">
+        </div>
+        <div class="field">
+          <label>Access Key</label>
+          <input type="password" name="localAiKey" autocomplete="off" spellcheck="false" value=""
+            placeholder="${key ? 'Leave blank to keep the saved key' : 'Paste the access key'}">
+        </div>
+        <div class="fab-row">
+          <button type="submit" class="btn btn-primary btn-block">Save</button>
+        </div>
+      </form>
+      <label class="bp-hint" style="display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;cursor:pointer;">
+        <input type="checkbox" id="localAiFallback" ${fallback ? 'checked' : ''} style="margin-top:2px;">
+        <span><b>Use OpenRouter when the local AI is off.</b> Scans keep working when the desktop is down, and say
+        when they did this. ${hasOr ? 'An OpenRouter key is saved on this device.'
+          : 'Needs an OpenRouter key -- none is saved on this device, so this does nothing yet.'}</span>
+      </label>
+      ${url || key ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-local-ai">Remove Local AI Settings</button></div>` : ''}
+    </div>`;
 }
 
 export function settingsModalHtml(){
@@ -58,13 +105,14 @@ export function settingsModalHtml(){
 
     <div class="section-title">AI Provider</div>
     <div class="bp-hint" style="margin-bottom:10px;">
-      Powers the AI Assistant and Blueprint extraction. Google Gemini is free and the default; OpenRouter is a
-      backup you can switch to if Gemini's free-tier limit gets hit, or to try a different model for reading
-      blueprints. Only the selected provider is actually used -- the other key can sit unused.
+      Powers the AI Assistant and Blueprint extraction. Google Gemini and OpenRouter are cloud services;
+      Local AI is the shop's own server, so drawings stay on a machine you own. Only the selected provider is
+      actually used -- the other keys can sit unused.
     </div>
     <div class="chip-row" id="providerChips" style="margin-bottom:14px;">
       <button class="chip ${provider==='gemini'?'active':''}" data-action="set-ai-provider" data-provider="gemini">Google Gemini</button>
       <button class="chip ${provider==='openrouter'?'active':''}" data-action="set-ai-provider" data-provider="openrouter">OpenRouter</button>
+      <button class="chip ${provider==='local'?'active':''}" data-action="set-ai-provider" data-provider="local">Local AI</button>
     </div>
 
     <!-- The app's own error messages are a paraphrase of the provider's,
@@ -161,6 +209,8 @@ export function settingsModalHtml(){
       ${hasPersonalOpenRouterKey() ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-openrouter-key">Remove Key</button></div>` : ''}
     </div>
 
+    ${localAiSectionHtml(provider)}
+
     ${AUTH_ENABLED && isAdmin() ? `
     <div class="section-title">Admin</div>
     <div class="bp-hint" style="margin-bottom:10px;">
@@ -219,6 +269,32 @@ export function openSettingsModal(){
       if(orModelSelect.value === '__other__') orModelOther.focus();
     });
   }
+  const localForm = document.getElementById('localAiForm');
+  if(localForm){
+    localForm.addEventListener('submit', e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const url = normalizeLocalAiUrl(fd.get('localAiUrl'));
+      const key = (fd.get('localAiKey')||'').trim();
+      const problem = localAiUrlProblem(url);
+      if(problem){ showToast(problem, 8000); return; }
+      if(!key && !getLocalAiKey()){ showToast('Paste the access key too'); return; }
+      setLocalAiUrl(url);
+      if(key) setLocalAiKey(key);
+      closeModal();
+      showToast('Local AI saved to this browser. Test Connection checks it end to end.', 5000);
+    });
+  }
+  const fallbackBox = document.getElementById('localAiFallback');
+  if(fallbackBox){
+    // Saves on click: a checkbox that needs a separate Save is one people
+    // think they set.
+    fallbackBox.addEventListener('change', ()=>{
+      setLocalAiFallback(fallbackBox.checked);
+      showToast(fallbackBox.checked ? 'OpenRouter will cover for the local AI when it\'s off'
+                                    : 'Scans will fail while the local AI is off');
+    });
+  }
   if(orForm){
     orForm.addEventListener('submit', e=>{
       e.preventDefault();
@@ -266,7 +342,7 @@ export async function testAiProvider(){
     </div>`).join('');
 
   const models = (!r.ok && r.models && r.models.length)
-    ? `<div class="bp-hint" style="margin-top:8px;">Models this key can use for drawings:<br>
+    ? `<div class="bp-hint" style="margin-top:8px;">${r.provider === 'Local AI' ? 'Models installed on the local AI' : 'Models this key can use for drawings'}:<br>
          <span class="ai-test-raw">${escapeHtml(r.models.slice(0, 10).join('\n'))}</span></div>`
     : '';
 

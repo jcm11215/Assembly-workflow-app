@@ -77,7 +77,7 @@ export function renderAssistant(){
   }).join('');
   document.getElementById('content').innerHTML = `
     <div class="section-title">AI Assistant</div>
-    ${!activeProviderHasKey() ? `<div class="focus-banner"><div class="focus-banner-head">Setup Needed</div><div style="font-size:13px;margin-bottom:10px;">Add an API key for ${getAiProvider()==='openrouter'?'OpenRouter':'Google Gemini'} to turn this on.</div><button class="btn btn-primary btn-sm" data-action="open-settings">Open Settings</button></div>` : ''}
+    ${!activeProviderHasKey() ? `<div class="focus-banner"><div class="focus-banner-head">Setup Needed</div><div style="font-size:13px;margin-bottom:10px;">${getAiProvider()==='local' ? "Add the local AI's address and access key to turn this on." : `Add an API key for ${getAiProvider()==='openrouter'?'OpenRouter':'Google Gemini'} to turn this on.`}</div><button class="btn btn-primary btn-sm" data-action="open-settings">Open Settings</button></div>` : ''}
     <div class="prompt-grid">
       ${QUICK_PROMPTS.map(p=>`<button data-action="quick-prompt" data-prompt="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('')}
     </div>
