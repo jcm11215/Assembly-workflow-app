@@ -113,6 +113,7 @@ function toJob(r, checklist, blueprint){
     assignedName: r.assigned_name || '',
     lastMovedByName: r.moved_by_name || '',
     version: r.version,
+    rev: r.rev,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     checklist: checklist || {},

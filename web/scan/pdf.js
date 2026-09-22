@@ -1,7 +1,5 @@
 /** PDF -> page images, and image downscaling for upload. */
 
-/* ================= BLUEPRINT EXTRACTION ================= */
-
 export function fileToBase64Raw(file){
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
@@ -10,8 +8,6 @@ export function fileToBase64Raw(file){
     reader.readAsDataURL(file);
   });
 }
-// Downscales large photos before sending, so uploads stay fast on shop-floor wifi/cell.
-
 // Downscales large photos before sending, so uploads stay fast on shop-floor wifi/cell.
 export function fileToImageBase64Resized(file, maxDim, quality){
   maxDim = maxDim || 1400; quality = quality || 0.78;
@@ -42,9 +38,8 @@ export function fileToImageBase64Resized(file, maxDim, quality){
 }
 // PDFs are rendered to images with pdf.js rather than uploaded raw -- this is
 // far more reliable across drawing exports and keeps the payload small.
-
-// PDFs are rendered to images with pdf.js rather than uploaded raw -- this is
-// far more reliable across drawing exports and keeps the payload small.
+// pdf.js is served from this app's own server (web/vendor/pdfjs), loaded
+// the first time a PDF is opened.
 export let pdfjsReadyPromise = null;
 
 export function ensurePdfJs(){
@@ -52,14 +47,17 @@ export function ensurePdfJs(){
   if(pdfjsReadyPromise) return pdfjsReadyPromise;
   pdfjsReadyPromise = new Promise((resolve, reject)=>{
     const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.src = '/vendor/pdfjs/pdf.min.js';
     script.onload = ()=>{
       try{
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js';
         resolve(window.pdfjsLib);
       }catch(e){ reject(e); }
     };
-    script.onerror = ()=> reject(new Error('Could not load the PDF reader. Check your connection and try again, or upload a photo/image instead.'));
+    script.onerror = ()=>{
+      pdfjsReadyPromise = null;
+      reject(new Error('Could not load the PDF reader. Check the connection and try again, or upload a photo instead.'));
+    };
     document.head.appendChild(script);
   });
   return pdfjsReadyPromise;

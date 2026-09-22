@@ -30,7 +30,11 @@ const COLUMN = {
   priority: 'priority', assignedTo: 'assigned_to', percentComplete: 'percent_complete'
 };
 
+/** Called once after every change to a job or anything shown on it
+ *  (checklist, blueprint, parts): bumps its revision and pushes the
+ *  fresh copy to every open app. */
 export function pushJob(db, id){
+  db.run('update jobs set rev = rev + 1 where id = ?', id);
   const job = getJob(db, id);
   if(job) broadcast('job', job);
   return job;

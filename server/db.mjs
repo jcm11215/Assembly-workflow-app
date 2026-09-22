@@ -59,7 +59,8 @@ const MIGRATIONS = [
     assigned_to      text references users(id) on delete set null,
     created_by       text references users(id) on delete set null,
     last_moved_by    text references users(id) on delete set null,
-    version          integer not null default 1,
+    version          integer not null default 1,   -- bumped by edits and stage moves: the edit-conflict guard
+    rev              integer not null default 0,   -- bumped by every change: lets the app drop an out-of-order copy
     created_at       text not null,
     updated_at       text not null
   );

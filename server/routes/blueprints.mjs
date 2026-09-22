@@ -108,7 +108,7 @@ export default function register(r){
     }, { type: 'job', id: job.id });
     ctx.status = 201;
     const updated = pushJob(ctx.db, job.id);
-    return { blueprint: updated.blueprint };
+    return { blueprint: updated.blueprint, job: updated };
   }, { perm: 'blueprint.manage' });
 
   r.put('/api/blueprints/:id/file', async ctx => {
@@ -121,7 +121,7 @@ export default function register(r){
     await writeFileAtomic(ctx.filesDir, rel, bytes);
     ctx.db.run('update blueprints set file_path = ?, mime_type = ? where id = ?', rel, mime, bp.id);
     const job = pushJob(ctx.db, bp.job_id);
-    return { blueprint: job.blueprint };
+    return { blueprint: job.blueprint, job };
   }, { perm: 'blueprint.manage' });
 
   r.get('/api/blueprints/:id/file', ctx => {
@@ -163,9 +163,8 @@ export default function register(r){
     const c = cleanComponent({ ...body, extraction_method: 'manual', confidence: null, installation_location: null }, n);
     const id = insertComponent(ctx.db, bp.id, c);
     ctx.log('Part added', { text: `${bp.job_number}: ${c.item}`, jobNumber: bp.job_number }, { type: 'job', id: bp.job_id });
-    pushJob(ctx.db, bp.job_id);
     ctx.status = 201;
-    return { component: toComponent(ctx.db.get('select * from components where id = ?', id)) };
+    return { component: toComponent(ctx.db.get('select * from components where id = ?', id)), job: pushJob(ctx.db, bp.job_id) };
   }, { perm: 'blueprint.manage' });
 
   r.patch('/api/components/:id', async ctx => {
@@ -184,8 +183,10 @@ export default function register(r){
     ctx.db.run(`update components set ${keys.map(k => `${k} = ?`).join(', ')} where id = ?`, ...keys.map(k => sets[k]), existing.id);
     ctx.log('Part edited', { text: `${existing.job_number}: ${sets.item || existing.item}`, jobNumber: existing.job_number },
       { type: 'job', id: existing.job_id });
-    pushJob(ctx.db, existing.job_id);
-    return { component: toComponent(ctx.db.get('select * from components where id = ?', existing.id)) };
+    return {
+      component: toComponent(ctx.db.get('select * from components where id = ?', existing.id)),
+      job: pushJob(ctx.db, existing.job_id)
+    };
   }, { perm: 'blueprint.manage' });
 
   r.delete('/api/components/:id', ctx => {
@@ -193,7 +194,7 @@ export default function register(r){
     ctx.db.run('delete from components where id = ?', existing.id);
     ctx.log('Part removed', { text: `${existing.job_number}: ${existing.item}`, jobNumber: existing.job_number },
       { type: 'job', id: existing.job_id });
-    pushJob(ctx.db, existing.job_id);
+    return { job: pushJob(ctx.db, existing.job_id) };
   }, { perm: 'blueprint.manage' });
 
   /** New display order for a blueprint's parts: `ids` in order. */
@@ -204,6 +205,6 @@ export default function register(r){
     ctx.db.tx(() => {
       ids.forEach((id, i) => ctx.db.run('update components set sort_order = ? where id = ? and blueprint_id = ?', i, String(id), bp.id));
     });
-    pushJob(ctx.db, bp.job_id);
+    return { job: pushJob(ctx.db, bp.job_id) };
   }, { perm: 'blueprint.manage' });
 }
