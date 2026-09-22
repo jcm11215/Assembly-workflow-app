@@ -8,3 +8,5 @@ id_rsa
 
 # Claude Code local tooling state (worktrees for spawned tasks, launch config)
 .claude/
+data/
+node_modules/
