@@ -7,7 +7,7 @@
 
 
 import { DEFAULT_GEMINI_MODEL, getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel,
-         getLocalAiUrl, getLocalAiKey, getLocalAiFallback } from './keys.js';
+         getLocalAiUrl, getLocalAiToken, getLocalAiFallback } from './keys.js';
 
 /** Kept as a live getter, not a constant: the model is a setting now,
  *  because an overloaded model is fixed by using a different one. */
@@ -323,7 +323,7 @@ function localError(message, extra){
 
 async function callLocalOnce(systemPrompt, content){
   const base = getLocalAiUrl();
-  const key = getLocalAiKey();
+  const key = getLocalAiToken();
   if(!base || !key) throw localError('NO_API_KEY');
 
   const ctrl = typeof AbortController === 'function' ? new AbortController() : null;

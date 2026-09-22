@@ -1,8 +1,8 @@
 /** Settings: name, AI provider, keys. */
 
 import { getAiProvider, getApiKey, getGeminiModel, getOpenRouterKey, getOpenRouterModel, setApiKey, setGeminiModel, setOpenRouterKey, setOpenRouterModel, hasPersonalApiKey, hasPersonalOpenRouterKey,
-         getLocalAiUrl, getLocalAiKey, getLocalAiFallback, setLocalAiUrl, setLocalAiKey, setLocalAiFallback, localAiUrlProblem, normalizeLocalAiUrl,
-         getLocalBlueprintStorageEnabled, setLocalBlueprintStorageEnabled } from '../ai/keys.js';
+         getLocalAiUrl, getLocalAiKey, getLocalAiFallback, setLocalAiFallback, localAiUrlProblem, normalizeLocalAiUrl } from '../ai/keys.js';
+import { getShopSetting, setShopSetting, SHOP_KEYS } from '../db/shopSettings.js';
 import { getUserName, setUserName } from '../auth/identity.js';
 import { AUTH_ENABLED, currentUser, signOut } from '../auth/authService.js';
 import { getCachedProfile } from '../auth/profileService.js';
@@ -29,13 +29,14 @@ function accountSectionHtml(){
 }
 
 /**
- * The shop's own server. The address isn't a secret (it's shown so it can
- * be checked); the access key is, and is never echoed back into the page.
+ * The shop's own server, as each person sees it: a status line and the
+ * one per-device choice left (the OpenRouter backup). Nothing to type --
+ * the address is a shop setting and the credential is their sign-in.
  */
 function localAiSectionHtml(provider){
   const url = getLocalAiUrl();
-  const key = getLocalAiKey();
-  const keyMasked = key ? ('...' + key.slice(-4)) : '';
+  const fromShop = !!getShopSetting(SHOP_KEYS.LOCAL_SERVER_URL);
+  const legacy = !!(localStorage.getItem('awt_localAiUrl') || getLocalAiKey());
   const fallback = getLocalAiFallback();
   const hasOr = hasPersonalOpenRouterKey();
   return `
@@ -43,64 +44,64 @@ function localAiSectionHtml(provider){
       <div class="section-title" style="margin-top:0;">Local AI</div>
       <div class="bp-hint" style="margin-bottom:10px;">
         The AI running on the shop desktop. No usage limits and nothing leaves your own machine -- but the desktop
-        has to be on. Enter its <b>https</b> address (the Tailscale one ending in <b>.ts.net</b>) and the access key
-        from the local AI's <b>System</b> tab, under <b>Tracker connection</b>. Both are stored only in this browser.
+        has to be on. Nothing to set up on this device: it uses the shop's server address and your own sign-in.
       </div>
-      ${url && key
-        ? `<div class="bp-file-chip">Set up: ${escapeHtml(url)} &middot; key ${escapeHtml(keyMasked)}</div>`
-        : `<div class="bp-file-chip">Not set up on this device yet.</div>`}
-      <form id="localAiForm">
-        <div class="field">
-          <label>Address</label>
-          <input type="url" name="localAiUrl" placeholder="https://justin-desktop.your-tailnet.ts.net" autocomplete="off"
-            spellcheck="false" inputmode="url" value="${escapeHtml(url)}">
-        </div>
-        <div class="field">
-          <label>Access Key</label>
-          <input type="password" name="localAiKey" autocomplete="off" spellcheck="false" value=""
-            placeholder="${key ? 'Leave blank to keep the saved key' : 'Paste the access key'}">
-        </div>
-        <div class="fab-row">
-          <button type="submit" class="btn btn-primary btn-block">Save</button>
-        </div>
-      </form>
+      ${url
+        ? `<div class="bp-file-chip">Ready: ${escapeHtml(url)}${fromShop ? '' : ' (saved on this device)'}</div>`
+        : `<div class="bp-file-chip">Not set up for the shop yet -- ${isAdmin() ? 'set the address under Shop Server below.' : 'ask an admin to set the server address.'}</div>`}
       <label class="bp-hint" style="display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;cursor:pointer;">
         <input type="checkbox" id="localAiFallback" ${fallback ? 'checked' : ''} style="margin-top:2px;">
         <span><b>Use OpenRouter when the local AI is off.</b> Scans keep working when the desktop is down, and say
         when they did this. ${hasOr ? 'An OpenRouter key is saved on this device.'
           : 'Needs an OpenRouter key -- none is saved on this device, so this does nothing yet.'}</span>
       </label>
-      ${url || key ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-local-ai">Remove Local AI Settings</button></div>` : ''}
+      ${legacy ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-local-ai">Remove Old Per-Device Local AI Settings</button></div>` : ''}
     </div>`;
 }
 
 /**
- * Where uploaded drawings themselves are kept -- independent of which AI
- * reads them. Shown regardless of the provider chip above: someone might
- * want Gemini or OpenRouter doing the reading while the files still land
- * on a server they own, or the reverse. Reuses the same address and key
- * as Local AI, since it is the same machine; the checkbox below is
- * disabled until those are saved.
+ * Admin only: the shop's server, set once for every device. Replaces
+ * typing an address and access key into each phone -- the address lives
+ * in shop_settings, and each person's own sign-in is the credential.
+ * Also where new blueprint files go, shop-wide, so every device agrees.
  */
-function blueprintStorageSectionHtml(){
-  const configured = !!(getLocalAiUrl() && getLocalAiKey());
-  const on = getLocalBlueprintStorageEnabled();
+function shopServerSectionHtml(){
+  if(!(AUTH_ENABLED && isAdmin())) return '';
+  const url = getShopSetting(SHOP_KEYS.LOCAL_SERVER_URL) || '';
+  const def = getShopSetting(SHOP_KEYS.DEFAULT_AI_PROVIDER) || 'openrouter';
+  const storage = getShopSetting(SHOP_KEYS.BLUEPRINT_STORAGE) || 'supabase';
   return `
-    <div class="section-title">Blueprint Storage</div>
+    <div class="section-title">Shop Server</div>
     <div class="bp-hint" style="margin-bottom:10px;">
-      Where uploaded drawings themselves are kept, separate from which AI reads them. By default they go into
-      this app's own cloud storage. Turning this on sends them instead to a folder on the shop's own server --
-      the same one Local AI (below) can talk to -- so they stay on a machine you own and can open directly.
+      Set once here, used by every signed-in device -- nobody else types anything. The address is the desktop's
+      <b>https</b> Tailscale one, ending in <b>.ts.net</b>. People reach it with their own tracker sign-in, so
+      deactivating an account on the Team screen cuts off its access to the server too.
     </div>
-    <label class="bp-hint" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:4px;${configured ? 'cursor:pointer;' : 'opacity:.6;'}">
-      <input type="checkbox" id="localBlueprintStorage" ${on ? 'checked' : ''} ${configured ? '' : 'disabled'} style="margin-top:2px;">
-      <span><b>Store new blueprint files on the shop's server.</b> ${configured
-        ? 'Uses the address and access key set below.'
-        : 'Set an address and access key below first -- this is the same server Local AI uses.'}</span>
-    </label>
-    ${on ? `<div class="bp-hint" style="margin-bottom:10px;">Existing drawings already saved in the cloud stay there and still open normally -- only new
-      scans and uploads go to the local folder from now on.</div>` : ''}
-  `;
+    <form id="shopServerForm">
+      <div class="field">
+        <label>Server Address</label>
+        <input type="url" name="serverUrl" placeholder="https://justin-desktop.your-tailnet.ts.net" autocomplete="off"
+          spellcheck="false" inputmode="url" value="${escapeHtml(url)}">
+      </div>
+      <div class="field">
+        <label>AI For Everyone</label>
+        <select name="defaultProvider">
+          <option value="local" ${def==='local'?'selected':''}>Local AI (the shop's server)</option>
+          <option value="openrouter" ${def==='openrouter'?'selected':''}>OpenRouter</option>
+          <option value="gemini" ${def==='gemini'?'selected':''}>Google Gemini</option>
+        </select>
+        <div class="bp-hint">What every device uses unless someone picks otherwise above. OpenRouter and Gemini still
+          need a key on each device; Local AI needs nothing.</div>
+      </div>
+      <label class="bp-hint" style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 10px;cursor:pointer;">
+        <input type="checkbox" name="blueprintLocal" ${storage==='local' ? 'checked' : ''} style="margin-top:2px;">
+        <span><b>Keep new blueprint files on the shop's server.</b> Saved to a folder on the desktop, one per job,
+          instead of cloud storage. Drawings already in the cloud stay there and still open.</span>
+      </label>
+      <div class="fab-row">
+        <button type="submit" class="btn btn-primary btn-block">Save For The Whole Shop</button>
+      </div>
+    </form>`;
 }
 
 export function settingsModalHtml(){
@@ -239,8 +240,8 @@ export function settingsModalHtml(){
       ${hasPersonalOpenRouterKey() ? `<div class="fab-row"><button type="button" class="btn btn-outline btn-block" data-action="clear-openrouter-key">Remove Key</button></div>` : ''}
     </div>
 
-    ${blueprintStorageSectionHtml()}
     ${localAiSectionHtml(provider)}
+    ${shopServerSectionHtml()}
 
     ${AUTH_ENABLED && isAdmin() ? `
     <div class="section-title">Admin</div>
@@ -300,20 +301,27 @@ export function openSettingsModal(){
       if(orModelSelect.value === '__other__') orModelOther.focus();
     });
   }
-  const localForm = document.getElementById('localAiForm');
-  if(localForm){
-    localForm.addEventListener('submit', e=>{
+  const shopForm = document.getElementById('shopServerForm');
+  if(shopForm){
+    shopForm.addEventListener('submit', async e=>{
       e.preventDefault();
       const fd = new FormData(e.target);
-      const url = normalizeLocalAiUrl(fd.get('localAiUrl'));
-      const key = (fd.get('localAiKey')||'').trim();
-      const problem = localAiUrlProblem(url);
+      const url = normalizeLocalAiUrl(fd.get('serverUrl'));
+      const problem = url ? localAiUrlProblem(url) : null;
       if(problem){ showToast(problem, 8000); return; }
-      if(!key && !getLocalAiKey()){ showToast('Paste the access key too'); return; }
-      setLocalAiUrl(url);
-      if(key) setLocalAiKey(key);
-      closeModal();
-      showToast('Local AI saved to this browser. Test Connection checks it end to end.', 5000);
+      const btn = shopForm.querySelector('button[type="submit"]');
+      if(btn){ btn.disabled = true; btn.textContent = 'Saving...'; }
+      try {
+        await setShopSetting(SHOP_KEYS.LOCAL_SERVER_URL, url);
+        await setShopSetting(SHOP_KEYS.DEFAULT_AI_PROVIDER, fd.get('defaultProvider') || 'openrouter');
+        await setShopSetting(SHOP_KEYS.BLUEPRINT_STORAGE, fd.get('blueprintLocal') ? 'local' : 'supabase');
+        closeModal();
+        showToast('Saved for the whole shop. Other devices pick it up the next time they open the app.', 6000);
+      } catch (err) {
+        console.error('shop settings save failed', err);
+        if(btn){ btn.disabled = false; btn.textContent = 'Save For The Whole Shop'; }
+        showToast(err.isPermission ? 'Only an admin can change shop settings.' : (err.message || 'Could not save'), 6000);
+      }
     });
   }
   const fallbackBox = document.getElementById('localAiFallback');
@@ -324,16 +332,6 @@ export function openSettingsModal(){
       setLocalAiFallback(fallbackBox.checked);
       showToast(fallbackBox.checked ? 'OpenRouter will cover for the local AI when it\'s off'
                                     : 'Scans will fail while the local AI is off');
-    });
-  }
-  const blueprintStorageBox = document.getElementById('localBlueprintStorage');
-  if(blueprintStorageBox){
-    blueprintStorageBox.addEventListener('change', ()=>{
-      setLocalBlueprintStorageEnabled(blueprintStorageBox.checked);
-      openSettingsModal();   // repaints the "existing drawings stay put" note in/out
-      showToast(blueprintStorageBox.checked
-        ? 'New blueprint files will be saved to the shop\'s server.'
-        : 'New blueprint files will be saved to this app\'s cloud storage again.');
     });
   }
   if(orForm){

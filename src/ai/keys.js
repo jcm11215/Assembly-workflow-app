@@ -1,4 +1,6 @@
 /** AI provider selection + per-provider key storage (browser-local). */
+import { getSession } from '../auth/sessionStore.js';
+import { getShopSetting, SHOP_KEYS } from '../db/shopSettings.js';
 
 /**
  * AI provider selection + per-provider key storage (browser-local).
@@ -53,9 +55,14 @@ export function setOpenRouterModel(model){ localStorage.setItem('awt_openrouterM
 // if this needs revisiting later).
 const PROVIDERS = ['gemini', 'openrouter', 'local'];
 
+/** A choice made on this device wins; otherwise the shop's default (set
+ *  once by an admin), so a new phone uses the local AI with nothing
+ *  picked; otherwise OpenRouter, as before. */
 export function getAiProvider(){
   const p = localStorage.getItem('awt_aiProvider');
-  return PROVIDERS.includes(p) ? p : 'openrouter';
+  if(PROVIDERS.includes(p)) return p;
+  const shop = getShopSetting(SHOP_KEYS.DEFAULT_AI_PROVIDER);
+  return PROVIDERS.includes(shop) ? shop : 'openrouter';
 }
 
 export function setAiProvider(p){
@@ -71,10 +78,11 @@ export function providerLabel(p){
 /* ---------------- Local AI (the shop's own server) ----------------
  *
  * The desktop running the local AI, reached at its Tailscale https
- * address. Same rule as the cloud keys: the address and the access key
- * are typed in once per device and live only in this browser -- the repo
- * is public, and the access key is what stands between the internet and
- * every drawing on that server.
+ * address. Nothing here is typed in per device any more: the address is
+ * a shop setting an admin enters once, and the credential is the
+ * person's own tracker sign-in, which the server checks with Supabase.
+ * Neither lives in the repo -- it's public, and the address would
+ * advertise the server to anyone reading it.
  */
 
 /** Tidies a pasted address: adds https://, drops a trailing slash or a
@@ -109,11 +117,32 @@ export function localAiUrlProblem(url){
   return null;
 }
 
-export function getLocalAiUrl(){ return normalizeLocalAiUrl(localStorage.getItem('awt_localAiUrl') || ''); }
+/** The shop's server address, set once by an admin for every device.
+ *  An address saved on this device before shop settings existed still
+ *  works as a fallback, so nothing already set up stops working. */
+export function getLocalAiUrl(){
+  const shop = getShopSetting(SHOP_KEYS.LOCAL_SERVER_URL);
+  return normalizeLocalAiUrl(shop || localStorage.getItem('awt_localAiUrl') || '');
+}
 export function setLocalAiUrl(url){ localStorage.setItem('awt_localAiUrl', normalizeLocalAiUrl(url)); }
 
+/** A per-device access key -- legacy. Nothing asks for one any more;
+ *  kept so a device that saved one keeps working until it's removed. */
 export function getLocalAiKey(){ return (localStorage.getItem('awt_localAiKey') || '').trim(); }
 export function setLocalAiKey(key){ localStorage.setItem('awt_localAiKey', (key || '').trim()); }
+
+/**
+ * What proves who's asking, sent as the Bearer token to the shop's
+ * server: the person's own tracker sign-in. The server checks it with
+ * Supabase, so being signed in IS the credential -- nothing to type on
+ * each device, and deactivating someone's account cuts off their access
+ * to the server too. A legacy per-device key is used only when there is
+ * no session (auth disabled, or signed out).
+ */
+export function getLocalAiToken(){
+  const s = getSession();
+  return (s && s.access_token) || getLocalAiKey();
+}
 
 /** When the local AI can't be reached (desktop off, service down), use
  *  OpenRouter instead of failing the scan. On unless turned off; only
@@ -122,23 +151,18 @@ export function getLocalAiFallback(){ return localStorage.getItem('awt_localAiFa
 export function setLocalAiFallback(on){ localStorage.setItem('awt_localAiFallback', on ? 'on' : 'off'); }
 
 /**
- * Store uploaded blueprint files on the shop's own server instead of in
- * Supabase Storage -- same address and access key as Local AI above,
- * since it is the same machine, but a separate switch: someone may want
- * Gemini or OpenRouter doing the reading while files still land on a
- * server they own, or the reverse. Off by default, and only meaningful
- * once an address and key are saved.
+ * Whether new blueprint files go to the shop's own server instead of
+ * Supabase Storage. Shop-wide, set by an admin: a per-device switch let
+ * one tablet save to the cloud while another saved to the desktop, and
+ * nobody could say where a given drawing was.
  */
 export function getLocalBlueprintStorageEnabled(){
-  return localStorage.getItem('awt_localBlueprintStorage') === 'on';
-}
-export function setLocalBlueprintStorageEnabled(on){
-  localStorage.setItem('awt_localBlueprintStorage', on ? 'on' : 'off');
+  return getShopSetting(SHOP_KEYS.BLUEPRINT_STORAGE) === 'local';
 }
 
 export function activeProviderHasKey(){
   const p = getAiProvider();
-  if(p === 'local') return !!getLocalAiUrl() && !!getLocalAiKey();
+  if(p === 'local') return !!getLocalAiUrl() && !!getLocalAiToken();
   return p === 'openrouter' ? !!getOpenRouterKey() : !!getApiKey();
 }
 

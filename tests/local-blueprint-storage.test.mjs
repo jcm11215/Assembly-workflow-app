@@ -6,14 +6,20 @@
 // setting was ever turned on.
 globalThis.document={getElementById:()=>null,querySelectorAll:()=>[]};
 globalThis.window={};
-globalThis.localStorage={_d:{},getItem(k){return this._d[k]??null},setItem(k,v){this._d[k]=String(v)},clear(){this._d={}}};
+globalThis.localStorage={_d:{},getItem(k){return this._d[k]??null},setItem(k,v){this._d[k]=String(v)},clear(){this._d={}},removeItem(k){delete this._d[k]}};
 globalThis.AbortController=class{constructor(){this.signal={}}abort(){}};
 globalThis.FileReader=class{
   readAsDataURL(blob){ this.onload && this.onload({ target: { result: `data:${blob.type||''};base64,${blob._b64||''}` } }); }
 };
 
 const keys = await import('../src/ai/keys.js');
+const S = await import('../src/db/shopSettings.js');
 const { sanitizeForPath } = await import('../src/db/localFileStore.js');
+
+// Shop settings are an in-memory cache in the app; set it directly here.
+let shop = {};
+function shopSet(k, v){ shop = { ...shop, [k]: v }; S._setShopSettingsForTest(shop); }
+function storageLocal(on){ shopSet(S.SHOP_KEYS.BLUEPRINT_STORAGE, on ? 'local' : 'supabase'); }
 
 let pass = 0, fail = 0;
 const t = (n, c) => { c ? (pass++, console.log('  PASS ' + n)) : (fail++, console.log('  FAIL ' + n)); };
@@ -39,8 +45,9 @@ let BLUEPRINTS, COMPONENTS, LOCAL_FILES, calls;
 
 function resetFixtures(){
   BLUEPRINTS = []; COMPONENTS = []; LOCAL_FILES = {}; calls = [];
-  keys.setLocalAiUrl(BASE);
-  keys.setLocalAiKey('secret-key-1234');
+  localStorage.clear();
+  shop = {}; shopSet(S.SHOP_KEYS.LOCAL_SERVER_URL, BASE);
+  localStorage.setItem('awt_session', JSON.stringify({ access_token: 'user-jwt', user: { id: 'u1' } }));
 }
 
 globalThis.fetch = async (url, opt = {}) => {
@@ -86,6 +93,7 @@ globalThis.fetch = async (url, opt = {}) => {
   // The local server -- should only ever be hit for a row saved to
   // 'local', and only when its address+key are configured.
   if(u.includes('/api/blueprint-file/')){
+    calls[calls.length - 1].auth = (opt.headers || {}).Authorization;
     const path = decodeURIComponent(u.split('/api/blueprint-file/')[1]);
     if(m === 'PUT'){ LOCAL_FILES[path] = true; return ok({ ok: true, path }); }
     if(m === 'GET') return path in LOCAL_FILES ? okBlob() : { ok: false, status: 404 };
@@ -98,7 +106,7 @@ const repo = await import('../src/db/blueprintsRepo.js');
 
 console.log('\n=== local storage off (default): unchanged Supabase behavior ===');
 resetFixtures();
-keys.setLocalBlueprintStorageEnabled(false);
+storageLocal(false);
 const savedCloud = await repo.saveExtraction('j1', {
   components: [], originalFile: { base64: 'AA==', mimeType: 'application/pdf', filename: 'drawing.pdf' }, jobNumber: '24-1050'
 });
@@ -110,7 +118,7 @@ t('reads back through Supabase Storage', !!cloudFile && cloudFile.filename === '
 
 console.log('\n=== local storage on: files go to the shop\'s server, named for a human ===');
 resetFixtures();
-keys.setLocalBlueprintStorageEnabled(true);
+storageLocal(true);
 const savedLocal = await repo.saveExtraction('j2', {
   components: [], originalFile: { base64: 'AA==', mimeType: 'application/pdf', filename: 'Drawing.pdf' }, jobNumber: '24-1050'
 });
@@ -118,6 +126,8 @@ t('row is tagged storage_backend "local"', savedLocal.storage_backend === 'local
 t('storage_path is "<job number>/<name>", not the job id', savedLocal.storage_path === '24-1050/Drawing.pdf');
 t('nothing was sent to Supabase Storage', !calls.some(c => c.url.includes('/storage/v1/object') && c.method !== 'GET'));
 t('the local server actually received the PUT', '24-1050/Drawing.pdf' in LOCAL_FILES);
+t('sent with the person\'s own sign-in, not a per-device key',
+  calls.filter(c => c.url.includes('/api/blueprint-file/')).every(c => c.auth === 'Bearer user-jwt'));
 
 const savedLocalV2 = await repo.saveExtraction('j2', {
   components: [], originalFile: { base64: 'AA==', mimeType: 'application/pdf', filename: 'Drawing.pdf' }, jobNumber: '24-1050'
@@ -131,11 +141,11 @@ t('getOriginalFile reads the newest version back through the local server', !!lo
 
 console.log('\n=== deleteForJob routes each row to the backend IT was saved with ===');
 resetFixtures();
-keys.setLocalBlueprintStorageEnabled(false);
+storageLocal(false);
 await repo.saveExtraction('j3', {   // version 1, saved to Supabase
   components: [], originalFile: { base64: 'AA==', mimeType: 'application/pdf', filename: 'a.pdf' }, jobNumber: '9'
 });
-keys.setLocalBlueprintStorageEnabled(true);
+storageLocal(true);
 await repo.saveExtraction('j3', {   // version 2 -- gets a "(v2)" filename, same as any re-scan
   components: [], originalFile: { base64: 'AA==', mimeType: 'application/pdf', filename: 'b.pdf' }, jobNumber: '9'
 });
@@ -149,8 +159,8 @@ t('exactly one local-server delete, not one per row', localDeletes.length === 1)
 
 console.log('\n=== the local server being unreachable degrades like a bad Supabase upload already does ===');
 resetFixtures();
-keys.setLocalBlueprintStorageEnabled(true);
-keys.setLocalAiUrl('');   // configured to use local storage, but no address saved
+storageLocal(true);
+shopSet(S.SHOP_KEYS.LOCAL_SERVER_URL, '');   // storage set to local, but no server address
 const savedNoAddr = await repo.saveExtraction('j4', {
   components: [], originalFile: { base64: 'AA==', mimeType: 'application/pdf', filename: 'c.pdf' }, jobNumber: '5'
 });
@@ -158,7 +168,29 @@ t('storage_path stays null -- caller already knows to show "could not attach" fo
 t('storage_backend falls back to "supabase" so the not-null column stays meaningful', savedNoAddr.storage_backend === 'supabase');
 t('the components were still saved -- a storage failure does not lose the scan', COMPONENTS.length >= 0);
 
-keys.setLocalBlueprintStorageEnabled(false);
+storageLocal(false);
+
+console.log('\n=== nothing to type on a device: address from the shop, credential from the sign-in ===');
+localStorage.clear(); shop = {}; S._setShopSettingsForTest({});
+t('no shop address and nothing on the device -> not set up', keys.getLocalAiUrl() === '');
+shopSet(S.SHOP_KEYS.LOCAL_SERVER_URL, BASE);
+t('the shop address is used with nothing saved on the device', keys.getLocalAiUrl() === BASE);
+localStorage.setItem('awt_localAiUrl', 'https://old-device-setting.ts.net');
+t('the shop address wins over an old per-device one', keys.getLocalAiUrl() === BASE);
+localStorage.setItem('awt_session', JSON.stringify({ access_token: 'user-jwt', user: { id: 'u1' } }));
+localStorage.setItem('awt_localAiKey', 'old-shared-key');
+t('signed in -> the session token is the credential, even with an old key saved', keys.getLocalAiToken() === 'user-jwt');
+localStorage.removeItem('awt_session');
+t('no session -> an old per-device key still works as a fallback', keys.getLocalAiToken() === 'old-shared-key');
+localStorage.clear(); shop = {}; S._setShopSettingsForTest({});
+t('no shop default and no device choice -> OpenRouter, as before', keys.getAiProvider() === 'openrouter');
+shopSet(S.SHOP_KEYS.DEFAULT_AI_PROVIDER, 'local');
+t('the shop default applies to a device that never picked', keys.getAiProvider() === 'local');
+keys.setAiProvider('gemini');
+t('a choice made on the device still wins', keys.getAiProvider() === 'gemini');
+localStorage.clear(); shopSet(S.SHOP_KEYS.LOCAL_SERVER_URL, BASE);
+localStorage.setItem('awt_session', JSON.stringify({ access_token: 'user-jwt', user: { id: 'u1' } }));
+t('local AI counts as ready with only a shop address and a sign-in', keys.activeProviderHasKey());
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

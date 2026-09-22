@@ -5,10 +5,11 @@
  * pick one or the other with a single branch, not two code paths.
  *
  * The server is the same one Local AI talks to (src/ai/providers.js) --
- * an address and access key configured in Settings, reachable over
- * Tailscale. This module knows nothing about chat; it only moves bytes.
+ * the shop's address, set once by an admin, reached over Tailscale, and
+ * authenticated with the person's own tracker sign-in. This module
+ * knows nothing about chat; it only moves bytes.
  */
-import { getLocalAiKey, getLocalAiUrl } from '../ai/keys.js';
+import { getLocalAiToken, getLocalAiUrl } from '../ai/keys.js';
 
 /** Characters filenames and job-number folders are allowed to use on
  *  the server's filesystem. Mirrors the server's own `_safe_segment` --
@@ -31,7 +32,7 @@ function apiBase(){
 }
 
 function authHeaders(extra){
-  const key = getLocalAiKey();
+  const key = getLocalAiToken();
   return { ...(key ? { Authorization: `Bearer ${key}` } : {}), ...(extra || {}) };
 }
 

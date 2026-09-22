@@ -6,11 +6,12 @@ import { getAiProvider, providerLabel } from './keys.js';
 /** The local AI fails in its own ways, with its own fixes. */
 function explainLocalError(err, msg){
   if(msg === 'NO_API_KEY'){
-    return 'Add the local AI\'s address and access key in Settings (the gear icon, top right), or switch providers.';
+    return 'The shop\'s server address hasn\'t been set up yet -- an admin sets it once in Settings -> Shop Server. ' +
+           'Or switch providers in Settings.';
   }
   if(err.status === 401){
-    return 'The local AI rejected the access key. Copy the current key from the local AI (System tab, "Tracker connection") ' +
-           'into Settings here -- it changes if someone rotates it.';
+    return 'The local AI didn\'t accept your tracker sign-in. Sign out and back in; if that doesn\'t fix it, ' +
+           'the desktop may need its latest update, or your account may have been deactivated.';
   }
   if(err.unreachable){
     return `${msg} Is the desktop on and the local AI running? ` +

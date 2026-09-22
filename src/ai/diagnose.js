@@ -19,7 +19,7 @@
  * is still in front of the person reading it.
  */
 import { getAiProvider, getApiKey, getOpenRouterKey, getOpenRouterModel,
-         getLocalAiUrl, getLocalAiKey, getLocalAiFallback, localAiUrlProblem } from './keys.js';
+         getLocalAiUrl, getLocalAiToken, getLocalAiFallback, localAiUrlProblem } from './keys.js';
 import { getGeminiModel } from './keys.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -246,9 +246,10 @@ export async function diagnoseLocal(){
   const PROVIDER = 'Local AI';
   const steps = [];
   const base = getLocalAiUrl();
-  const key = getLocalAiKey();
+  const key = getLocalAiToken();
 
-  const problem = base ? localAiUrlProblem(base) : 'No address saved on this device.';
+  const problem = base ? localAiUrlProblem(base)
+    : 'The shop\'s server address hasn\'t been set yet. An admin sets it once in Settings -> Shop Server, for every device.';
   steps.push(step('Address', !problem, problem || `Using ${base}`));
   if(problem) return { provider: PROVIDER, steps, models: [] };
 
@@ -274,7 +275,7 @@ export async function diagnoseLocal(){
   }
 
   if(!key){
-    steps.push(step('Access key accepted', false, 'No access key saved on this device. Copy it from the local AI (System tab, "Tracker connection").'));
+    steps.push(step('Sign-in accepted', false, 'Not signed in on this device -- sign in to the tracker and try again.'));
     return { provider: PROVIDER, steps, models: [] };
   }
 
@@ -283,16 +284,17 @@ export async function diagnoseLocal(){
     const res = await fetch(`${base}/v1/models`, { headers: { Authorization: `Bearer ${key}` } });
     const { json, text } = await readJson(res);
     if(!res.ok){
-      steps.push(step('Access key accepted', false,
-        res.status === 401 ? 'The local AI rejected the key. Copy the current one from its System tab -- it changes when rotated.'
+      steps.push(step('Sign-in accepted', false,
+        res.status === 401 ? 'The local AI didn\'t accept your tracker sign-in. Sign out and back in; if it still fails, ' +
+                             'the desktop needs its latest update (it checks sign-ins with Supabase), or your account is deactivated.'
                            : 'The local AI refused the request.',
         `HTTP ${res.status} -- ${providerMessage(json, text, res.status)}`));
       return { provider: PROVIDER, steps, models: [] };
     }
     info = json || {};
-    steps.push(step('Access key accepted', true, 'The key is right.'));
+    steps.push(step('Sign-in accepted', true, 'The local AI recognized your tracker sign-in.'));
   } catch (e) {
-    steps.push(step('Access key accepted', false, 'The request never completed.', String(e && e.message || e)));
+    steps.push(step('Sign-in accepted', false, 'The request never completed.', String(e && e.message || e)));
     return { provider: PROVIDER, steps, models: [] };
   }
 

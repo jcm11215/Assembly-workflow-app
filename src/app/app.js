@@ -29,6 +29,7 @@ import { startActivityRealtime, stopActivityRealtime } from '../realtime/activit
 import { showToast } from '../ui/components/toast.js';
 import { initErrorHandlers } from '../monitoring/errorHandler.js';
 import { initConnectionMonitor } from '../monitoring/connectionMonitor.js';
+import { loadShopSettings } from '../db/shopSettings.js';
 
 export async function boot(){
   setRenderer(render);                              // wire the bus before anything can request a render
@@ -55,7 +56,9 @@ let realtimeStarted = false;
 let sawDisconnect = false;
 
 async function continueBoot(){
-  await loadAll();
+  // Shop settings alongside the data, not after it: they decide which AI
+  // and which blueprint storage this device uses, and never throw.
+  await Promise.all([loadAll(), loadShopSettings()]);
   render();
   initEventRouter();
 

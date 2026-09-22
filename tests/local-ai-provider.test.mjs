@@ -156,7 +156,7 @@ await t('once found down, the next call skips straight to OpenRouter for a while
   const sub = P.takeModelSubstitution();
   ok(/moment ago/.test(sub.reason), sub.reason);
 });
-await t('a wrong key is shown, never covered by OpenRouter', async () => {
+await t('a refused sign-in is shown, never covered by OpenRouter', async () => {
   setup();
   const calls = mockFetch({ local: [json(401, { error: { message: 'The local AI rejected the access key.', type: 'unauthorized' } })],
                             openrouter: [orOk('should not be used')] });
@@ -165,7 +165,7 @@ await t('a wrong key is shown, never covered by OpenRouter', async () => {
   ok(err, 'threw');
   eq(err.status, 401, 'status');
   eq(calls.filter(c => c.url.includes('openrouter')).length, 0, 'no fallback');
-  ok(/access key/.test(explainFetchError(err)) && /System tab/.test(explainFetchError(err)), explainFetchError(err));
+  ok(/tracker sign-in/.test(explainFetchError(err)) && /Sign out and back in/.test(explainFetchError(err)), explainFetchError(err));
 });
 await t('too big for the model\'s context: passed up so the scan divides the pages', async () => {
   setup();
@@ -217,7 +217,7 @@ await t('missing address or key is NO_API_KEY, explained for the local AI', asyn
   let err;
   try { await P.callAI('SYS', 'hi'); } catch (e) { err = e; }
   eq(err.message, 'NO_API_KEY', 'code');
-  ok(/local AI's address and access key/.test(explainFetchError(err)), explainFetchError(err));
+  ok(/server address hasn't been set up/.test(explainFetchError(err)) && /Shop Server/.test(explainFetchError(err)), explainFetchError(err));
 });
 await t('a truly successful local call reports no substitution', async () => {
   setup();
