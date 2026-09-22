@@ -48,15 +48,28 @@ export function subscribe(fn){
   return () => listeners.delete(fn);
 }
 
-/** Re-renders the component when `select(state)` changes. */
+/**
+ * Re-renders the component when `select(state)` changes.
+ *
+ * Effects run after the browser paints, so a change can land between this
+ * component's first render and its subscription (a fast response at
+ * start-up, say). Checking once more right after subscribing is what keeps
+ * that change from being missed -- without it the app could sit on
+ * "Loading" with its data already in hand.
+ */
 export function useStore(select = s => s){
   const [value, setValue] = useState(() => select(state));
   const selectRef = useRef(select);
   selectRef.current = select;
-  useEffect(() => subscribe(s => {
-    const next = selectRef.current(s);
-    setValue(prev => (Object.is(prev, next) ? prev : next));
-  }), []);
+  useEffect(() => {
+    const check = s => {
+      const next = selectRef.current(s);
+      setValue(prev => (Object.is(prev, next) ? prev : next));
+    };
+    const unsubscribe = subscribe(check);
+    check(state);
+    return unsubscribe;
+  }, []);
   return value;
 }
 

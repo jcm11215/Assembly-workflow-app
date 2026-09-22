@@ -86,6 +86,7 @@ export function Overlays(){
   useEffect(() => {
     const fn = () => force(n => n + 1);
     listeners.add(fn);
+    fn();   // anything opened before this subscribed (see useStore)
     return () => listeners.delete(fn);
   }, []);
 

@@ -21,7 +21,7 @@ export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday',
 export const isRecurring = task => !!task && task.recurrence !== 'none';
 
 export function recurrenceLabel(task){
-  if(task.recurrence === 'weekly') return `Every ${WEEKDAYS[task.weekday] || 'week'}`;
+  if(task.recurrence === 'weekly') return `Every ${WEEKDAYS[Number(task.weekday)] || 'week'}`;
   return (RECURRENCE.find(r => r.id === task.recurrence) || RECURRENCE[0]).label;
 }
 
@@ -31,12 +31,12 @@ export function recurrenceLabel(task){
  * not that day has passed, so an overdue one stays on the list.
  */
 export function isDueOn(task, iso){
-  if(!task || !task.active) return false;
+  if(!task || task.active === false) return false;
   const started = !task.startsOn || iso >= task.startsOn;
   switch(task.recurrence){
     case 'daily':    return started;
     case 'weekdays': { const d = dayOfWeek(iso); return started && d >= 1 && d <= 5; }
-    case 'weekly':   return started && dayOfWeek(iso) === task.weekday;
+    case 'weekly':   return started && dayOfWeek(iso) === Number(task.weekday);
     default:         return task.dueDate === iso;
   }
 }
@@ -46,7 +46,7 @@ export const occurrenceKey = (taskId, iso) => `${taskId}|${iso}`;
 /** Only one-offs can be overdue: a missed recurring day is history, not
  *  something still owed today. */
 export function isOverdue(task, doneKeys, today){
-  if(!task.active || isRecurring(task) || !task.dueDate || task.dueDate >= today) return false;
+  if(task.active === false || isRecurring(task) || !task.dueDate || task.dueDate >= today) return false;
   return !doneKeys.has(occurrenceKey(task.id, task.dueDate));
 }
 
@@ -60,7 +60,7 @@ export const HISTORY_DAYS = 30;
 export function completionWindow(tasks, today){
   let from = shiftDays(today, -HISTORY_DAYS);
   for(const t of tasks){
-    if(t.active && !isRecurring(t) && t.dueDate && t.dueDate < from) from = t.dueDate;
+    if(t.active !== false && !isRecurring(t) && t.dueDate && t.dueDate < from) from = t.dueDate;
   }
   return { from, to: today };
 }
