@@ -1,0 +1,41 @@
+# Assembly Workflow Tracker -- systemd unit.
+# deploy/install.sh fills in __APP_DIR__ and __NODE__ and installs this as
+# /etc/systemd/system/assembly-workflow.service.
+
+[Unit]
+Description=Assembly Workflow Tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=assembly
+Group=assembly
+WorkingDirectory=__APP_DIR__
+ExecStart=__NODE__ --disable-warning=ExperimentalWarning server/main.mjs
+Restart=always
+RestartSec=3
+
+# Listens on this machine only; `tailscale serve` publishes it to the
+# tailnet with HTTPS. See docs/INSTALL.md.
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+Environment=DATA_DIR=/var/lib/assembly-workflow
+Environment=NODE_ENV=production
+
+# The app writes only to its data folder.
+StateDirectory=assembly-workflow
+StateDirectoryMode=0750
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

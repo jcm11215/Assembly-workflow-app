@@ -306,3 +306,19 @@ test('AI settings never hand keys back', async () => {
   const state = (await assembler.get('/api/state')).data;
   assert.deepEqual(state.ai, { provider: 'openrouter', label: 'OpenRouter', ready: true });
 });
+
+test('only PDFs and images are accepted as drawing files', async () => {
+  const job = await newJob();
+  const saved = await admin.post(`/api/jobs/${job.id}/blueprints`, { fileName: 'x.html', mimeType: 'text/html', components: [] });
+  const page = new TextEncoder().encode('<script>alert(1)</script>');
+  const res = await admin.put(`/api/blueprints/${saved.data.blueprint.id}/file`, page, { 'Content-Type': 'text/html' });
+  assert.equal(res.status, 400);
+});
+
+test('static files cannot be read outside the app folders', async () => {
+  for(const p of ['/../server/config.mjs', '/%2e%2e/package.json', '/shared/../server/db.mjs', '/..%2fdata/assembly.db']){
+    const res = await fetch(srv.url + p);
+    assert.equal(res.status, 404, p);
+  }
+  assert.equal((await fetch(srv.url + '/shared/procedure.js')).status, 200);
+});

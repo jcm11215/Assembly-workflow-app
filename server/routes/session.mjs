@@ -119,7 +119,10 @@ export default function register(r){
   r.post('/api/setup', async ctx => {
     const body = await ctx.json();
     if(!setupCodeIfNeeded(ctx.db)) throw conflict('This server is already set up. Sign in instead.', 'already_setup');
+    const key = throttleKey('setup', ctx.clientIp());
+    if(isThrottled(key)) throw new HttpError(429, 'Too many attempts. Wait 15 minutes and try again.', 'throttled');
     if(!checkSetupCode(body.setupCode)){
+      recordFailure(key);
       throw badRequest('That setup code is not right. It is printed in the server log.', 'bad_setup_code');
     }
     const fields = newAccountFields(body);

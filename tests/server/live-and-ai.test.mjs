@@ -121,3 +121,16 @@ test('asking with no provider set up is a 409 the app can explain', async () => 
   assert.equal(res.status, 409);
   assert.equal(res.data.code, 'ai_not_configured');
 });
+
+test('the first-run setup code is throttled like a password', async () => {
+  const { startServer } = await import('./harness.mjs');
+  const fresh = await startServer();
+  try {
+    const c = fresh.client();
+    assert.equal((await c.get('/api/session')).data.setupNeeded, true);
+    for(let i = 0; i < 8; i++){
+      assert.equal((await c.post('/api/setup', { setupCode: 'NOPE', fullName: 'X', login: 'xxx', password: 'password123' })).status, 400);
+    }
+    assert.equal((await c.post('/api/setup', { setupCode: 'NOPE', fullName: 'X', login: 'xxx', password: 'password123' })).status, 429);
+  } finally { await fresh.close(); }
+});

@@ -10,7 +10,7 @@ import { badRequest, notFound, MB } from '../http.mjs';
 import { uuid, now } from '../db.mjs';
 import { toComponent } from '../records.mjs';
 import { pushJob } from './jobs.mjs';
-import { relativePathFor, writeFileAtomic, absolutePath } from '../files.mjs';
+import { relativePathFor, writeFileAtomic, absolutePath, safeMimeType } from '../files.mjs';
 import * as v from '../validate.mjs';
 
 export const COMPONENT_STAGES = ['trough', 'screw', 'drive', 'bearings', 'tail', 'other'];
@@ -116,7 +116,8 @@ export default function register(r){
     if(bp.file_path) throw badRequest('That blueprint already has its file.');
     const bytes = await ctx.raw(60 * MB);
     if(!bytes.length) throw badRequest('The file is empty.');
-    const mime = String(ctx.req.headers['content-type'] || bp.mime_type || 'application/octet-stream').split(';')[0];
+    const mime = safeMimeType(String(ctx.req.headers['content-type'] || bp.mime_type || '').split(';')[0].trim());
+    if(mime === 'application/octet-stream') throw badRequest('A drawing has to be a PDF or a photo (JPEG, PNG, WebP, HEIC).');
     const rel = relativePathFor(bp.job_number, bp.original_filename, mime, bp.version);
     await writeFileAtomic(ctx.filesDir, rel, bytes);
     ctx.db.run('update blueprints set file_path = ?, mime_type = ? where id = ?', rel, mime, bp.id);
@@ -130,11 +131,13 @@ export default function register(r){
     const abs = absolutePath(ctx.filesDir, bp.file_path);
     let stat;
     try { stat = fs.statSync(abs); } catch { throw notFound('The file for that blueprint'); }
-    const name = (bp.original_filename || 'blueprint').replace(/["\\\r\n]/g, '_');
+    const name = (bp.original_filename || 'blueprint').replace(/[^\x20-\x7e]|["\\]/g, '_');
+    const type = safeMimeType(bp.mime_type);
     ctx.res.writeHead(200, {
-      'Content-Type': bp.mime_type || 'application/octet-stream',
+      'Content-Type': type,
       'Content-Length': stat.size,
-      'Content-Disposition': `inline; filename="${name}"`,
+      // Only a PDF or an image opens in the browser; anything else downloads.
+      'Content-Disposition': `${type === 'application/octet-stream' ? 'attachment' : 'inline'}; filename="${name}"`,
       'Cache-Control': 'private, max-age=3600',
       'X-Content-Type-Options': 'nosniff'
     });

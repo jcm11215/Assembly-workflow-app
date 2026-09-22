@@ -24,7 +24,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { paths } from './config.mjs';
 import { openDb, putSetting } from './db.mjs';
-import { relativePathFor, writeFileAtomic } from './files.mjs';
+import { relativePathFor, writeFileAtomic, safeMimeType } from './files.mjs';
 
 const argv = process.argv.slice(2);
 const DRY_RUN = argv.includes('--dry-run');
@@ -155,7 +155,7 @@ async function main(){
         (b.storage_backend === 'local' && !LOCAL_FILES ? ' (it was saved to the shop server -- pass --local-files <that folder>)' : ''));
       continue;
     }
-    const mime = b.original_mime_type || 'application/octet-stream';
+    const mime = safeMimeType(b.original_mime_type);
     files.set(b.id, { bytes, mime, rel: relativePathFor(jobById.get(b.job_id).job_number, b.original_filename || path.basename(b.storage_path), mime, b.version || 1) });
   }
 

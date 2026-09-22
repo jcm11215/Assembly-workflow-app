@@ -24,6 +24,12 @@ export function safeName(name, fallback){
   return s || fallback;
 }
 
+/** The only file types a drawing may be stored as. Anything else is kept
+ *  as an opaque download: the files are served from the app's own
+ *  address, so an uploaded web page must never be able to run there. */
+const SAFE_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic']);
+export const safeMimeType = type => (SAFE_TYPES.has(String(type || '').toLowerCase()) ? String(type).toLowerCase() : 'application/octet-stream');
+
 const EXT_BY_MIME = {
   'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic'
 };
