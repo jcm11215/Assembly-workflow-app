@@ -1,5 +1,5 @@
 # Assembly Workflow Tracker -- systemd unit.
-# deploy/install.sh fills in __APP_DIR__ and __NODE__ and installs this as
+# deploy/install.sh fills in __APP_DIR__, __NODE__ and __PORT__ and installs this as
 # /etc/systemd/system/assembly-workflow.service.
 
 [Unit]
@@ -19,7 +19,7 @@ RestartSec=3
 # Listens on this machine only; `tailscale serve` publishes it to the
 # tailnet with HTTPS. See docs/INSTALL.md.
 Environment=HOST=127.0.0.1
-Environment=PORT=8080
+Environment=PORT=__PORT__
 Environment=DATA_DIR=/var/lib/assembly-workflow
 Environment=NODE_ENV=production
 
