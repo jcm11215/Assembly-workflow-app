@@ -190,6 +190,50 @@ const MIGRATIONS = [
   );
   create index activity_at on activity(at desc);
   create index activity_actor on activity(actor_id, at desc);
+  `,
+
+  // 2: the knowledge base the assistant answers from, and staff corrections
+  `
+  create table knowledge_docs (
+    id           text primary key,
+    title        text not null,
+    collection   text not null default 'general',
+    file_path    text,                  -- relative to data/files; null for text that came without a file
+    file_name    text not null default '',
+    mime_type    text not null default 'application/octet-stream',
+    size         integer not null default 0,
+    content_hash text not null default '',
+    status       text not null default 'pending' check (status in ('pending','indexed','empty','error')),
+    detail       text not null default '',
+    chunk_count  integer not null default 0,
+    created_by   text references users(id) on delete set null,
+    created_at   text not null,
+    updated_at   text not null
+  );
+  create index knowledge_docs_hash on knowledge_docs(content_hash);
+
+  create table knowledge_chunks (
+    id          integer primary key autoincrement,
+    doc_id      text not null references knowledge_docs(id) on delete cascade,
+    ordinal     integer not null,
+    text        text not null,
+    embedding   blob,                   -- float32, unit length
+    embed_model text not null default ''
+  );
+  create index knowledge_chunks_doc on knowledge_chunks(doc_id, ordinal);
+
+  create table corrections (
+    id          text primary key,
+    question    text not null,
+    bad_answer  text not null default '',
+    correction  text not null,
+    active      integer not null default 1,
+    used_count  integer not null default 0,
+    embedding   blob,
+    embed_model text not null default '',
+    created_by  text references users(id) on delete set null,
+    created_at  text not null
+  );
   `
 ];
 

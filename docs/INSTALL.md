@@ -64,17 +64,32 @@ DATA_DIR=/var/lib/assembly-workflow node server/cli.mjs create-admin`.
 
 ## 5. Set up the AI
 
-In the app: **Settings → AI**. Pick a provider, paste its key, **Save**, and
-**Test the saved settings**. This is set once for everyone -- keys stay on
-the server and are never shown back.
+In the app: **Settings → AI**. Pick a provider, **Save**, and **Test the
+saved settings**. This is set once for everyone -- keys stay on the server
+and are never shown back.
 
+- **Local AI** -- models on your own hardware, run by
+  [Ollama](https://ollama.com). Install it on this machine (skip if it's
+  already there):
+
+  ```bash
+  curl -fsSL https://ollama.com/install.sh | sh
+  ```
+
+  Then in **Settings → AI → Local AI**, under *Download a model*, fetch a
+  vision model for drawings (`minicpm-v`), a chat model for the assistant
+  (`qwen2.5:7b`, or `qwen2.5:14b` with 12 GB+ of GPU memory) and
+  `nomic-embed-text` for the knowledge base. Pick them in the three model
+  boxes and Save. Ollama on another tailnet machine works too: give its
+  address, and on that machine set `OLLAMA_HOST=0.0.0.0` for its service.
+  Optionally let OpenRouter stand in when the local AI is off.
 - **Google Gemini** -- key from https://aistudio.google.com/apikey.
 - **OpenRouter** -- key from https://openrouter.ai/keys. Pick a model that
   reads images.
-- **Local AI** -- your own OpenAI-compatible AI server. Give its address
-  *as this server reaches it*: `http://localhost:<port>` if it runs on this
-  same machine, or its `https://….ts.net` address if it's another machine
-  on the tailnet. Optionally let OpenRouter stand in when it's off.
+
+The **Knowledge** screen (admins) is where the assistant's documents go:
+procedures, spec sheets, vendor manuals. It needs Ollama's embedding model
+whichever provider answers.
 
 ## 6. Add the team
 

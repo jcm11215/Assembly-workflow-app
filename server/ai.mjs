@@ -8,14 +8,15 @@
  *
  *   gemini      Google Gemini API (key + model)
  *   openrouter  OpenRouter (key + model)
- *   local       the shop's own AI server, OpenAI-compatible
- *               (address + access key), optionally falling back to
- *               OpenRouter when it is off
+ *   local       Ollama on this machine or the tailnet (ollama.mjs),
+ *               optionally falling back to OpenRouter when it is off
  *
  * Content is a string or an array of blocks:
  *   { type: 'text', text }
  *   { type: 'image', source: { media_type, data }, textLayer?: { page, text } }
  */
+
+import * as ollama from './ollama.mjs';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
 export const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
@@ -35,27 +36,31 @@ export function normalizeSettings(s){
     provider: PROVIDERS.includes(s.provider) ? s.provider : 'gemini',
     gemini: { key: s.gemini?.key || '', model: s.gemini?.model || DEFAULT_GEMINI_MODEL },
     openrouter: { key: s.openrouter?.key || '', model: s.openrouter?.model || DEFAULT_OPENROUTER_MODEL },
-    local: {
-      url: normalizeUrl(s.local?.url || ''),
-      key: s.local?.key || '',
-      fallback: s.local?.fallback !== false
-    }
+    local: normalizeLocal(s.local)
   };
 }
 
-/** "desktop.tailnet.ts.net" -> "https://desktop.tailnet.ts.net"; trailing
- *  slashes and a pasted "/v1" dropped. */
-export function normalizeUrl(url){
-  let u = String(url || '').trim();
-  if(!u) return '';
-  if(!/^https?:\/\//i.test(u)) u = `https://${u}`;
-  return u.replace(/\/+$/, '').replace(/\/v1$/, '');
+const int = (v, d, lo, hi) => (Number.isFinite(Number(v)) && v !== '' && v != null ? Math.min(hi, Math.max(lo, Math.round(Number(v)))) : d);
+
+export function normalizeLocal(l){
+  l = l || {};
+  return {
+    url: ollama.normalizeOllamaUrl(l.url),
+    chatModel: String(l.chatModel || '').trim(),
+    visionModel: String(l.visionModel || '').trim(),
+    embedModel: String(l.embedModel || '').trim() || ollama.DEFAULT_EMBED_MODEL,
+    contextTokens: int(l.contextTokens, 8192, 2048, 131072),
+    visionContextTokens: int(l.visionContextTokens, 16384, 2048, 131072),
+    temperature: Number.isFinite(Number(l.temperature)) && l.temperature !== '' && l.temperature != null
+      ? Math.min(2, Math.max(0, Number(l.temperature))) : 0.3,
+    fallback: l.fallback !== false
+  };
 }
 
 function isReady(s){
   if(s.provider === 'gemini') return !!s.gemini.key;
   if(s.provider === 'openrouter') return !!s.openrouter.key;
-  return !!(s.local.url && s.local.key);
+  return !!(s.local.chatModel || s.local.visionModel);
 }
 
 /** What any signed-in person may know: which provider, and whether it is
@@ -74,7 +79,7 @@ export function adminView(raw){
     provider: s.provider,
     gemini: { model: s.gemini.model, keySet: !!s.gemini.key, keyHint: hint(s.gemini.key) },
     openrouter: { model: s.openrouter.model, keySet: !!s.openrouter.key, keyHint: hint(s.openrouter.key) },
-    local: { url: s.local.url, fallback: s.local.fallback, keySet: !!s.local.key, keyHint: hint(s.local.key) }
+    local: { ...s.local }
   };
 }
 
@@ -89,15 +94,17 @@ export function applyEdit(raw, edit){
     if(!PROVIDERS.includes(edit.provider)) throw new Error('Unknown AI provider.');
     s.provider = edit.provider;
   }
-  for(const p of ['gemini', 'openrouter', 'local']){
+  for(const p of ['gemini', 'openrouter']){
     const e = edit[p];
     if(!e) continue;
     if(e.key !== undefined) s[p].key = String(e.key).trim();
-    if(e.model !== undefined && p !== 'local') s[p].model = String(e.model).trim() || s[p].model;
+    if(e.model !== undefined) s[p].model = String(e.model).trim() || s[p].model;
   }
   if(edit.local){
-    if(edit.local.url !== undefined) s.local.url = normalizeUrl(edit.local.url);
-    if(edit.local.fallback !== undefined) s.local.fallback = !!edit.local.fallback;
+    const keys = ['url', 'chatModel', 'visionModel', 'embedModel', 'contextTokens', 'visionContextTokens', 'temperature', 'fallback'];
+    const next = { ...s.local };
+    for(const k of keys) if(edit.local[k] !== undefined) next[k] = edit.local[k];
+    s.local = normalizeLocal(next);
   }
   return s;
 }
@@ -196,28 +203,13 @@ async function callGemini(s, system, content){
 
 /* ---------------- OpenRouter ---------------- */
 
-function toOpenAiContent(content, { withTextLayers = false } = {}){
+/** Cloud providers read each image alone; only the local model gets the
+ *  pages' selectable text beside them (ollama.mjs). */
+function toOpenAiContent(content){
   if(typeof content === 'string') return content;
-  const out = [];
-  for(const b of content){
-    if(b.type === 'image'){
-      out.push({ type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } });
-      // The local model gets each PDF page's selectable text beside its
-      // image: exact part numbers beat squinting at a render. Cloud
-      // providers read the image alone, as they always have.
-      if(withTextLayers && b.textLayer?.text) out.push({ type: 'text', text: textLayerNote(b.textLayer) });
-    } else {
-      out.push({ type: 'text', text: b.text || '' });
-    }
-  }
-  return out;
-}
-
-export function textLayerNote(layer){
-  return `Selectable text in the PDF on page ${layer.page} -- the exact characters, but reading ` +
-    `order can be jumbled, and anything drawn as lines rather than text is missing. Use it to ` +
-    `get part numbers, sizes and table entries exactly right; the image shows where each one sits:\n` +
-    layer.text;
+  return content.map(b => b.type === 'image'
+    ? { type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } }
+    : { type: 'text', text: b.text || '' });
 }
 
 async function openRouterOnce(s, system, content){
@@ -267,51 +259,24 @@ async function callOpenRouter(s, system, content){
   throw last;
 }
 
-/* ---------------- Local AI ---------------- */
+/* ---------------- Local AI (Ollama) ---------------- */
 
-export const LOCAL_TIMEOUT_MS = 10 * 60000;
 const LOCAL_DOWN_MS = 60000;
 let localDownUntil = 0;
 export function resetLocalState(){ localDownUntil = 0; }
 
 async function localOnce(s, system, content){
-  let res;
   try {
-    res = await fetch(`${s.local.url}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.local.key}` },
-      body: JSON.stringify({
-        model: 'auto',   // the local server picks its vision or chat model
-        stream: false,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: toOpenAiContent(content, { withTextLayers: true }) }]
-      }),
-      signal: AbortSignal.timeout(LOCAL_TIMEOUT_MS)
-    });
+    return (await ollama.chat(s.local, system, content)).text;
   } catch (e) {
-    const hung = e?.name === 'TimeoutError' || e?.name === 'AbortError';
-    throw new AiError(hung
-      ? `The local AI took longer than ${LOCAL_TIMEOUT_MS / 60000} minutes to answer.`
-      : `Couldn't reach the local AI at ${s.local.url} (${e?.cause?.code || e?.message || 'network error'}).`,
-    { provider: 'local', unreachable: true });
+    if(!(e instanceof ollama.OllamaError)) throw e;
+    throw new AiError(e.message, { provider: 'local', status: e.status || null, unreachable: e.unreachable });
   }
-  const raw = await res.text();
-  let data = null;
-  try { data = JSON.parse(raw); } catch { /* handled below */ }
-  if(!res.ok || data?.error){
-    // 502/504: Tailscale saying the machine didn't answer; 503: the
-    // server saying its model runtime didn't.
-    const unreachable = [502, 503, 504].includes(res.status) || data?.error?.type === 'upstream_unavailable';
-    throw new AiError(data?.error?.message || `Local AI request failed (${res.status})`, { provider: 'local', status: res.status, unreachable });
-  }
-  if(!data) throw new AiError('Unexpected response from the local AI (not JSON).', { provider: 'local', unreachable: true });
-  const message = data.choices?.[0]?.message;
-  if(!message) throw new AiError('The local AI returned no answer.', { provider: 'local' });
-  return message.content || '';
 }
 
 async function callLocal(s, system, content){
-  if(!s.local.url || !s.local.key){
-    throw new AiError('The local AI address and access key are not set. An admin can add them in Settings.', { provider: 'local', notConfigured: true });
+  if(!isReady(s)){
+    throw new AiError('No model is picked for the local AI yet. An admin can pick one in Settings.', { provider: 'local', notConfigured: true });
   }
   const canFallBack = s.local.fallback && !!s.openrouter.key;
   const fallBack = async why => {
@@ -340,8 +305,9 @@ async function callLocal(s, system, content){
       await sleep(1500);
     }
   }
-  // Only an unreachable server or a crashing model is routed around. A
-  // wrong key or a missing model is a setup problem, shown as it is.
+  // Only an unreachable Ollama or a crashing model is routed around. A
+  // missing model or an oversized request is shown as it is -- the scan
+  // pipeline answers "too large" by splitting the pages.
   if((last.unreachable || last.status === 500) && canFallBack){
     return fallBack(last.unreachable ? 'was unreachable' : `failed (${last.message})`);
   }
@@ -381,5 +347,16 @@ export async function listModels(rawSettings, provider){
       .map(m => ({ id: m.id, name: m.name || m.id, free: /:free$/.test(m.id) || Number(m.pricing?.prompt) === 0 }))
       .sort((a, b) => (b.free - a.free) || a.name.localeCompare(b.name));
   }
-  throw new AiError('The local AI picks its own model.', { provider });
+  if(provider === 'local'){
+    try {
+      return (await ollama.listModels(s.local.url)).map(m => ({
+        id: m.name, name: m.name, sizeGb: Math.round((m.size || 0) / 1e8) / 10,
+        family: m.details?.family || '', params: m.details?.parameter_size || '',
+        embedding: /embed|bge|minilm/i.test(m.name) || /bert/i.test(m.details?.family || '')
+      })).sort((a, b) => a.id.localeCompare(b.id));
+    } catch (e) {
+      throw new AiError(e.message, { provider, unreachable: e.unreachable });
+    }
+  }
+  throw new AiError('Unknown provider.', { provider });
 }

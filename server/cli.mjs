@@ -6,6 +6,7 @@
  *   node server/cli.mjs users                   list every login
  *   node server/cli.mjs backup                  write a database backup now
  *   node server/cli.mjs legacy-auth off         stop checking old Supabase passwords
+ *   node server/cli.mjs import-localai <folder> bring in the old Local AI's documents and corrections
  *
  * Uses the same DATA_DIR as the server (see config.mjs), and is safe to
  * run while the server is running.
@@ -13,10 +14,12 @@
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { paths } from './config.mjs';
+import fs from 'node:fs';
 import { openDb, now, getSetting } from './db.mjs';
 import { hashPassword, passwordProblem, normalizeLogin, loginProblem, endAllSessions } from './auth.mjs';
 import { insertUser } from './routes/session.mjs';
 import { backupNow } from './backup.mjs';
+import { importLocalAi } from './import-localai.mjs';
 
 const [command, ...args] = process.argv.slice(2);
 const db = openDb(paths.db);
@@ -76,6 +79,12 @@ const commands = {
     console.log(`Backup written: ${backupNow(db)}`);
   },
 
+  async 'import-localai'(){
+    if(!args[0]) throw new Error('Give the folder the Local AI was installed in, e.g. import-localai /home/you/localai');
+    fs.mkdirSync(paths.files, { recursive: true });
+    await importLocalAi(db, paths.files, args[0]);
+  },
+
   'legacy-auth'(){
     if(args[0] !== 'off'){
       console.log(getSetting(db, 'legacyAuth') ? 'Old Supabase passwords are still accepted on first sign-in.' : 'Old Supabase passwords are not checked.');
@@ -90,7 +99,7 @@ const commands = {
 
 try {
   if(!commands[command]){
-    console.log('Usage: node server/cli.mjs <create-admin | set-password [login] | users | backup | legacy-auth [off]>');
+    console.log('Usage: node server/cli.mjs <create-admin | set-password [login] | users | backup | legacy-auth [off] | import-localai <folder>>');
     process.exitCode = command ? 1 : 0;
   } else {
     await commands[command]();

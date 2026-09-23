@@ -8,9 +8,15 @@
  */
 import { api } from './api.js';
 
-export async function askAI(system, content){
-  const res = await api.post('/api/ai/chat', { system, content });
-  return { text: res.text || '', substitution: res.substitution || null };
+/**
+ * With `knowledge` (the question as asked), the server adds the knowledge
+ * base passages and staff corrections that match it, and `sources` says
+ * which ones.
+ */
+export async function askAI(system, content, { knowledge } = {}){
+  const res = await api.post('/api/ai/chat', { system, content, ...(knowledge ? { knowledge } : {}) });
+  return { text: res.text || '', substitution: res.substitution || null,
+           sources: res.sources || null, knowledgeNote: res.knowledgeNote || null };
 }
 
 /** A failure explained for the person who hit it. */

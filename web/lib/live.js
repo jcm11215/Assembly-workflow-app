@@ -42,7 +42,8 @@ const handlers = {
     me: s.me && s.me.id === u.id ? { ...s.me, fullName: u.fullName, role: u.role } : s.me
   })),
   activity: a => setState(s => (s.activity ? { activity: [a, ...s.activity.filter(x => x.id !== a.id)].slice(0, 500) } : null)),
-  ai: summary => setState({ ai: summary })
+  ai: summary => setState({ ai: summary }),
+  'ai-pull': progress => setState({ aiPull: progress.done ? { ...progress } : progress })
 };
 
 export function startLive(){

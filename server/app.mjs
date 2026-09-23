@@ -21,6 +21,7 @@ import taskRoutes from './routes/tasks.mjs';
 import activityRoutes from './routes/activity.mjs';
 import adminRoutes from './routes/admin.mjs';
 import aiRoutes from './routes/ai.mjs';
+import knowledgeRoutes from './routes/knowledge.mjs';
 
 /**
  * @param {object} deps
@@ -30,7 +31,7 @@ import aiRoutes from './routes/ai.mjs';
 export function createApp({ db, filesDir }){
   const router = createRouter();
   for(const register of [sessionRoutes, stateRoutes, jobRoutes, blueprintRoutes, recordRoutes,
-                         taskRoutes, activityRoutes, adminRoutes, aiRoutes]){
+                         taskRoutes, activityRoutes, adminRoutes, aiRoutes, knowledgeRoutes]){
     register(router);
   }
 

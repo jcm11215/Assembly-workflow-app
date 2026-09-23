@@ -17,11 +17,16 @@ it: SQLite is built into Node 22, and the browser libraries are vendored.
 │  records.mjs  rows → the exact objects the app renders                      │
 │  live.mjs     Server-Sent Events: every change pushed to every open app     │
 │  ai.mjs       Gemini / OpenRouter / local AI, keys held here                │
+│  ollama.mjs   the local models: chat, drawings, embeddings, downloads       │
+│  knowledge.mjs  documents + corrections the assistant searches              │
 │  files.mjs    drawings on disk, a folder per job                            │
 │  backup.mjs   nightly VACUUM INTO copies                                    │
 └───────────────┬──────────────────────────────────────┬──────────────────────┘
                 ▼                                      ▼
      data/assembly.db (SQLite)              data/files/<job>/<drawing>
+                                            data/files/knowledge/<doc>
+                ▲
+                └── Ollama on 127.0.0.1:11434 (or another tailnet machine)
 ```
 
 ## Folders
@@ -89,3 +94,24 @@ content blocks to `POST /api/ai/chat`, and the server calls whichever
 provider an admin set up, with retries: it waits out rate limits, switches
 away from an overloaded Gemini model, and falls back from the local AI to
 OpenRouter if allowed. A substitution is reported, never silent.
+
+**Local AI.** `ollama.mjs` calls Ollama's native `/api/chat`, not its
+OpenAI-style endpoint, because only the native one honours `num_ctx`: a
+multi-page scan overflows a small context and Ollama silently drops the
+start of the prompt. Requests are sized up front (tokens per image by
+model family), refused with "too large" when they can't fit -- the scan
+pipeline answers that by halving the pages -- and checked afterwards for
+an overflow that slipped through. Drawings go to the vision model with
+each page's PDF text layer beside it; questions go to the chat model.
+
+**Knowledge base.** Admins add documents (Knowledge screen). Text comes
+from the file (text, Markdown, CSV, HTML, Word) or, for a PDF, from the
+browser's pdf.js text layer. It is cut into ~1400-character passages on
+paragraph boundaries and embedded by Ollama's embedding model; vectors
+live in SQLite as float32 blobs and are searched by dot product. When the
+assistant is asked something, `POST /api/ai/chat` gets `knowledge: <the
+question>` and adds the best passages -- weighted by collection, so the
+shop's own procedures outrank vendor catalogs -- and any staff correction
+to a similar question, labelled as overriding everything else. So a
+correction counts from the next question on, with no retraining. The
+search runs on the local embedding model whichever provider answers.

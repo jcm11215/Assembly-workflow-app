@@ -81,7 +81,15 @@ Run from `/opt/assembly-workflow` as `sudo -u assembly env DATA_DIR=/var/lib/ass
   admin can do this; there is no email reset.
 - **Scans fail.** Settings → AI → Test the saved settings. The message is
   the provider's own ("API key not valid", "quota exceeded"). For the local
-  AI, check its address works *from the server*: `curl <address>/v1/models`.
+  AI, Settings → AI shows whether Ollama answers and what it has
+  installed; from the server, `curl http://127.0.0.1:11434/api/tags` and
+  `systemctl status ollama`. "Too large for the local model's context" is
+  handled by splitting pages; if a scan still fails, raise the drawing
+  context size under Advanced, or pick a vision model that uses fewer
+  tokens per page (minicpm-v).
+- **The assistant ignores a document.** Knowledge → check it says
+  "N passages" (a scanned PDF has no text layer and can't be searched). If
+  the screen warns about a different embedding model, press Re-index.
 - **The disk is filling up.** Admin → Health shows the database, drawings
   and free space. Old backups beyond the last 14 are deleted automatically.
 - **Locked out of every admin account.** `create-admin` from the terminal.

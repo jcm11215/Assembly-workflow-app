@@ -4,11 +4,11 @@
  *
  *   #/            dashboard      #/jobs/<id>   a job's page
  *   #/board  #/blockers  #/errors  #/tasks  #/notes
- *   #/assistant  #/activity  #/admin
+ *   #/assistant  #/knowledge  #/activity  #/admin
  */
 import { useEffect, useState } from '../vendor/index.js';
 
-export const TABS = ['dashboard', 'board', 'blockers', 'errors', 'tasks', 'notes', 'assistant', 'activity', 'admin'];
+export const TABS = ['dashboard', 'board', 'blockers', 'errors', 'tasks', 'notes', 'assistant', 'knowledge', 'activity', 'admin'];
 
 export function parseRoute(hash = location.hash){
   const path = hash.replace(/^#\/?/, '').split('?')[0];

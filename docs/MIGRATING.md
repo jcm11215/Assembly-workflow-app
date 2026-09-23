@@ -66,6 +66,33 @@ was never finished uploading in the old app.
 - **AI keys.** The old app kept them in each browser; the new one keeps
   them on the server. An admin enters them once under **Settings → AI**.
 
+## From the stand-alone Local AI Assistant
+
+If the shop ran the separate Local AI Assistant (the Python app, service
+`localai`), its job is now part of this app: scans and the assistant use
+Ollama directly, and its documents and corrections move into the
+**Knowledge** screen. Bring them across -- files, passages and
+corrections, plus its model choices -- with:
+
+```bash
+cd /opt/assembly-workflow
+sudo -u assembly env DATA_DIR=/var/lib/assembly-workflow \
+  node server/cli.mjs import-localai /home/<you>/localai
+```
+
+(`sudo -u assembly` needs to read that folder; if it can't, run it with
+plain `sudo` and then `sudo chown -R assembly: /var/lib/assembly-workflow`.)
+Its copies of tracker jobs are left behind -- the assistant reads the jobs
+live now. Running it twice is safe.
+
+Then stop the old service; that also frees the port it held (8080):
+
+```bash
+sudo systemctl disable --now localai
+```
+
+Ollama itself stays: it's what runs the models.
+
 ## Afterwards
 
 When you're happy everything came across:

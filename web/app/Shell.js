@@ -5,7 +5,7 @@
 import { html, useEffect } from '../vendor/index.js';
 import { useStore, setState } from '../lib/store.js';
 import { useRoute, navigate } from '../lib/router.js';
-import { useCan } from '../lib/permissions.js';
+import { can as roleCan } from '../../shared/roles.js';
 import { metrics } from '../lib/jobs.js';
 import { reloadState } from '../lib/actions.js';
 import { Icon } from '../ui/icons.js';
@@ -26,6 +26,7 @@ import { Settings } from '../screens/Settings.js';
 // fetched the first time they are opened.
 const Assistant = lazy(() => import('../screens/Assistant.js'), 'Assistant');
 const Admin = lazy(() => import('../screens/Admin.js'), 'Admin');
+const Knowledge = lazy(() => import('../screens/Knowledge.js'), 'Knowledge');
 
 const NAV = [
   { group: 'Production' },
@@ -38,16 +39,17 @@ const NAV = [
   { id: 'notes', label: 'Notes', icon: 'notes' },
   { group: 'Tools' },
   { id: 'assistant', label: 'Assistant', icon: 'assistant' },
+  { id: 'knowledge', label: 'Knowledge', icon: 'knowledge', perm: 'knowledge.manage' },
   { id: 'activity', label: 'Activity', icon: 'activity' },
   { id: 'admin', label: 'Admin', icon: 'admin', perm: 'team.manage' }
 ];
 
 const SCREENS = { dashboard: Dashboard, board: Board, blockers: Blockers, errors: Errors, tasks: Tasks,
-                  notes: Notes, assistant: Assistant, activity: Activity, admin: Admin };
+                  notes: Notes, assistant: Assistant, knowledge: Knowledge, activity: Activity, admin: Admin };
 
 export function Shell(){
   const route = useRoute();
-  const isAdmin = useCan('team.manage');
+  const role = useStore(s => s.me && s.me.role);
   const connection = useStore(s => s.connection);
   const me = useStore(s => s.me);
   const hasBlocked = useStore(s => s.blockers.some(b => b.status !== 'Resolved'));
@@ -90,7 +92,7 @@ export function Shell(){
       </main>
 
       <nav class="nav" aria-label="Main">
-        ${NAV.filter(n => !n.perm || (n.perm === 'team.manage' && isAdmin)).map(n => n.group
+        ${NAV.filter(n => !n.perm || roleCan(role, n.perm)).map(n => n.group
           ? html`<div class="nav-group" aria-hidden="true">${n.group}</div>`
           : html`<a href=${`#/${n.id === 'dashboard' ? '' : n.id}`} class=${`nav-btn${route.name === n.id ? ' active' : ''}`}
                     aria-current=${route.name === n.id ? 'page' : undefined}>

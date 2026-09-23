@@ -52,7 +52,9 @@ export const PERMISSIONS = {
   'activity.all':      ADMIN,      // everyone sees their own; admins see the shop's
   'team.manage':       ADMIN,
   'settings.manage':   ADMIN,
-  'ai.use':            EVERYONE
+  'ai.use':            EVERYONE,
+  'knowledge.manage':  ADMIN,      // the assistant's documents and corrections
+  'knowledge.correct': ['assembler', 'admin']   // teach the assistant the right answer
 };
 
 export function can(role, permission){

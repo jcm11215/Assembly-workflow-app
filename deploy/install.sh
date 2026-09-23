@@ -83,6 +83,18 @@ else
   echo "Tailscale isn't installed yet. Once it is: sudo tailscale serve --bg ${PORT}"
 fi
 
+if ! command -v ollama >/dev/null 2>&1; then
+  echo
+  echo "For the local AI (drawings, the assistant and its knowledge base on this machine), install Ollama:"
+  echo "  curl -fsSL https://ollama.com/install.sh | sh"
+  echo "then pick models in the app under Settings -> AI. (Gemini or OpenRouter work without it.)"
+fi
+if systemctl list-unit-files localai.service >/dev/null 2>&1 && systemctl is-enabled --quiet localai 2>/dev/null; then
+  echo
+  echo "The old stand-alone Local AI service is still enabled. To move what it learned in and switch it off,"
+  echo "see docs/MIGRATING.md, 'From the stand-alone Local AI Assistant'."
+fi
+
 CODE="$(journalctl -u "$SERVICE" -n 60 --no-pager 2>/dev/null | grep -A1 'setup code' | tail -1 | tr -d '[:space:]' || true)"
 if [[ -n "$CODE" ]]; then
   echo

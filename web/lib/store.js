@@ -22,6 +22,7 @@ const initial = {
   ai: { provider: 'gemini', label: 'Google Gemini', ready: false },
   activity: null,             // loaded when the Activity screen first opens
   jobFilter: 'all',           // the dashboard filter; the metric tiles set it too
+  aiPull: null,               // a local model downloading (admins only): { model, status, total, completed, done? }
   assistantDraft: '',         // a question another screen hands to the assistant
   connection: 'connecting',   // connecting | live | reconnecting
   loadedAt: null

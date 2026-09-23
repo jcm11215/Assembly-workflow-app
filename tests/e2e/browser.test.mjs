@@ -105,7 +105,7 @@ test('a job is created, ticked, and seen live by a second person', { skip }, asy
 });
 
 test('a new job is read off a drawing', { skip }, async () => {
-  await api(admin, 'PUT', '/api/settings/ai', { provider: 'local', local: { url: `http://127.0.0.1:${PORT + 1}`, key: 'k', fallback: false } });
+  await api(admin, 'PUT', '/api/settings/ai', { provider: 'local', local: { url: `http://127.0.0.1:${PORT + 1}`, chatModel: 'fake-chat', visionModel: 'fake-vision', fallback: false } });
   await admin.goto(BASE + '/#/');
   await admin.click('text=New job from a drawing');
   await admin.setInputFiles('input[type=file]', path.join(import.meta.dirname, 'drawing.pdf'));
@@ -123,10 +123,26 @@ test('a new job is read off a drawing', { skip }, async () => {
   assert.equal(bp.mimeType, 'application/pdf');
 });
 
+test('a document added to the knowledge base is cited by the assistant', { skip }, async () => {
+  await admin.goto(BASE + '/#/knowledge');
+  await admin.setInputFiles('input[type=file]', {
+    name: 'Team focus.md', mimeType: 'text/markdown',
+    buffer: Buffer.from('What should the team focus on today? Always finish jobs in QC before starting new work.')
+  });
+  await admin.locator('.doc-row', { hasText: 'Team focus' }).getByText('1 passage').waitFor({ timeout: 10000 });
+  await admin.goto(BASE + '/#/assistant');
+  await admin.click('text=What should the team focus on today?');
+  await admin.locator('.source', { hasText: 'Team focus' }).waitFor();
+  await admin.click('text=Correct this');
+  await admin.fill('textarea[name=correction]', 'QC first, then overdue jobs.');
+  await admin.click('button:has-text("Save correction")');
+  await admin.getByText('will use this from now on').waitFor();
+});
+
 test('the assistant answers, and acts only after confirmation', { skip }, async () => {
   await admin.goto(BASE + '/#/assistant');
   await admin.click('text=What should the team focus on today?');
-  await admin.getByText('Focus on 2024-017H first').waitFor();
+  await admin.getByText('Focus on 2024-017H first').last().waitFor();
   await admin.fill('input[aria-label=Message]', 'report a blocker on 2024-017H, gearmotor not in');
   await admin.click('button:has-text("Do it")');
   await admin.locator('.plan').waitFor();
@@ -137,7 +153,7 @@ test('the assistant answers, and acts only after confirmation', { skip }, async 
 });
 
 test('every screen opens without an error', { skip }, async () => {
-  for(const tab of ['', 'board', 'blockers', 'errors', 'tasks', 'notes', 'assistant', 'activity', 'admin']){
+  for(const tab of ['', 'board', 'blockers', 'errors', 'tasks', 'notes', 'assistant', 'knowledge', 'activity', 'admin']){
     await admin.goto(`${BASE}/#/${tab}`);
     await admin.locator('main').waitFor();
     await admin.waitForTimeout(300);

@@ -1,7 +1,8 @@
 // The AI providers' retry and fallback rules, against stand-in responses.
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { callAI, retryAfterMs, normalizeSettings, applyEdit, adminView, normalizeUrl } from '../../server/ai.mjs';
+import { callAI, retryAfterMs, normalizeSettings, applyEdit, adminView } from '../../server/ai.mjs';
+import { toUserMessage, fitProblem, normalizeOllamaUrl } from '../../server/ollama.mjs';
 
 const realFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = realFetch; });
@@ -55,7 +56,7 @@ test('Local AI: unreachable falls back to OpenRouter when allowed, and says so',
     if(String(url).startsWith('http://local')) throw new TypeError('fetch failed');
     return json(200, { choices: [{ message: { content: 'from openrouter' } }] });
   };
-  const settings = { provider: 'local', local: { url: 'http://local', key: 'k', fallback: true }, openrouter: { key: 'or', model: 'm/free' } };
+  const settings = { provider: 'local', local: { url: 'http://local', chatModel: 'qwen2.5:7b', fallback: true }, openrouter: { key: 'or', model: 'm/free' } };
   const out = await callAI(settings, 's', 'x');
   assert.equal(out.text, 'from openrouter');
   assert.match(out.substitution.used, /OpenRouter/);
@@ -75,7 +76,35 @@ test('settings: keys are kept unless replaced, and never shown back', () => {
   assert.equal(normalizeSettings(null).provider, 'gemini');
 });
 
-test('local AI addresses are tidied', () => {
-  assert.equal(normalizeUrl('desktop.tail1234.ts.net/'), 'https://desktop.tail1234.ts.net');
-  assert.equal(normalizeUrl('http://localhost:8000/v1'), 'http://localhost:8000');
+test('Ollama addresses are tidied, and blank means this machine', () => {
+  assert.equal(normalizeOllamaUrl('desktop:11434/'), 'http://desktop:11434');
+  assert.equal(normalizeOllamaUrl('http://localhost:11434/api'), 'http://localhost:11434');
+  assert.equal(normalizeOllamaUrl(''), 'http://127.0.0.1:11434');
+});
+
+test('local AI settings: models and sizes kept within bounds', () => {
+  const s = applyEdit({}, { provider: 'local', local: { chatModel: 'qwen2.5:7b', contextTokens: 999999, temperature: '0.5' } });
+  assert.equal(s.local.chatModel, 'qwen2.5:7b');
+  assert.equal(s.local.contextTokens, 131072);
+  assert.equal(s.local.temperature, 0.5);
+  assert.equal(s.local.embedModel, 'nomic-embed-text');
+  assert.equal(applyEdit(s, { local: { visionModel: 'minicpm-v' } }).local.chatModel, 'qwen2.5:7b');
+});
+
+test('Ollama messages: pages keep their captions and text layers', () => {
+  const m = toUserMessage([
+    { type: 'text', text: 'PDF page 2' },
+    { type: 'image', source: { media_type: 'image/jpeg', data: 'AAAA' }, textLayer: { page: 2, text: 'PN 12345' } },
+    { type: 'text', text: 'Read the parts table.' }
+  ]);
+  assert.deepEqual(m.images, ['AAAA']);
+  assert.match(m.content, /^The 1 attached image is, in order: PDF page 2\./);
+  assert.match(m.content, /page 2 .*\n?.*PN 12345/s);
+});
+
+test('a request too big for the context is refused in words the scan splitter knows', () => {
+  const msgs = [{ role: 'user', content: 'x', images: new Array(12).fill('A') }];
+  assert.match(fitProblem(msgs, 'llava', 8192, 4096), /too large/i);
+  assert.match(fitProblem([{ role: 'user', content: '', images: ['A', 'B'] }], 'llama3.2-vision', 16384, 100), /too many/i);
+  assert.equal(fitProblem([{ role: 'user', content: 'hi' }], 'qwen', 8192, 100), null);
 });

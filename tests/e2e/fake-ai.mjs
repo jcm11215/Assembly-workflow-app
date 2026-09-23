@@ -1,6 +1,7 @@
-// An OpenAI-compatible stand-in for the local AI, answering each kind of
-// prompt the app sends with a realistic reply.
+// A stand-in for Ollama, answering each kind of prompt the app sends
+// with a realistic reply.
 import http from 'node:http';
+import { fakeEmbedding } from '../fake-ollama.mjs';
 export const REPLIES = {
   classify: JSON.stringify({ pages: [{ page: 1, view: 'general_assembly' }, { page: 2, view: 'bom' }] }),
   parts: JSON.stringify({
@@ -27,6 +28,11 @@ export function startFakeAI(port){
     let body = '';
     for await (const c of req) body += c;
     const j = JSON.parse(body || '{}');
+    const send = obj => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+    if(req.url === '/api/tags') return send({ models: [{ name: 'fake-chat', size: 1e9 }, { name: 'fake-vision', size: 1e9 }, { name: 'nomic-embed-text', size: 3e8 }] });
+    if(req.url === '/api/ps') return send({ models: [] });
+    if(req.url === '/api/version') return send({ version: '0.0-test' });
+    if(req.url === '/api/embed') return send({ embeddings: j.input.map(fakeEmbedding) });
     const system = j.messages?.[0]?.content || '';
     const user = JSON.stringify(j.messages?.[1]?.content || '');
     let which;
@@ -44,8 +50,7 @@ export function startFakeAI(port){
         : JSON.stringify([{ action: 'advance_stage', jobNumber: '2024-017H' }]);
     }
     if(which === 'answer') text = 'Focus on 2024-017H first: it is due soon and has no blockers.';
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message: { content: text } }] }));
+    send({ message: { role: 'assistant', content: text }, done: true, prompt_eval_count: 100, eval_count: 50 });
   });
   return new Promise(r => s.listen(port, '127.0.0.1', () => r({ server: s, seen })));
 }

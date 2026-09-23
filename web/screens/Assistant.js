@@ -2,12 +2,19 @@
  * The assistant: ask about the shop, or ask it to do something. A request
  * to do something always comes back as a review card first; nothing
  * changes until Confirm.
+ *
+ * Answers draw on the live job data and the knowledge base. The documents
+ * an answer used are listed under it, and an assembler or admin can
+ * correct a wrong answer -- the correction is used from the next question on.
  */
 import { html, useEffect, useRef, useState } from '../vendor/index.js';
 import { useStore, setState } from '../lib/store.js';
 import { explainAiError } from '../lib/ai.js';
 import { answer, propose, execute } from '../assistant/plan.js';
-import { toast } from '../ui/overlays.js';
+import { toast, openModal, Sheet } from '../ui/overlays.js';
+import { api } from '../lib/api.js';
+import { useCan } from '../lib/permissions.js';
+import { Field, submitting } from '../ui/kit.js';
 
 const QUICK = [
   'What should the team focus on today?',
@@ -50,8 +57,9 @@ export function Assistant(){
     const id = push({ role: 'ai', loading: true, text: 'Thinking…' });
     setBusy(true);
     try {
-      const { text: reply, substitution } = await answer(text);
-      patch(id, { loading: false, text: reply, note: substitution ? `Answered by ${substitution.used}.` : null });
+      const { text: reply, substitution, sources, knowledgeNote } = await answer(text);
+      patch(id, { loading: false, text: reply, question: text, sources,
+                  note: [substitution && `Answered by ${substitution.used}.`, knowledgeNote].filter(Boolean).join(' ') || null });
     } catch (e) {
       patch(id, { loading: false, error: true, text: explainAiError(e) });
     } finally { setBusy(false); }
@@ -103,6 +111,7 @@ export function Assistant(){
 }
 
 function Message({ m, onConfirm, onCancel }){
+  const canCorrect = useCan('knowledge.correct');
   if(m.role === 'user') return html`<div class=${`msg msg-user${m.action ? ' msg-action' : ''}`}>${m.text}</div>`;
   if(m.loading) return html`<div class="msg msg-ai loading">${m.text}</div>`;
   if(m.error) return html`<div class="msg msg-ai msg-error">${m.text}</div>`;
@@ -110,8 +119,14 @@ function Message({ m, onConfirm, onCancel }){
     return html`
       <div class="msg msg-ai">
         <div class="msg-text">${m.text}</div>
+        <${Sources} sources=${m.sources} />
         ${m.note && html`<div class="hint">${m.note}</div>`}
-        <button class="link-btn" onClick=${() => navigator.clipboard?.writeText(m.text).then(() => toast('Copied.'))}>Copy</button>
+        <div class="msg-actions">
+          <button class="link-btn" onClick=${() => navigator.clipboard?.writeText(m.text).then(() => toast('Copied.'))}>Copy</button>
+          ${canCorrect && m.question && html`
+            <button class="link-btn" onClick=${() => openModal(Correct, { question: m.question, answer: m.text })}>
+              Correct this</button>`}
+        </div>
       </div>`;
   }
   const { plan, state, outcome } = m;
@@ -136,4 +151,38 @@ function Message({ m, onConfirm, onCancel }){
       ${state === 'running' && html`<div class="hint">Running…</div>`}
       ${state === 'cancelled' && html`<div class="hint">Cancelled -- nothing was changed.</div>`}
     </div>`;
+}
+
+/** The documents and corrections an answer drew on. */
+function Sources({ sources }){
+  if(!sources || (!sources.documents.length && !sources.corrections.length)) return null;
+  return html`
+    <div class="sources">
+      ${sources.corrections.length > 0 && html`<span class="source source-fix" title=${sources.corrections.map(c => c.question).join('\n')}>
+        ✓ ${sources.corrections.length === 1 ? 'A staff correction' : `${sources.corrections.length} staff corrections`} applied</span>`}
+      ${sources.documents.map(d => html`
+        <a key=${d.docId} class="source" href=${`/api/knowledge/documents/${d.docId}/file`} target="_blank" rel="noopener">${d.title}</a>`)}
+    </div>`;
+}
+
+/** Teach the assistant the right answer. Used from the next question on. */
+function Correct({ close, question, answer }){
+  const save = submitting(async f => {
+    await api.post('/api/knowledge/corrections', { question: f.question, correction: f.correction, badAnswer: answer });
+    toast('Thanks -- the assistant will use this from now on.', { kind: 'ok' });
+    close();
+  });
+  return html`
+    <${Sheet} title="Correct this answer" close=${close}>
+      <form onSubmit=${save}>
+        <${Field} label="Question" hint="Worded the way people ask it. Similar questions get your answer too.">
+          <input name="question" defaultValue=${question} required maxlength="2000" />
+        <//>
+        <${Field} label="The correct answer">
+          <textarea name="correction" rows="6" required maxlength="8000" placeholder="What it should have said"></textarea>
+        <//>
+        <details class="hint"><summary>Its answer</summary><div class="msg-text">${answer}</div></details>
+        <div class="row-actions"><button type="submit" class="btn btn-primary">Save correction</button></div>
+      </form>
+    <//>`;
 }
