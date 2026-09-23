@@ -1,4 +1,5 @@
 /** PDF -> page images, and image downscaling for upload. */
+import { findTable, readTable, tableIsClean } from './tableText.js';
 
 export function fileToBase64Raw(file){
   return new Promise((resolve,reject)=>{
@@ -163,72 +164,24 @@ export function textRuns(items, toPage, size){
   return out;
 }
 
-const HEADER = {
-  item: /^(ITEM|ITEM\s*NO\.?|ITEM\s*#|NO\.?|FIND|FIND\s*NO\.?|BALLOON)$/i,
-  qty: /^(QTY\.?|QUANTITY|REQ'?D)$/i,
-  desc: /^(DESCRIPTION|DESC\.?|PART\s*(NO\.?|NUMBER|NAME)|PART)$/i
-};
-
 /**
  * What the app can find on a page without any AI, from its text runs:
  *
  *   numbers  every standalone 1-3 digit number and its centre -- balloon
  *            numbers on a CAD export are usually real text
- *   bomBox   [x, y, w, h] around the parts table, found from its header
- *            row (ITEM / QTY / DESCRIPTION) and the item numbers lined up
- *            under or over it; null when there isn't one
+ *   bomBox   [x, y, w, h] around the parts table, or null
+ *   table    the table's rows read straight from the text (tableText.js),
+ *            or null when they don't form a clean table
  *
- * A scanned sheet has no text runs and gets neither -- the AI reads it
- * whole, as before.
+ * A sheet with no text runs gets none of these -- the AI reads it whole.
  */
 export function indexPage(runs){
   const numbers = (runs || []).filter(r => /^\d{1,3}$/.test(r.str))
     .map(r => ({ n: Number(r.str), x: r.x + r.w / 2, y: r.y + r.h / 2 }));
-
-  // The header row: runs of two or more header kinds on one line.
-  const heads = (runs || []).map(r => ({ r, kind: Object.keys(HEADER).find(k => HEADER[k].test(r.str)) })).filter(h => h.kind);
-  let best = null;
-  for(const h of heads){
-    const row = heads.filter(o => Math.abs((o.r.y + o.r.h / 2) - (h.r.y + h.r.h / 2)) < Math.max(0.006, h.r.h));
-    const kinds = new Set(row.map(o => o.kind));
-    if(kinds.size >= 2 && kinds.has('item') && (!best || row.length > best.length)) best = row;
-  }
-  if(!best) return { numbers, bomBox: null };
-
-  const itemHead = best.find(o => o.kind === 'item').r;
-  const colX = itemHead.x + itemHead.w / 2, tol = Math.max(0.02, itemHead.w);
-  const headY = itemHead.y + itemHead.h / 2;
-  // Item numbers in that column, walking away from the header in the
-  // direction the table runs (CAD tables grow up or down), stopping at
-  // the first gap much bigger than a row.
-  const col = numbers.filter(n => Math.abs(n.x - colX) <= tol && Math.abs(n.y - headY) < 0.6);
-  const pick = sign => {
-    const side = col.filter(n => (n.y - headY) * sign > 0).sort((a, b) => Math.abs(a.y - headY) - Math.abs(b.y - headY));
-    const rows = [];
-    let last = headY, step = null;
-    for(const n of side){
-      const gap = Math.abs(n.y - last);
-      if(step != null && gap > step * 3 + 0.01) break;
-      if(rows.length) step = step == null ? gap : Math.min(step, gap) || step;
-      rows.push(n); last = n.y;
-    }
-    return rows;
-  };
-  const down = pick(1), up = pick(-1);
-  const rows = down.length >= up.length ? down : up;
-  if(rows.length < 2) return { numbers, bomBox: null };
-
-  const ys = [headY, ...rows.map(r => r.y)];
-  const top = Math.min(...ys), bottom = Math.max(...ys);
-  const rowH = itemHead.h;
-  const left = Math.min(...best.map(o => o.r.x), colX - tol);
-  // The description column runs past its header: take every run on the
-  // table's lines, starting from the table's left edge.
-  const inBand = (runs || []).filter(r => r.x >= left - 0.01 && r.y + r.h / 2 >= top - rowH && r.y + r.h / 2 <= bottom + rowH);
-  const right = Math.max(...best.map(o => o.r.x + o.r.w), ...inBand.map(r => Math.min(r.x + r.w, left + 0.7)));
-  const pad = 0.012;
-  const x = Math.max(0, left - pad), y = Math.max(0, top - rowH - pad);
-  return { numbers, bomBox: [x, y, Math.min(1, right + pad) - x, Math.min(1, bottom + rowH + pad) - y] };
+  const table = findTable(runs);
+  if(!table) return { numbers, bomBox: null, table: null };
+  const rows = readTable(table);
+  return { numbers, bomBox: table.bomBox, table: tableIsClean(rows) ? rows : null };
 }
 
 /** Is a point inside [x, y, w, h]? */
@@ -274,13 +227,14 @@ export async function pdfFileToImages(file, maxPages, maxDim, quality, pageNumbe
         const runs = textRuns(items, (x, y) => baseViewport.convertToViewportPoint(x, y), baseViewport);
         if(runs.length){
           index = indexPage(runs);
-          if(index.bomBox) crop = await renderCrop(page, baseViewport, index.bomBox, runs, quality);
+          // A table read cleanly from the text needs no picture of it.
+          if(index.bomBox && !index.table) crop = await renderCrop(page, baseViewport, index.bomBox, runs, quality);
         }
       } catch (e) { console.error('reading the PDF text failed', e); }
     }
     images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg', page: i,
                  width: canvas.width, height: canvas.height, text,
-                 index: index && { numbers: index.numbers, bomBox: index.bomBox }, crop});
+                 index, crop});
   }
   return images;
 }

@@ -177,10 +177,11 @@ const WANTED_COMPONENT_RE = new RegExp([
   String.raw`\b(seals?|waste\s*packs?|glands?)\b`,
   String.raw`\bgaskets?\b`,
   String.raw`\b(bearings?|brgs?|pillow\s*blocks?)\b`,
-  String.raw`\bhangers?\b`,
+  String.raw`\b(hangers?|hngrs?)\b`,
   String.raw`\b(coupling|tail|drive|end)\s*shafts?\b`,
   String.raw`\b(augers?|flight(ing)?s?|screw\s*(assembly|assy|section)s?)\b`,
-  String.raw`\bcoupling\s*bolts?\b`,
+  String.raw`\b(coupling|cplg)\s*(bolts?|shafts?)\b`,
+  String.raw`\bflange\s*blocks?\b`,
   String.raw`\buhmw\b`
 ].join('|'), 'i');
 

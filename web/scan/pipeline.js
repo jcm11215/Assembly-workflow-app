@@ -33,6 +33,7 @@ import { mergeCallouts, mergeClassification, mergeLayout, mergeParts } from './s
 import { evictOld, forgetPages, hashContent } from './scanStore.js';
 import { joinPartsAndCallouts, resolveLocations, sortByLocation } from './scanJoin.js';
 import { normalizeComponentsDetailed } from './spec.js';
+import { categorize, learnKey } from './categories.js';
 
 /**
  * Parses a reading's reply, repairing what can be repaired -- a drawing is
@@ -146,6 +147,33 @@ async function perSheet(spec, pages, tally, blocksFor){
   };
 }
 
+/** Table rows read from the PDF's text, as parts-list entries. The type
+ *  comes from the rules in categories.js; rows that aren't a tracked
+ *  type keep their description and are dropped by the whitelist. */
+export function partsFromTable(rows, page){
+  return (rows || []).map(r => ({
+    balloon: r.balloon, item: categorize(r.description) || r.description, item_as_drawn: r.description,
+    part_number: r.part_number || '', specification: r.specification || '', quantity: r.quantity,
+    installation_location: 'unknown', source_page: page, extraction_method: 'bom_table', confidence: 0.95
+  }));
+}
+
+/**
+ * Corrections people made to earlier scans: a description someone
+ * re-typed or moved to another end is read that way from now on.
+ * `learned` maps learnKey(description) -> {item?, location?}.
+ */
+export function applyLearned(parts, learned){
+  let used = 0;
+  const out = (parts || []).map(p => {
+    const hit = learned && p && p.item_as_drawn ? learned.get(learnKey(p.item_as_drawn)) : null;
+    if(!hit) return p;
+    used++;
+    return { ...p, ...(hit.item ? { item: hit.item } : {}), ...(hit.location ? { installation_location: hit.location } : {}), learned: true };
+  });
+  return { parts: out, used };
+}
+
 /** "3 at (0.86, 0.41)" hints: where the table's item numbers appear on a
  *  sheet in the PDF's own text, outside the table itself. */
 function balloonHints(page, itemNumbers){
@@ -160,7 +188,7 @@ function balloonHints(page, itemNumbers){
  * Throws only when nothing at all could be read -- a scan that never
  * happened, which the person needs to see as such.
  */
-export async function readDrawing(blocks, { includeJobFields = false } = {}){
+export async function readDrawing(blocks, { includeJobFields = false, learned = null } = {}){
   evictOld();
   const pages = preparePages(pageOfBlocks(blocks));
   const allPages = pages.map(p => p.page);
@@ -195,12 +223,19 @@ export async function readDrawing(blocks, { includeJobFields = false } = {}){
   const roles = pagesByRole(classification, allPages);
   const bomPages = tablePages.length ? tablePages : roles.bom;
 
-  // 2: the line items, one sheet at a time, from the enlarged table
-  // when the PDF's text located it.
-  const partsPass = await perSheet(layer('parts', PROMPT_VERSIONS.parts, () => buildPartsListPrompt(includeJobFields),
-    'Transcribe the parts list from this page.', mergeParts), forPages(bomPages), tally, tableBlocks);
+  // 2: the line items. A table the PDF's text spelled out cleanly is
+  // read from that text -- no AI; any other table sheet is asked about
+  // one at a time, from its enlarged crop when there is one.
+  const textTables = forPages(bomPages).filter(p => indexOf(p) && indexOf(p).table);
+  const fromText = textTables.flatMap(p => partsFromTable(indexOf(p).table, p.page));
+  const askPages = forPages(bomPages).filter(p => !textTables.includes(p));
+  const partsPass = askPages.length
+    ? await perSheet(layer('parts', PROMPT_VERSIONS.parts, () => buildPartsListPrompt(includeJobFields),
+        'Transcribe the parts list from this page.', mergeParts), askPages, tally, tableBlocks)
+    : { question: 'parts', parsed: { parts: [] }, error: null };
   const partsParsed = parsedOf(partsPass);
-  const { components: tableParts, report: filterReport } = normalizeComponentsDetailed(partsParsed);
+  const { parts: withLearning, used: learnedUsed } = applyLearned([...fromText, ...(partsParsed.parts || [])], learned);
+  const { components: tableParts, report: filterReport } = normalizeComponentsDetailed({ parts: withLearning });
   const itemNumbers = new Set(tableParts.map(p => Number(p.balloon)).filter(n => Number.isFinite(n)));
 
   // Which sheets show the assembly: with the PDF's text, the ones where
@@ -260,7 +295,9 @@ export async function readDrawing(blocks, { includeJobFields = false } = {}){
       driveEndSide: driveSide,
       pagesRead: { bom: bomPages, views: viewPages.map(p => p.page), total: allPages.length },
       sheetsFoundBy: classifiedBy,
-      tablesEnlarged: tablePages,
+      tablesReadFromText: textTables.map(p => p.page),
+      tablesEnlarged: tablePages.filter(n => !textTables.some(p => p.page === n)),
+      correctionsApplied: learnedUsed,
       failedReadings: readings.filter(r => r.error).map(r => ({ pass: r.error.pass || r.question || 'reading', message: r.error.message })),
       incompleteReadings: readings.filter(r => r.partial).map(r => `${r.question || 'reading'}: ${r.partial.message}`),
       repairedReadings: tally.repairs,
