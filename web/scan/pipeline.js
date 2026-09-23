@@ -215,6 +215,7 @@ export function partsFromTable(rows, page){
 export function applyLearned(parts, learned){
   let used = 0;
   const keys = new Set();
+  const leftOut = [];
   const out = (parts || []).map(p => {
     const key = p && p.item_as_drawn ? learnKey(p.item_as_drawn) : '';
     const hit = learned && key ? learned.get(key) : null;
@@ -222,10 +223,10 @@ export function applyLearned(parts, learned){
     used++;
     keys.add(key);
     // Someone removed this part from an earlier scan.
-    if(hit.item === NOT_A_PART) return null;
+    if(hit.item === NOT_A_PART){ leftOut.push(p.item_as_drawn); return null; }
     return { ...p, ...(hit.item ? { item: hit.item } : {}), ...(hit.location ? { installation_location: hit.location } : {}), learned: true };
   });
-  return { parts: out.filter(Boolean), used, keys: [...keys] };
+  return { parts: out.filter(Boolean), used, keys: [...keys], leftOut };
 }
 
 /** "3 at (0.86, 0.41)" hints: where the table's item numbers appear on a
@@ -289,7 +290,9 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
         'Transcribe the parts list from this page.', mergeParts), askPages, tally, tableBlocks, onStatus, 'Reading the parts table')
     : { question: 'parts', parsed: { parts: [] }, error: null };
   const partsParsed = parsedOf(partsPass);
-  const { parts: withLearning, used: learnedUsed, keys: learnedKeys } = applyLearned([...fromText, ...(partsParsed.parts || [])].map(checkShaft).filter(Boolean), learned);
+  const readRows = [...fromText, ...(partsParsed.parts || [])];
+  const notShafts = readRows.filter(p => !checkShaft(p)).map(p => p.item_as_drawn || p.item);
+  const { parts: withLearning, used: learnedUsed, keys: learnedKeys, leftOut: leftOutByLearning } = applyLearned(readRows.map(checkShaft).filter(Boolean), learned);
   const { components: normalized, report: filterReport } = normalizeComponentsDetailed({ parts: withLearning });
   // A set that repeats its table on every sheet lists every row again.
   const { parts: tableParts, removed: repeatedRows } = dedupeParts(normalized);
@@ -369,6 +372,9 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
       tablesReadFromText: textTables.map(p => p.page),
       tablesEnlarged: tablePages.filter(n => !textTables.some(p => p.page === n)),
       correctionsApplied: learnedUsed,
+      rowsRead: readRows.length,
+      leftOutByLearning: leftOutByLearning.slice(0, 12),
+      notShafts: notShafts.slice(0, 12),
       learnedKeys,
       failedReadings: readings.filter(r => r.error).map(r => ({ pass: r.error.pass || r.question || 'reading', message: r.error.message })),
       incompleteReadings: readings.filter(r => r.partial).map(r => `${r.question || 'reading'}: ${r.partial.message}`),
@@ -384,13 +390,25 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
 export function scanSummary(components, d){
   const reused = d.readingsReused
     ? ` (${d.readingsReused} reading${d.readingsReused === 1 ? '' : 's'} carried over from the last attempt)` : '';
-  if(components.length) return `Found ${components.length} part${components.length === 1 ? '' : 's'} on the drawing${reused}.`;
+  if(components.length) return `Found ${components.length} part${components.length === 1 ? '' : 's'} on the drawing${reused}.${leftOutNote(d)}`;
   const failed = d.failedReadings.map(f => f.pass);
   if(failed.includes('parts')) return `The parts list couldn't be read (${failed.join(' and ')} failed). Try again -- it often works on a second attempt.`;
   if((d.droppedNames || []).length && !d.kept){
     return `The scan found ${d.returnedByAi} items, but none are parts this app tracks (${d.droppedNames.slice(0, 3).join(', ')}…). Add what you need by hand.`;
   }
   return `The scan finished but found no parts on this drawing. Re-scanning sometimes helps; otherwise add them by hand.`;
+}
+
+/** What the scan read but didn't keep, and why -- so a short list can be
+ *  checked against the drawing at a glance. */
+function leftOutNote(d){
+  const why = [];
+  const list = a => a.slice(0, 4).join(', ') + (a.length > 4 ? '…' : '');
+  if((d.droppedNames || []).length) why.push(`not a tracked type: ${list(d.droppedNames)}`);
+  if((d.leftOutByLearning || []).length) why.push(`removed from an earlier scan (Knowledge → Part names): ${list(d.leftOutByLearning)}`);
+  if((d.notShafts || []).length) why.push(`only carries a shaft: ${list(d.notShafts)}`);
+  if(d.repeatedRowsRemoved) why.push(`${d.repeatedRowsRemoved} repeated row${d.repeatedRowsRemoved === 1 ? '' : 's'}`);
+  return why.length ? ` Read ${d.rowsRead != null ? d.rowsRead : 'more'} rows; left out ${why.join('; ')}.` : '';
 }
 
 /** Only worth recording when a scan came back thin or something failed. */

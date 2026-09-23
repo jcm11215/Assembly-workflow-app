@@ -315,8 +315,8 @@ const sizesOf = s => (String(s || '').match(/\d+/g) || []).join(' ');
  * Two parts-table rows that are one row read twice -- a drawing set that
  * repeats its table on every sheet, a model that lists a row again. Same
  * item number, and the same part: the same part number when both have
- * one, otherwise the same kind of part with no size that disagrees. Rows
- * with no item number have to match word for word.
+ * one, otherwise the same wording (or one reading containing the other).
+ * Rows with no item number have to match word for word.
  */
 function sameRow(a, b){
   const key = balloonKey(a.balloon);
@@ -327,7 +327,8 @@ function sameRow(a, b){
   const sa = sizesOf(da), sb = sizesOf(db);
   if(sa && sb && sa !== sb) return false;
   if(key == null) return squash(da) === squash(db);
-  return squash(da) === squash(db) || (!!squash(a.item) && squash(a.item) === squash(b.item));
+  const sa2 = squash(da), sb2 = squash(db);
+  return sa2 === sb2 || (Math.min(sa2.length, sb2.length) >= 6 && (sa2.includes(sb2) || sb2.includes(sa2)));
 }
 
 /** Which of two readings of a row to keep: the PDF's own text over a
