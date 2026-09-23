@@ -77,12 +77,12 @@ corrections, plus its model choices -- with:
 
 ```bash
 cd /opt/assembly-workflow
-sudo -u assembly env DATA_DIR=/var/lib/assembly-workflow \
-  node server/cli.mjs import-localai /home/<you>/localai
+sudo env DATA_DIR=/var/lib/assembly-workflow node server/cli.mjs import-localai /home/<you>/localai
+sudo chown -R assembly: /var/lib/assembly-workflow
 ```
 
-(`sudo -u assembly` needs to read that folder; if it can't, run it with
-plain `sudo` and then `sudo chown -R assembly: /var/lib/assembly-workflow`.)
+(Plain `sudo`, because the app's own account can't read your home folder;
+the `chown` hands the imported files back to it.)
 Its copies of tracker jobs are left behind -- the assistant reads the jobs
 live now. Running it twice is safe.
 

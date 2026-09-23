@@ -22,7 +22,11 @@ const iso = secs => new Date((Number(secs) || Date.now() / 1000) * 1000).toISOSt
 
 export async function importLocalAi(db, filesDir, folder, log = console.log){
   const dbFile = path.join(folder, 'data', 'memory.db');
-  if(!fs.existsSync(dbFile)) throw new Error(`No ${dbFile} -- give the folder the Local AI was installed in.`);
+  try { fs.accessSync(dbFile, fs.constants.R_OK); }
+  catch (e) {
+    if(e.code === 'EACCES') throw new Error(`Not allowed to read ${dbFile}. Run this with plain sudo (not sudo -u assembly), then: sudo chown -R assembly: <DATA_DIR>`);
+    throw new Error(`No ${dbFile} -- give the folder the Local AI was installed in.`);
+  }
   let cfg = {};
   try { cfg = JSON.parse(fs.readFileSync(path.join(folder, 'config.json'), 'utf8')); } catch { /* defaults */ }
   const embedModel = cfg.embed_model || 'nomic-embed-text';
