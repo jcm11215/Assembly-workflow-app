@@ -144,6 +144,96 @@ export function textLayerFromItems(items, maxChars){
   return text.length > maxChars ? text.slice(0, maxChars) + '\n[... more text on this page, cut off here]' : text;
 }
 
+/**
+ * A page's text runs with where they sit: {str, x, y, w, h} as fractions
+ * of the rendered page, 0,0 top-left. `toPage(x, y)` turns a PDF point
+ * into canvas pixels (pdf.js's viewport does, rotation included); `size`
+ * is the canvas's {width, height}. Pure, so it is tested without a PDF.
+ */
+export function textRuns(items, toPage, size){
+  const out = [];
+  for(const it of items || []){
+    if(!it || typeof it.str !== 'string' || !it.str.trim() || !Array.isArray(it.transform)) continue;
+    const [, , , , e, f] = it.transform;
+    const h = Math.abs(it.height || it.transform[3] || 0), w = Math.abs(it.width || 0);
+    const [x1, y1] = toPage(e, f), [x2, y2] = toPage(e + w, f + h);
+    const x = Math.min(x1, x2) / size.width, y = Math.min(y1, y2) / size.height;
+    out.push({ str: it.str.trim(), x, y, w: Math.abs(x2 - x1) / size.width, h: Math.abs(y2 - y1) / size.height, item: it });
+  }
+  return out;
+}
+
+const HEADER = {
+  item: /^(ITEM|ITEM\s*NO\.?|ITEM\s*#|NO\.?|FIND|FIND\s*NO\.?|BALLOON)$/i,
+  qty: /^(QTY\.?|QUANTITY|REQ'?D)$/i,
+  desc: /^(DESCRIPTION|DESC\.?|PART\s*(NO\.?|NUMBER|NAME)|PART)$/i
+};
+
+/**
+ * What the app can find on a page without any AI, from its text runs:
+ *
+ *   numbers  every standalone 1-3 digit number and its centre -- balloon
+ *            numbers on a CAD export are usually real text
+ *   bomBox   [x, y, w, h] around the parts table, found from its header
+ *            row (ITEM / QTY / DESCRIPTION) and the item numbers lined up
+ *            under or over it; null when there isn't one
+ *
+ * A scanned sheet has no text runs and gets neither -- the AI reads it
+ * whole, as before.
+ */
+export function indexPage(runs){
+  const numbers = (runs || []).filter(r => /^\d{1,3}$/.test(r.str))
+    .map(r => ({ n: Number(r.str), x: r.x + r.w / 2, y: r.y + r.h / 2 }));
+
+  // The header row: runs of two or more header kinds on one line.
+  const heads = (runs || []).map(r => ({ r, kind: Object.keys(HEADER).find(k => HEADER[k].test(r.str)) })).filter(h => h.kind);
+  let best = null;
+  for(const h of heads){
+    const row = heads.filter(o => Math.abs((o.r.y + o.r.h / 2) - (h.r.y + h.r.h / 2)) < Math.max(0.006, h.r.h));
+    const kinds = new Set(row.map(o => o.kind));
+    if(kinds.size >= 2 && kinds.has('item') && (!best || row.length > best.length)) best = row;
+  }
+  if(!best) return { numbers, bomBox: null };
+
+  const itemHead = best.find(o => o.kind === 'item').r;
+  const colX = itemHead.x + itemHead.w / 2, tol = Math.max(0.02, itemHead.w);
+  const headY = itemHead.y + itemHead.h / 2;
+  // Item numbers in that column, walking away from the header in the
+  // direction the table runs (CAD tables grow up or down), stopping at
+  // the first gap much bigger than a row.
+  const col = numbers.filter(n => Math.abs(n.x - colX) <= tol && Math.abs(n.y - headY) < 0.6);
+  const pick = sign => {
+    const side = col.filter(n => (n.y - headY) * sign > 0).sort((a, b) => Math.abs(a.y - headY) - Math.abs(b.y - headY));
+    const rows = [];
+    let last = headY, step = null;
+    for(const n of side){
+      const gap = Math.abs(n.y - last);
+      if(step != null && gap > step * 3 + 0.01) break;
+      if(rows.length) step = step == null ? gap : Math.min(step, gap) || step;
+      rows.push(n); last = n.y;
+    }
+    return rows;
+  };
+  const down = pick(1), up = pick(-1);
+  const rows = down.length >= up.length ? down : up;
+  if(rows.length < 2) return { numbers, bomBox: null };
+
+  const ys = [headY, ...rows.map(r => r.y)];
+  const top = Math.min(...ys), bottom = Math.max(...ys);
+  const rowH = itemHead.h;
+  const left = Math.min(...best.map(o => o.r.x), colX - tol);
+  // The description column runs past its header: take every run on the
+  // table's lines, starting from the table's left edge.
+  const inBand = (runs || []).filter(r => r.x >= left - 0.01 && r.y + r.h / 2 >= top - rowH && r.y + r.h / 2 <= bottom + rowH);
+  const right = Math.max(...best.map(o => o.r.x + o.r.w), ...inBand.map(r => Math.min(r.x + r.w, left + 0.7)));
+  const pad = 0.012;
+  const x = Math.max(0, left - pad), y = Math.max(0, top - rowH - pad);
+  return { numbers, bomBox: [x, y, Math.min(1, right + pad) - x, Math.min(1, bottom + rowH + pad) - y] };
+}
+
+/** Is a point inside [x, y, w, h]? */
+export const inBox = (p, b) => !!b && p.x >= b[0] && p.x <= b[0] + b[2] && p.y >= b[1] && p.y <= b[1] + b[3];
+
 /** Renders the given 1-based pages (default: every page, up to maxPages).
  *  Each image carries its real page number, so the AI can be told which
  *  sheet it's looking at even when pages are skipped. With
@@ -175,15 +265,43 @@ export async function pdfFileToImages(file, maxPages, maxDim, quality, pageNumbe
     // Real pixel size travels with the page: cropping to a region of it
     // needs the aspect ratio, and the canvas is the only place it's known
     // without decoding the image again.
-    let text = '';
+    let text = '', index = null, crop = null;
     if(opts.textLayer){
       // Never worth failing a scan over: the image is the real input.
-      try { text = textLayerFromItems((await page.getTextContent()).items); } catch (e) { text = ''; }
+      try {
+        const items = (await page.getTextContent()).items;
+        text = textLayerFromItems(items);
+        const runs = textRuns(items, (x, y) => baseViewport.convertToViewportPoint(x, y), baseViewport);
+        if(runs.length){
+          index = indexPage(runs);
+          if(index.bomBox) crop = await renderCrop(page, baseViewport, index.bomBox, runs, quality);
+        }
+      } catch (e) { console.error('reading the PDF text failed', e); }
     }
     images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg', page: i,
-                 width: canvas.width, height: canvas.height, text});
+                 width: canvas.width, height: canvas.height, text,
+                 index: index && { numbers: index.numbers, bomBox: index.bomBox }, crop});
   }
   return images;
+}
+
+/**
+ * The parts table alone, rendered large -- small table text that is a
+ * blur at whole-sheet size is sharp here -- with just its own text.
+ */
+async function renderCrop(page, baseViewport, box, runs, quality){
+  const [bx, by, bw, bh] = box;
+  const longest = Math.max(bw * baseViewport.width, bh * baseViewport.height);
+  const scale = Math.max(1, Math.min(6, 1600 / longest));
+  const vp = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.ceil(bw * vp.width));
+  canvas.height = Math.max(1, Math.ceil(bh * vp.height));
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, -bx * vp.width, -by * vp.height] }).promise;
+  const inside = runs.filter(r => inBox({ x: r.x + r.w / 2, y: r.y + r.h / 2 }, box)).map(r => r.item);
+  return { base64: canvas.toDataURL('image/jpeg', quality).split(',')[1], mime: 'image/jpeg', box, text: textLayerFromItems(inside) };
 }
 
 // Shrinks an already-decoded base64 image to a genuinely tiny preview

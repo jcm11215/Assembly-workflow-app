@@ -11,8 +11,8 @@
  */
 export const PROMPT_VERSIONS = {
   classify: 1,
-  parts: 1,
-  layout: 1,
+  parts: 2,   // reads one sheet, or its enlarged table
+  layout: 2,  // one sheet: the main view
   callouts: 2   // plus a hash of the item list and drive side it is asked with
 };
 
