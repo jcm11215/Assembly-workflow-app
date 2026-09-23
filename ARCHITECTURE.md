@@ -35,9 +35,9 @@ it: SQLite is built into Node 22, and the browser libraries are vendored.
 | --- | --- |
 | `shared/` | Pure rules both sides import: stages, the checklist and the stage-move rule (`procedure.js`), roles and permissions (`roles.js`), task recurrence, the error vocabulary and its rollups, calendar dates. |
 | `server/` | The server. `main.mjs` starts it; `app.mjs` builds the handler (tests run it on an in-memory database); `cli.mjs` is the admin tool; `models.mjs` picks and downloads the AI models; `import-supabase.mjs` and `import-localai.mjs` are one-time migrations. |
-| `web/` | The app. Preact + htm, vendored in `web/vendor/` with pdf.js and the Barlow fonts; plain ES modules, no build step. |
-| `web/lib/` | `api.js` (fetch), `store.js` (one state object + `useStore`), `actions.js` (every change, one function each), `live.js` (SSE), `router.js` (hash routes). |
-| `web/screens/` | One file per screen. `web/jobs/` holds the pieces shared between job screens. |
+| `web/` | The app. Preact + htm, vendored in `web/vendor/` with pdf.js and the Rubik and Mulish fonts (ISC's typefaces); plain ES modules, no build step. Dark by default, light per device in Settings (`theme-boot.js`, `lib/theme.js`). |
+| `web/lib/` | `api.js` (fetch), `store.js` (one state object + `useStore`), `actions.js` (every change, one function each), `live.js` (SSE), `router.js` (hash routes), `dashboard.js` (the Home dashboard's numbers: one set of filters shared by every chart). |
+| `web/screens/` | One file per screen. `web/jobs/` holds the pieces shared between job screens; `web/ui/` the shared building blocks, including the dashboard's charts (`charts.js`). |
 | `web/scan/` | Reading drawings: the four-reading pipeline (`pipeline.js`) and its tested building blocks (prompts, JSON repair, balloon joining, layout). |
 | `web/assistant/` | The assistant's tool list and its propose-then-confirm flow. |
 | `deploy/` | systemd unit, the install and update scripts, and the `assembly-workflow` admin command they install. |

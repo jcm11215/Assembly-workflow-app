@@ -72,6 +72,13 @@ export function Segmented({ options, value, onChange, label }){
     </div>`;
 }
 
+/** The ISC Manufacturing logo, in the gray that suits the theme. */
+export function Logo({ class: cls = '' }){
+  return html`
+    <img class=${`${cls} logo-light`} src="/assets/isc-logo.png" alt="ISC Manufacturing" width="241" height="111" />
+    <img class=${`${cls} logo-dark`} src="/assets/isc-logo-dark.png" alt="ISC Manufacturing" width="241" height="111" />`;
+}
+
 /** Initials for an avatar: "Justin McKinney" -> "JM". */
 export const initials = name => String(name || '?').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
 

@@ -8,7 +8,7 @@ import { useRoute } from '../lib/router.js';
 import { can } from '../../shared/roles.js';
 import { roleLabel } from '../../shared/roles.js';
 import { Icon } from '../ui/icons.js';
-import { initials } from '../ui/kit.js';
+import { initials, Logo } from '../ui/kit.js';
 import { openModal, Sheet } from '../ui/overlays.js';
 import { lazy } from '../ui/lazy.js';
 
@@ -63,9 +63,9 @@ export function Shell(){
   return html`
     <div class="app">
       <aside class="sidebar">
-        <a class="brand" href="#/">
-          <img class="logo" src="/assets/isc-mfg-logo.webp" alt="" width="32" height="32" />
-          <div><div class="brand-name">Assembly Workflow</div><div class="brand-sub">ISC Manufacturing</div></div>
+        <a class="brand" href="#/" aria-label="Assembly Workflow home">
+          <${Logo} class="brand-logo" />
+          <span class="brand-app">Assembly<br />Workflow</span>
         </a>
         <nav class="nav" aria-label="Main">
           ${allowed.map((n, i) => n.group
@@ -86,7 +86,7 @@ export function Shell(){
       </aside>
 
       <header class="topbar">
-        <a href="#/" aria-label="Home"><img class="logo" src="/assets/isc-mfg-logo.webp" alt="" width="32" height="32" /></a>
+        <a href="#/" class="topbar-home" aria-label="Home"><${Logo} class="topbar-logo" /></a>
         <div class="topbar-title">${TITLES[route.name] || 'Home'}</div>
         <span class=${`conn conn-${connection}`} title=${connection === 'live' ? 'Connected' : 'Reconnecting…'}></span>
         <a class="avatar" href="#/settings" aria-label="Settings">${initials(me.fullName)}</a>

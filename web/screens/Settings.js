@@ -9,7 +9,8 @@ import { api } from '../lib/api.js';
 import { signOut, changePassword } from '../lib/actions.js';
 import { useCan } from '../lib/permissions.js';
 import { roleLabel, ROLE_INFO } from '../../shared/roles.js';
-import { Field, Select, AsyncButton, PageHeader, initials, submitting } from '../ui/kit.js';
+import { Field, Select, AsyncButton, PageHeader, Segmented, initials, submitting } from '../ui/kit.js';
+import { THEMES, themePref, setThemePref } from '../lib/theme.js';
 import { Icon } from '../ui/icons.js';
 import { toast, toastError } from '../ui/overlays.js';
 
@@ -20,6 +21,7 @@ export function Settings(){
     <${PageHeader} title="Settings" sub=${isAdmin ? 'Your account and the shop’s AI' : 'Your account'} />
     <div class="settings-grid">
       <${Account} me=${me} />
+      <${Appearance} />
       <section class="card">
         <div class="card-head"><h2>AI</h2></div>
         <div class="card-pad">${isAdmin ? html`<${AiSetup} />` : html`<${AiStatus} />`}</div>
@@ -53,6 +55,19 @@ function Account({ me }){
           <button class="btn" onClick=${out}><${Icon} name="logout" />Sign out</button>
         </div>
         ${changing && html`<${PasswordForm} onDone=${() => setChanging(false)} />`}
+      </div>
+    </section>`;
+}
+
+/** Per device: a shared shop tablet and a phone can differ. */
+function Appearance(){
+  const [pref, setPref] = useState(themePref());
+  return html`
+    <section class="card">
+      <div class="card-head"><h2>Appearance</h2></div>
+      <div class="card-pad">
+        <${Segmented} label="Theme" value=${pref} options=${THEMES} onChange=${p => { setThemePref(p); setPref(p); }} />
+        <p class="hint" style=${{ marginBottom: 0 }}>For this device only.</p>
       </div>
     </section>`;
 }

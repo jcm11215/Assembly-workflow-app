@@ -24,8 +24,9 @@ const handlers = {
   'blocker-removed': ({ id }) => setState(s => ({ blockers: without(s.blockers, id) })),
   note: n => setState(s => ({ notes: upsert(s.notes, n, { prepend: true }) })),
   'note-removed': ({ id }) => setState(s => ({ notes: without(s.notes, id) })),
-  error: e => setState(s => ({ errors: upsert(s.errors, e, { prepend: true }) })),
-  'error-removed': ({ id }) => setState(s => ({ errors: without(s.errors, id) })),
+  // Not "error": EventSource fires its own "error" when the connection drops.
+  'job-error': e => setState(s => ({ errors: upsert(s.errors, e, { prepend: true }) })),
+  'job-error-removed': ({ id }) => setState(s => ({ errors: without(s.errors, id) })),
   task: t => setState(s => ({ tasks: upsert(s.tasks, t, { prepend: true }) })),
   'task-removed': ({ id }) => setState(s => ({
     tasks: without(s.tasks, id),

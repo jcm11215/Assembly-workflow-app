@@ -155,6 +155,19 @@ test('the assistant answers, and acts only after confirmation', { skip }, async 
   assert.deepEqual((await api(admin, 'GET', '/api/state')).blockers.map(b => b.issue), ['Gearmotor not delivered']);
 });
 
+test('the dashboard filters everything from one click', { skip }, async () => {
+  await admin.goto(`${BASE}/#/`);
+  await admin.getByRole('heading', { name: 'Open jobs, most urgent first' }).waitFor();
+  await admin.locator('.hbar', { hasText: 'Ready' }).first().click();
+  await admin.getByRole('heading', { name: /jobs? in view/ }).waitFor();
+  assert.equal(await admin.locator('.hbar[aria-pressed=true]').count(), 1);
+  assert.equal(await admin.locator('.hbar.dim').count(), 6, 'the other stages dim');
+  await admin.locator('.filter-chip', { hasText: 'Stage' }).click();
+  await admin.getByRole('heading', { name: 'Open jobs, most urgent first' }).waitFor();
+  await admin.click('button[aria-label="Show Where the jobs are as a table"]');
+  await admin.locator('.viz-table').waitFor();
+});
+
 test('settings shows the AI as ready once its models are installed', { skip }, async () => {
   await admin.goto(`${BASE}/#/settings`);
   await admin.getByRole('heading', { name: 'Your account' }).waitFor();

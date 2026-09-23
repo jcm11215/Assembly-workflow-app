@@ -21,7 +21,8 @@ const initial = {
   completions: [],
   ai: { label: 'Local AI', ready: false },
   activity: null,             // loaded when the Activity screen first opens
-  jobFilter: 'open',          // the Jobs screen's filter; Home's tiles set it too
+  jobFilter: 'open',          // the Jobs screen's filter
+  homeFilters: { lead: '', priority: '', stage: '', due: '', blocked: false }, // the Home dashboard's, shared by all its charts
   aiDownloads: null,          // local model downloads (admins only): { current, queue, error }
   assistantDraft: '',         // a question another screen hands to the assistant
   connection: 'connecting',   // connecting | live | reconnecting

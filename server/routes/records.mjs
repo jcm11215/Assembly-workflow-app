@@ -63,7 +63,7 @@ export default function register(r){
     broadcast('blocker-removed', { id: blocker.id });
     // An error the blocker was linked to stays -- the error still
     // happened -- and is pushed again now that the link is gone.
-    for(const { id } of linkedErrors) broadcast('error', getError(ctx.db, id));
+    for(const { id } of linkedErrors) broadcast('job-error', getError(ctx.db, id));
   }, { perm: 'blocker.manage' });
 
   /* ---------------- notes ---------------- */
@@ -128,7 +128,7 @@ export default function register(r){
     const error = getError(ctx.db, id);
     ctx.log('Error logged', { text: `${job.job_number}: ${description}`, jobNumber: job.job_number, department: body.department },
       { type: 'error', id });
-    broadcast('error', error);
+    broadcast('job-error', error);
     ctx.status = 201;
     return { error };
   }, { perm: 'error.log' });
@@ -144,7 +144,7 @@ export default function register(r){
     ctx.log(status === 'Corrected' ? 'Error marked corrected' : 'Error reopened',
       { text: `${error.jobNumber}: ${error.description}`, jobNumber: error.jobNumber }, { type: 'error', id: error.id });
     const updated = getError(ctx.db, error.id);
-    broadcast('error', updated);
+    broadcast('job-error', updated);
     return { error: updated };
   }, { perm: 'error.close' });
 
@@ -153,6 +153,6 @@ export default function register(r){
     if(!error) throw notFound('That error');
     ctx.db.run('delete from job_errors where id = ?', error.id);
     ctx.log('Error deleted', { text: `${error.jobNumber}: ${error.description}`, jobNumber: error.jobNumber }, { type: 'error', id: error.id });
-    broadcast('error-removed', { id: error.id });
+    broadcast('job-error-removed', { id: error.id });
   }, { perm: 'error.delete' });
 }

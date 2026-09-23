@@ -4,7 +4,7 @@
  */
 import { html, useState } from '../vendor/index.js';
 import { signIn, signUp, setUp } from '../lib/actions.js';
-import { Field, submitting } from '../ui/kit.js';
+import { Field, Logo, submitting } from '../ui/kit.js';
 import { toast } from '../ui/overlays.js';
 
 const USERNAME_HINT = 'A username (letters, numbers, dots, dashes) or your work email.';
@@ -15,7 +15,7 @@ export function AuthScreen({ mode: initialMode, onSignedIn }){
   return html`
     <div class="auth">
       <div class="auth-brand">
-        <img src="/assets/isc-mfg-logo.webp" alt="ISC Manufacturing" width="88" height="88" />
+        <${Logo} class="auth-logo" />
         <div class="auth-name">Assembly Workflow Tracker</div>
         <div class="auth-sub">Industrial Screw Conveyors</div>
       </div>
