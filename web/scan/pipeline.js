@@ -32,9 +32,16 @@ import { parseJsonLenient } from './jsonRepair.js';
 import { preparePages, readQuestion } from './scanLayers.js';
 import { mergeCallouts, mergeClassification, mergeLayout, mergeParts } from './scanMerge.js';
 import { evictOld, forgetPages, hashContent } from './scanStore.js';
-import { joinPartsAndCallouts, resolveLocations, sortByLocation } from './scanJoin.js';
+import { combineSameRows, dedupeParts, joinPartsAndCallouts, resolveLocations, sortByLocation } from './scanJoin.js';
 import { normalizeComponentsDetailed } from './spec.js';
 import { categorize, learnKey } from './categories.js';
+
+/**
+ * Which scanner read a drawing, saved with every scan so a list from an
+ * older one can be told apart. 1 (saved as nothing) counted a part again
+ * in every view that showed it; 2 lists each table row once per end.
+ */
+export const SCANNER = 2;
 
 /**
  * Parses a reading's reply, repairing what can be repaired -- a drawing is
@@ -164,7 +171,7 @@ async function perSheet(spec, pages, tally, blocksFor, onStatus, label){
     if(onStatus) onStatus(`${label} on page ${p.page}…`);
     const r = await readQuestion(spec, [{ ...p, blocks: blocksFor(p) }], tally);
     if(r.error) console.error(`${spec.question}, page ${p.page}: ${r.error.message}`);
-    answers.push(r);
+    answers.push(r.parsed ? { ...r, parsed: onSheet(r.parsed, p.page) } : r);
   }
   const ok = answers.filter(r => !r.error);
   if(!ok.length) return { question: spec.question, parsed: null, error: (answers[0] || {}).error || null, reused: false };
@@ -175,6 +182,17 @@ async function perSheet(spec, pages, tally, blocksFor, onStatus, label){
     reused: answers.every(r => r.reused),
     ...(failed.length ? { partial: { message: `page${failed.length > 1 ? 's' : ''} ${pages.filter((p, i) => answers[i].error).map(p => p.page).join(', ')} could not be read` } } : {})
   };
+}
+
+/** An answer about one sheet is about that sheet, whatever page number
+ *  the model wrote on its entries. */
+function onSheet(parsed, page){
+  if(!parsed || typeof parsed !== 'object') return parsed;
+  const out = { ...parsed };
+  for(const f of ['parts', 'callouts', 'unballooned']){
+    if(Array.isArray(out[f])) out[f] = out[f].map(e => (e && typeof e === 'object' ? { ...e, source_page: page } : e));
+  }
+  return out;
 }
 
 /** Table rows read from the PDF's text, as parts-list entries. The type
@@ -221,7 +239,7 @@ function balloonHints(page, itemNumbers){
  * Throws only when nothing at all could be read -- a scan that never
  * happened, which the person needs to see as such.
  */
-export async function readDrawing(blocks, { includeJobFields = false, learned = null, onStatus = () => {} } = {}){
+export async function readDrawing(blocks, { includeJobFields = false, learned = null, onStatus = () => {}, ask = askAI } = {}){
   evictOld();
   const pages = preparePages(pageOfBlocks(blocks));
   const allPages = pages.map(p => p.page);
@@ -236,7 +254,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
     question, promptVersion, buildPrompt, instruction, merge,
     call: async (system, pageBlocks, text) => {
       const clean = pageBlocks.map(({ index, role, ...b }) => b);
-      return (await askAI(system, [...clean, { type: 'text', text }])).text;
+      return (await ask(system, [...clean, { type: 'text', text }])).text;
     },
     parse: text => parseJsonReply(text, question)
   });
@@ -269,7 +287,9 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
     : { question: 'parts', parsed: { parts: [] }, error: null };
   const partsParsed = parsedOf(partsPass);
   const { parts: withLearning, used: learnedUsed, keys: learnedKeys } = applyLearned([...fromText, ...(partsParsed.parts || [])], learned);
-  const { components: tableParts, report: filterReport } = normalizeComponentsDetailed({ parts: withLearning });
+  const { components: normalized, report: filterReport } = normalizeComponentsDetailed({ parts: withLearning });
+  // A set that repeats its table on every sheet lists every row again.
+  const { parts: tableParts, removed: repeatedRows } = dedupeParts(normalized);
   const itemNumbers = new Set(tableParts.map(p => Number(p.balloon)).filter(n => Number.isFinite(n)));
 
   // Which sheets show the assembly: with the PDF's text, the ones where
@@ -315,18 +335,31 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
   // 5: join balloons to table rows, settle which end each part is at,
   // and sort drive end -> tail end -> the run -- in code, where there is
   // one right answer.
-  const { components: placed, report: joinReport } = joinPartsAndCallouts(tableParts, parsedOf(calloutPass));
+  // A number inside the parts table is the table's own item column, not
+  // a balloon.
+  const found = parsedOf(calloutPass);
+  const inTable = c => {
+    const sheet = c && byNumber.get(Number(c.source_page));
+    const idx = sheet && indexOf(sheet), at = c && c.position;
+    return !!(idx && idx.bomBox && at && inBox({ x: Number(at.x), y: Number(at.y) }, idx.bomBox));
+  };
+  const sightings = { ...found, callouts: (Array.isArray(found.callouts) ? found.callouts : []).filter(c => !inTable(c)) };
+  const { components: placed, report: joinReport } = joinPartsAndCallouts(tableParts, sightings);
   const { components: located, report: locationReport } = resolveLocations(placed, layoutParsed.orientation);
-  const components = sortByLocation(located).map(({ drawn_end, ...c }) => c);
+  const { components: combined, combined: entriesCombined } = combineSameRows(located);
+  const components = sortByLocation(combined).map(({ drawn_end, ...c }) => c);
 
   // Nothing left to recover: "Re-scan" should read the sheet again.
   if(!readings.some(r => r.error || r.partial)) forgetPages(pages.map(p => p.hash));
 
   return {
     components,
+    scanner: SCANNER,
     titleBlock: mergeTitleBlock(layoutParsed, partsParsed),
     diagnostics: {
       ...filterReport, ...joinReport, ...locationReport,
+      repeatedRowsRemoved: repeatedRows,
+      entriesCombined,
       driveEndSide: driveSide,
       pagesRead: { bom: bomPages, views: viewPages.map(p => p.page), total: allPages.length },
       sheetsFoundBy: classifiedBy,

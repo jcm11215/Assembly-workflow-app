@@ -101,6 +101,43 @@ function loadComponent(db, id){
 
 const MAX_THUMBNAIL = 400 * 1024;
 
+/**
+ * Saves a scan as the job's newest blueprint version: its parts, its
+ * thumbnail and, when given, the original file. Used by the upload route
+ * and by scans the server runs itself (scans.mjs). Returns the job as
+ * pushed to everyone.
+ */
+export async function createBlueprint(db, filesDir, user, job, { components, thumbnail = null, fileName = null, mimeType = null, fileBytes = null, scanner = null }, log){
+  const list = Array.isArray(components) ? components : [];
+  if(list.length > 2000) throw badRequest('That is too many parts for one drawing.');
+  if(thumbnail && thumbnail.length > MAX_THUMBNAIL) throw badRequest('The thumbnail is too large.');
+  const cleaned = list.map((c, i) => cleanComponent(c || {}, i));
+  const id = uuid();
+  const version = db.tx(() => {
+    const { n } = db.get('select coalesce(max(version), 0) + 1 as n from blueprints where job_id = ?', job.id);
+    db.run(`insert into blueprints (id, job_id, version, original_filename, mime_type, thumbnail, extracted_by, extracted_at, scanner)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, job.id, n, v.text(fileName, 'File name', { max: 200 }) || null,
+      v.text(mimeType, 'File type', { max: 100 }) || null, thumbnail, user.id, now(),
+      scanner == null ? null : v.integer(scanner, 'Scanner', { min: 1, max: 1000 }));
+    for(const c of cleaned) insertComponent(db, id, c);
+    return n;
+  });
+  if(fileBytes && fileBytes.length){
+    const mime = safeMimeType(mimeType || '');
+    if(mime !== 'application/octet-stream'){
+      const rel = relativePathFor(job.job_number, fileName, mime, version);
+      await writeFileAtomic(filesDir, rel, fileBytes);
+      db.run('update blueprints set file_path = ?, mime_type = ? where id = ?', rel, mime, id);
+    }
+  }
+  log('Blueprint scanned', {
+    text: `${job.job_number}: version ${version}, ${cleaned.length} part${cleaned.length === 1 ? '' : 's'}`,
+    jobNumber: job.job_number, version, parts: cleaned.length
+  }, { type: 'job', id: job.id });
+  return pushJob(db, job.id);
+}
+
 export default function register(r){
 
   /** A new scan: its parts list and thumbnail. The file follows in a
@@ -108,32 +145,12 @@ export default function register(r){
   r.post('/api/jobs/:id/blueprints', async ctx => {
     const body = await ctx.json(8 * MB);
     const job = v.job(ctx.db, ctx.params.id);
-    const components = Array.isArray(body.components) ? body.components : [];
-    if(components.length > 2000) throw badRequest('That is too many parts for one drawing.');
-    let thumbnail = null;
-    if(body.thumbnail){
-      thumbnail = Buffer.from(String(body.thumbnail), 'base64');
-      if(thumbnail.length > MAX_THUMBNAIL) throw badRequest('The thumbnail is too large.');
-    }
-    const cleaned = components.map((c, i) => cleanComponent(c || {}, i));
-
-    const id = uuid();
-    const version = ctx.db.tx(() => {
-      const { n } = ctx.db.get('select coalesce(max(version), 0) + 1 as n from blueprints where job_id = ?', job.id);
-      ctx.db.run(`insert into blueprints (id, job_id, version, original_filename, mime_type, thumbnail, extracted_by, extracted_at)
-                  values (?, ?, ?, ?, ?, ?, ?, ?)`,
-        id, job.id, n, v.text(body.fileName, 'File name', { max: 200 }) || null,
-        v.text(body.mimeType, 'File type', { max: 100 }) || null, thumbnail, ctx.user.id, now());
-      for(const c of cleaned) insertComponent(ctx.db, id, c);
-      return n;
-    });
-
-    ctx.log('Blueprint scanned', {
-      text: `${job.job_number}: version ${version}, ${cleaned.length} part${cleaned.length === 1 ? '' : 's'}`,
-      jobNumber: job.job_number, version, parts: cleaned.length
-    }, { type: 'job', id: job.id });
+    const updated = await createBlueprint(ctx.db, ctx.filesDir, ctx.user, job, {
+      components: body.components,
+      thumbnail: body.thumbnail ? Buffer.from(String(body.thumbnail), 'base64') : null,
+      fileName: body.fileName, mimeType: body.mimeType, scanner: body.scanner
+    }, ctx.log);
     ctx.status = 201;
-    const updated = pushJob(ctx.db, job.id);
     return { blueprint: updated.blueprint, job: updated };
   }, { perm: 'blueprint.manage' });
 

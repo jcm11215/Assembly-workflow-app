@@ -118,16 +118,19 @@ test('a new job is read off a drawing', { skip }, async () => {
   await admin.click('button:has-text("Create job")');
   await admin.getByRole('tab', { name: /Drawing/ }).click({ timeout: 15000 });
   await admin.locator('.cv-sheet').waitFor({ timeout: 15000 });
-  assert.equal(await admin.locator('.part').count(), 4);
-  // The picture's tags are the drawing's own item numbers, a repeated
-  // part keeping its number at each place, and the parts list shows them.
-  assert.deepEqual((await admin.locator('.cv-tag').allTextContents()).sort(), ['11', '3', '7', '7']);
-  assert.deepEqual((await admin.locator('.part .item-no').allTextContents()).sort(), ['11', '3', '7', '7']);
+  // Each part once, however many places show it -- the two hangers
+  // ballooned along the run are one entry of 2 -- and the picture's tags
+  // are the drawing's own item numbers.
+  assert.equal(await admin.locator('.part').count(), 3);
+  assert.deepEqual((await admin.locator('.cv-tag').allTextContents()).sort(), ['11', '3', '7']);
+  assert.deepEqual((await admin.locator('.part .item-no').allTextContents()).sort(), ['11', '3', '7']);
+  assert.match(await admin.locator('.part', { hasText: 'HNGR BRG ASSY' }).innerText(), /Qty: 2/);
 
   const state = await api(admin, 'GET', '/api/state');
   const bp = state.jobs.find(j => j.jobNumber === '2024-017H').blueprint;
   assert.equal(bp.hasFile, true);
   assert.equal(bp.mimeType, 'application/pdf');
+  assert.equal(bp.scanner, 2, 'saved with the scanner that read it');
 });
 
 test('a document added to the knowledge base is cited by the assistant', { skip }, async () => {

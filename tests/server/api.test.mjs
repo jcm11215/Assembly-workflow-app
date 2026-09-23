@@ -234,6 +234,7 @@ test('a scan saves parts, then its file; both come back', async () => {
   assert.equal(bp.components.length, 2);
   assert.deepEqual(bp.components[0].position, { x: 0.2, y: 0.3 });
   assert.equal(bp.hasFile, false);
+  assert.equal(bp.scanner, null, 'a scan that does not say which scanner read it');
 
   const bytes = new TextEncoder().encode('%PDF-1.4 pretend');
   const up = await admin.put(`/api/blueprints/${bp.id}/file`, bytes, { 'Content-Type': 'application/pdf' });
@@ -244,8 +245,11 @@ test('a scan saves parts, then its file; both come back', async () => {
   assert.equal(file.status, 200);
   assert.equal(file.data.toString(), '%PDF-1.4 pretend');
 
-  const second = await admin.post(`/api/jobs/${job.id}/blueprints`, { fileName: 'GA Drawing.pdf', mimeType: 'application/pdf', components: [] });
+  const second = await admin.post(`/api/jobs/${job.id}/blueprints`, { fileName: 'GA Drawing.pdf', mimeType: 'application/pdf', components: [], scanner: 2 });
   assert.equal(second.data.blueprint.version, 2);
+  assert.equal(second.data.blueprint.scanner, 2, 'which scanner read it is kept');
+  const bad = await admin.post(`/api/jobs/${job.id}/blueprints`, { components: [], scanner: 'new' });
+  assert.equal(bad.status, 400);
   const up2 = await admin.put(`/api/blueprints/${second.data.blueprint.id}/file`, bytes, { 'Content-Type': 'application/pdf' });
   assert.equal(up2.status, 200);
   const fs = await import('node:fs');

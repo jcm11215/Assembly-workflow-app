@@ -147,6 +147,13 @@ function normBalloon(v){
   return isFinite(n) ? String(Math.trunc(n)) : String(v).trim() || null;
 }
 
+/** A table's count as a number, or null. */
+function countOf(q){
+  if(q == null || q === '') return null;
+  const n = typeof q === 'number' ? q : parseFloat(String(q));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 /** The raw list, wherever the reply put it. The parts-list pass returns
  *  "parts"; a bare array and the older single-call "components" shape are
  *  both still accepted so neither becomes a silent zero. */
@@ -263,7 +270,8 @@ export function normalizeComponentsDetailed(parsed){
       // assembler matches against the paper in front of them.
       item_as_drawn: (c && c.item_as_drawn) ? String(c.item_as_drawn) : '',
       specification: (c && c.specification) ? String(c.specification) : '',
-      quantity: (c && c.quantity!=null && c.quantity!=='') ? c.quantity : null,
+      // A number or nothing: "2 EA" is 2, "AR" (as required) is left blank.
+      quantity: countOf(c && c.quantity),
       installation_location: location,
       stage: stageForLocation(location),                              // derived, never AI-supplied
       source_page: (c && c.source_page!=null) ? Number(c.source_page) : null,

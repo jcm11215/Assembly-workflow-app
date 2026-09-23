@@ -263,6 +263,13 @@ const MIGRATIONS = [
     updated_by  text references users(id) on delete set null,
     updated_at  text not null
   );
+  `,
+
+  // 5: which scanner read each drawing (web/scan/pipeline.js SCANNER).
+  // Scans from before it was recorded stay null: that scanner counted a
+  // part again in every view that showed it.
+  `
+  alter table blueprints add column scanner integer;
   `
 ];
 

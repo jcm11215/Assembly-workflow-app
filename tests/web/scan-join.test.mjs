@@ -3,7 +3,7 @@
 // inside the prompt, so these are the cases that used to come back as a
 // confident label on the wrong part.
 import './stub.mjs';
-const { joinPartsAndCallouts } = await import('../../web/scan/scanJoin.js');
+const { joinPartsAndCallouts, dedupeParts, combineSameRows } = await import('../../web/scan/scanJoin.js');
 const { pagesByRole } = await import('../../web/scan/prompt.js');
 
 let pass = 0, fail = 0;
@@ -50,13 +50,13 @@ t('a balloon with no table row is reported, never invented into a part', () => {
 });
 
 console.log('\n=== identical parts in several places ===');
-t('one entry per location, each counted as one', () => {
+t('parts along the run are one entry with their whole count, however many places show them', () => {
   const { components } = joinPartsAndCallouts([part(7, 'Hanger Bearing', { quantity: 3 })], {
     callouts: [callout(7, .3, .5), callout(7, .5, .5), callout(7, .7, .5)]
   });
-  eq(components.length, 3, 'instances');
-  eq(components.map(c => c.quantity).join(), '1,1,1', 'each instance is one');
-  eq(components.map(c => c.position.x).join(), '0.3,0.5,0.7', 'each has its own location');
+  eq(components.length, 1, 'entries');
+  eq(components[0].quantity, 3, 'all three');
+  if (!components[0].position) throw new Error('still placed on the drawing');
 });
 t('a single location keeps the table count', () => {
   const { components } = joinPartsAndCallouts([part(7, 'Coupling Bolts', { quantity: 24 })], {
@@ -64,11 +64,13 @@ t('a single location keeps the table count', () => {
   });
   eq(components[0].quantity, 24, 'quantity');
 });
-t('a count the drawing disagrees with is reported, not reconciled', () => {
-  const { report } = joinPartsAndCallouts([part(7, 'Hanger Bearing', { quantity: 4 })], {
-    callouts: [callout(7, .3, .5), callout(7, .6, .5)]
+t('more places than the table lists: counted by the table, the surest kept, and reported', () => {
+  const { components, report } = joinPartsAndCallouts([part(5, 'Bearing', { quantity: 1 })], {
+    callouts: [callout(5, .1, .5, { end: 'drive_end', confidence: 0.6 }), callout(5, .9, .5, { end: 'tail_end', confidence: 0.9 })]
   });
-  if (!/table says 4, found 2/.test(report.quantityMismatches[0] || '')) {
+  eq(components.length, 1, 'one bearing, as the table says');
+  eq(components[0].drawn_end, 'tail_end', 'the surer sighting');
+  if (!/table says 1, found 2/.test(report.quantityMismatches[0] || '')) {
     throw new Error('expected the disagreement to be reported: ' + JSON.stringify(report.quantityMismatches));
   }
 });
@@ -78,6 +80,7 @@ t('one table row, QTY 2, is one part at each place found', () => {
     callouts: [callout(5, .1, .5), callout(5, .9, .5)]
   });
   eq(components.map(c => c.quantity).join(','), '1,1', 'one each');
+  eq(components.map(c => c.position.x).join(','), '0.1,0.9', 'each where it was drawn');
 });
 t('QTY 2 found at one place: the other is kept, with no place, not folded in', () => {
   const { components, report } = joinPartsAndCallouts([part(5, 'Bearing', { quantity: 2 })], { callouts: [callout(5, .9, .5)] });
@@ -92,7 +95,98 @@ t('parts along the run stay together: QTY 3 flights, one balloon, 3 there', () =
   eq(components.length, 1, 'one entry');
   eq(components[0].quantity, 3, 'all three');
   const hangers = joinPartsAndCallouts([part(7, 'Hanger Bearing', { quantity: 4 })], { callouts: [callout(7, .3, .5), callout(7, .6, .5)] });
-  eq(hangers.components.map(c => c.quantity).join(','), '2,2', 'the count still adds up');
+  eq(hangers.components.map(c => c.quantity).join(','), '4', 'four hangers, one entry');
+});
+
+console.log('\n=== never more parts than the table lists ===');
+t('a part ballooned in three views is still one part', () => {
+  const { components } = joinPartsAndCallouts([part(3, 'Motor')], {
+    callouts: [callout(3, .8, .4, { source_page: 1 }), callout(3, .7, .6, { source_page: 2 }), callout(3, .5, .5, { source_page: 3 })]
+  });
+  eq(components.length, 1, 'entries');
+  eq(components[0].quantity, 1, 'quantity');
+});
+t('a bearing at both ends, drawn in two views, is one at each end', () => {
+  const { components } = joinPartsAndCallouts([part(5, 'Bearing', { quantity: 2 })], {
+    callouts: [
+      callout(5, .1, .5, { source_page: 1, end: 'drive_end' }), callout(5, .9, .5, { source_page: 1, end: 'tail_end' }),
+      callout(5, .2, .3, { source_page: 2, end: 'drive_end' }), callout(5, .8, .3, { source_page: 2, end: 'tail_end' })
+    ]
+  });
+  eq(components.map(c => `${c.drawn_end}:${c.quantity}`).join(), 'drive_end:1,tail_end:1', 'one per end');
+});
+t('a balloon read twice at the same spot counts once', () => {
+  const { components } = joinPartsAndCallouts([part(5, 'Bearing', { quantity: 2 })], {
+    callouts: [callout(5, .5, .5), callout(5, .51, .5)]
+  });
+  eq(components.length, 2, 'one placed, one still to place');
+  eq(components.filter(c => c.position).length, 1, 'placed once');
+});
+t('coupling bolts ballooned all along the run are one entry', () => {
+  const { components } = joinPartsAndCallouts([part(9, 'Coupling Bolts', { quantity: 24 })], {
+    callouts: [1, 2, 3, 4, 5, 6].map(i => callout(9, i / 7, .5, { end: 'along_run' }))
+  });
+  eq(components.length, 1, 'entries');
+  eq(components[0].quantity, 24, 'quantity');
+});
+t('a count that is not a number places the part once', () => {
+  const { components } = joinPartsAndCallouts([part(5, 'Bearing', { quantity: 'AR' })], {
+    callouts: [callout(5, .1, .5, { end: 'drive_end' }), callout(5, .9, .5, { end: 'tail_end' })]
+  });
+  eq(components.length, 1, 'entries');
+  eq(components[0].quantity, null, 'no count invented');
+});
+
+console.log('\n=== the same table row read twice ===');
+t('a table repeated on every sheet is kept once', () => {
+  const rows = [1, 2, 3].map(pg => part(5, 'Bearing', { item_as_drawn: 'FLG BRG 2-7/16', quantity: 2, source_page: pg }));
+  const { parts, removed } = dedupeParts(rows);
+  eq(parts.length, 1, 'rows');
+  eq(removed, 2, 'removed');
+  eq(parts[0].quantity, 2, 'count kept, not added up');
+});
+t('the PDF\'s own text beats a picture of the same row', () => {
+  const { parts } = dedupeParts([
+    part(5, 'Bearing', { item_as_drawn: 'FLG BRG', quantity: 3, extraction_method: 'inferred', confidence: 0.7 }),
+    part(5, 'Bearing', { item_as_drawn: 'FLG BRG 2-7/16', quantity: 2, extraction_method: 'bom_table', confidence: 0.95 })
+  ]);
+  eq(parts.length, 1, 'rows');
+  eq(parts[0].quantity, 2, 'the text reading');
+  eq(parts[0].item_as_drawn, 'FLG BRG 2-7/16', 'its wording');
+});
+t('a different size is a different part', () => {
+  const { parts } = dedupeParts([
+    part(5, 'Bearing', { item_as_drawn: 'FLG BRG 2-7/16' }), part(5, 'Bearing', { item_as_drawn: 'FLG BRG 3-7/16' })
+  ]);
+  eq(parts.length, 2, 'both kept');
+});
+t('a different part number is a different part', () => {
+  const { parts } = dedupeParts([
+    part(5, 'Bearing', { part_number: 'SKF-1' }), part(5, 'Bearing', { part_number: 'SKF-2' })
+  ]);
+  eq(parts.length, 2, 'both kept');
+});
+t('different item numbers are different rows, whatever they say', () => {
+  const { parts } = dedupeParts([part(5, 'Bearing'), part(6, 'Bearing')]);
+  eq(parts.length, 2, 'both kept');
+});
+t('rows with no item number have to match word for word', () => {
+  const { parts } = dedupeParts([
+    part(null, 'Bearing', { item_as_drawn: 'FLG BRG' }), part(null, 'Bearing', { item_as_drawn: 'PILLOW BLOCK BRG' }),
+    part(null, 'Bearing', { item_as_drawn: 'FLG. BRG' })
+  ]);
+  eq(parts.map(p => p.item_as_drawn).join(' | '), 'FLG BRG | PILLOW BLOCK BRG', 'rows');
+});
+t('entries of one row that land at the same place become one, counts added', () => {
+  const { components, combined } = combineSameRows([
+    { ...part(2, 'Drive Shaft'), quantity: 1, installation_location: 'drive_end', position: { x: .1, y: .5 } },
+    { ...part(2, 'Drive Shaft'), quantity: 1, installation_location: 'drive_end', position: null },
+    { ...part(5, 'Bearing'), quantity: 1, installation_location: 'tail_end', position: null }
+  ]);
+  eq(components.length, 2, 'entries');
+  eq(combined, 1, 'combined');
+  eq(components[0].quantity, 2, 'both drive shafts');
+  eq(components[0].position.x, 0.1, 'keeps the place');
 });
 
 console.log('\n=== drawings that label in words instead of numbers ===');

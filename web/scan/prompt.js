@@ -13,7 +13,7 @@ export const PROMPT_VERSIONS = {
   classify: 1,
   parts: 2,   // reads one sheet, or its enlarged table
   layout: 2,  // one sheet: the main view
-  callouts: 3   // plus a hash of the item list and drive side it is asked with
+  callouts: 4   // plus a hash of the item list and drive side it is asked with
 };
 
 /** Extraction prompts. The AI reads values off the drawing only; it
@@ -213,7 +213,7 @@ Respond with ONLY this JSON object, no markdown fences, no commentary:
 "position" is a fraction of THAT page's image: 0,0 top-left, 1,1 bottom-right.
 "end": drive_end or tail_end for a component at that end of the conveyor (end plates, end bearings, seals, shafts there); along_run for anything in the span between (hangers, flighting, coupling shafts); unknown if you cannot tell.
 
-Report ONE ENTRY PER PLACE the part is drawn: a bearing ballooned "5" at both ends is two entries, one drive_end and one tail_end. An item with a QTY above 1 is often ballooned only once even though it is drawn at more than one place (one bearing at each end, say): look for every place that part is drawn and report each, with the same number, even where that place has no balloon of its own. Parts that run along the conveyor (flights, hangers) may simply be ballooned once -- report the places you can see. Leave out a balloon whose number you cannot read rather than guessing it -- a wrong number labels the wrong part. "unballooned" is only for plain text callouts with a leader and no number.`;
+Report each item number ONCE PER END of the machine it is drawn at, however many views show it: a bearing ballooned "5" at both ends is two entries, one drive_end and one tail_end; a motor ballooned in two views is one entry. An item with a QTY above 1 is often ballooned only once even though one is drawn at each end: report it at each end where you can see it, with the same number, even where that end has no balloon of its own. Parts that run along the conveyor (flights, hangers, coupling shafts and bolts) are ONE entry, end along_run, however many of them there are. Leave out a balloon whose number you cannot read rather than guessing it -- a wrong number labels the wrong part. "unballooned" is only for plain text callouts with a leader and no number.`;
 }
 
 /* ---------------- Engineering validation ----------------

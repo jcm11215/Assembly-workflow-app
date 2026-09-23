@@ -57,6 +57,9 @@ export function toBlueprint(r, components){
     mimeType: r.mime_type,
     hasFile: !!r.file_path,
     hasThumbnail: !!r.has_thumbnail,
+    // Which scanner read it (web/scan/pipeline.js SCANNER); null before
+    // that was recorded.
+    scanner: r.scanner ?? null,
     extractedAt: r.extracted_at,
     extractedByName: r.extracted_by_name || '',
     components
@@ -67,7 +70,7 @@ export function toBlueprint(r, components){
 function latestBlueprints(db, jobIds){
   if(!jobIds.length) return new Map();
   const rows = db.all(`
-    select b.id, b.job_id, b.version, b.file_path, b.original_filename, b.mime_type, b.extracted_at,
+    select b.id, b.job_id, b.version, b.file_path, b.original_filename, b.mime_type, b.extracted_at, b.scanner,
            b.thumbnail is not null as has_thumbnail, u.full_name as extracted_by_name
       from blueprints b left join users u on u.id = b.extracted_by
      where b.job_id in (${inList(jobIds)})

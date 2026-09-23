@@ -810,6 +810,9 @@ div.col{cursor:default;}
 .file-pick.disabled{opacity:.6;pointer-events:none;}
 .file-pick b{color:var(--text);word-break:break-all;}
 .note-bar{padding:10px 14px;border-radius:var(--radius-sm);background:var(--amber-soft);color:var(--amber-text);font-size:14px;margin:8px 0 12px;}
+.parts-repeats{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.parts-repeats span{flex:1 1 320px;}
+.parts-repeats .btn{flex:none;}
 
 /* settings */
 .settings-grid{display:grid;gap:20px;max-width:760px;}

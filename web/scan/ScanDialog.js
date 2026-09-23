@@ -11,7 +11,7 @@ import { html, useEffect, useState } from '../vendor/index.js';
 import { useStore } from '../lib/store.js';
 import { saveScan, logActivity } from '../lib/actions.js';
 import { explainAiError } from '../lib/ai.js';
-import { api } from '../lib/api.js';
+import { api, fetchBlob } from '../lib/api.js';
 import { Field } from '../ui/kit.js';
 import { Icon } from '../ui/icons.js';
 import { openModal, Sheet, toast } from '../ui/overlays.js';
@@ -28,7 +28,7 @@ export function NewJobFromDrawing({ close }){
       const tb = result.titleBlock;
       openModal(JobForm, {
         prefill: { jobNumber: tb.jobNumber, customer: tb.customer, description: tb.description },
-        scan: { components: result.components, file, thumbnail }
+        scan: { components: result.components, file, thumbnail, scanner: result.scanner }
       });
       toast(scanSummary(result.components, result.diagnostics), { ms: 6000 });
     }} />`;
@@ -43,17 +43,36 @@ export function RescanJob({ jobId, close }){
       : 'Photograph a paper drawing or pick a saved image or PDF. The AI pulls out the parts and where they sit.'}
     button="Scan"
     onRead=${async ({ file, result, thumbnail }) => {
-      const { fileSaved } = await saveScan(job, { components: result.components, file, thumbnail });
+      const { fileSaved } = await saveScan(job, { components: result.components, file, thumbnail, scanner: result.scanner });
       close();
       toast(scanSummary(result.components, result.diagnostics), { ms: 6000, kind: result.components.length ? 'ok' : 'info' });
       if(!fileSaved) toast('The parts were saved, but the drawing file could not be uploaded. Try again to attach it.', { ms: 8000, kind: 'error' });
     }}
-    jobNumber=${job.jobNumber} jobId=${job.id} />`;
+    jobNumber=${job.jobNumber} jobId=${job.id}
+    saved=${job.blueprint && job.blueprint.hasFile
+      ? { url: `/api/blueprints/${job.blueprint.id}/file`, name: job.blueprint.fileName || `${job.jobNumber} drawing`, type: job.blueprint.mimeType }
+      : null} />`;
 }
 
-function ScanForm({ title, intro, button, includeJobFields = false, onRead, close, jobNumber = null, jobId = null }){
+function ScanForm({ title, intro, button, includeJobFields = false, onRead, close, jobNumber = null, jobId = null, saved = null }){
   const ai = useStore(s => s.ai);
   const [file, setFile] = useState(null);
+  // A job's drawing is already on the server: scanning it again needs no
+  // hunting for the file. Picking another one replaces it.
+  const [savedFile, setSavedFile] = useState(null);
+  useEffect(() => {
+    if(!saved) return;
+    let live = true;
+    fetchBlob(saved.url)
+      .then(blob => {
+        if(!live) return;
+        const f = new File([blob], saved.name, { type: saved.type || blob.type });
+        setSavedFile(f);
+        setFile(current => current || f);
+      })
+      .catch(() => {});   // not to hand: pick the file as usual
+    return () => { live = false; };
+  }, []);
   const [pageCount, setPageCount] = useState(null);
   const [pages, setPages] = useState('');
   const [busy, setBusy] = useState(false);
@@ -118,7 +137,8 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
                onChange=${e => { setFile(e.currentTarget.files[0] || null); setPages(''); setError(null); }} />
         <${Icon} name=${file ? 'drawing' : 'upload'} size=${26} />
         <b>${file ? file.name : 'Take a photo or choose a file'}</b>
-        <span class="hint">${file ? 'Tap to pick a different one' : 'A photo of the drawing, an image, or a PDF'}</span>
+        <span class="hint">${file && file === savedFile ? 'The drawing saved with this job. Tap to pick a different one.'
+          : file ? 'Tap to pick a different one' : 'A photo of the drawing, an image, or a PDF'}</span>
       </label>
       ${isPdf && html`
         <${Field} label="Pages to scan" hint=${pagesHint}>

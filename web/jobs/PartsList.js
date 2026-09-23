@@ -11,7 +11,7 @@ import { PART_GROUPS, PART_TYPES, partGroup, tipForPart } from '../domain/parts.
 import { addComponent, updateComponent, deleteComponent, reorderComponents } from '../lib/actions.js';
 import { useCan } from '../lib/permissions.js';
 import { fmtWhen } from '../lib/format.js';
-import { toastError } from '../ui/overlays.js';
+import { openModal, toastError } from '../ui/overlays.js';
 import { submitting } from '../ui/kit.js';
 import { TipCard } from './Tips.js';
 
@@ -23,6 +23,10 @@ export function PartsList({ job }){
   if(!bp) return null;
 
   const anyPlaced = parts.some(c => c.position);
+  // Only a scan from the old scanner: a list someone has rearranged since
+  // can hold the same part twice at one end on purpose.
+  const repeats = bp.scanner ? 0 : repeatedEntries(parts);
+  const rescan = () => import('../scan/ScanDialog.js').then(m => openModal(m.RescanJob, { jobId: job.id })).catch(toastError);
   const groups = PART_GROUPS.map(g => ({ ...g, parts: parts.filter(c => partGroup(c).id === g.id) }))
     .filter(g => editing || g.parts.length);
   // Read like the drawing's own table: by item number, the parts without
@@ -69,6 +73,12 @@ export function PartsList({ job }){
       </div>
       ${editing && html`<p class="hint">The scanner doesn't always get it right -- fix, reorder, remove or add anything here.
         A type or end you fix is remembered, and the next scan reads that part the same way.</p>`}
+      ${repeats > 0 && !editing && html`
+        <div class="note-bar parts-repeats">
+          <span>This scan lists ${repeats} part${repeats === 1 ? '' : 's'} more than once: the scanner used to count a part again in every view that showed it. ${canEdit
+            ? 'Scanning the drawing again gives a clean list (this one is kept as the earlier scan).' : 'An admin can scan the drawing again to fix it.'}</span>
+          ${canEdit && html`<button class="btn btn-sm" onClick=${rescan}>Scan again</button>`}
+        </div>`}
       ${!parts.length && !editing && html`<p class="hint">
         The drawing is attached, but the scan didn't find any parts on it. Re-scanning often works on a second try;
         otherwise an admin can add them by hand with Edit parts.</p>`}
@@ -101,6 +111,22 @@ export function PartsList({ job }){
 }
 
 const itemKey = c => (c.balloon != null && String(c.balloon).trim() !== '' ? String(c.balloon).trim() : null);
+
+/** Scanned entries past the first of the same part at the same place --
+ *  what the old scanner produced. Parts added by hand are the person's
+ *  own business. */
+function repeatedEntries(parts){
+  const seen = new Set();
+  let extra = 0;
+  for(const c of parts){
+    if(c.extraction_method === 'manual') continue;
+    const name = String(c.item_as_drawn || c.item || '').toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    const key = [itemKey(c) || '', name, String(c.part_number || '').toUpperCase(), c.installation_location || 'unknown'].join('|');
+    if(seen.has(key)) extra++;
+    else seen.add(key);
+  }
+  return extra;
+}
 
 /** Parts sort by item number; one without comes after all that have one. */
 function itemRank(c){

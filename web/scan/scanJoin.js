@@ -119,31 +119,82 @@ function labelMatchesPart(label, part){
   return !!category && squash(a) === category;
 }
 
-/** Parts that run along the conveyor: a single balloon covers every one
- *  of them (three flights, four hangers), so their count stays with the
- *  places found rather than being split off as "not found". */
+/** Parts that run along the conveyor: one balloon stands for every one of
+ *  them (three flights, four hangers, 24 coupling bolts), so they are one
+ *  entry with the table's whole count, however many places show them. */
 const ALONG_RUN = /^(auger|coupling|hanger|uhmw)/i;
 
-/**
- * How many of a table row go at each place found for it, so the counts
- * always add up to the table's quantity. `want` is that quantity (or
- * NaN), `places` how many places were found.
- *
- *   QTY 2, found at 2 places     -> 1 + 1
- *   QTY 1, found at 1 place      -> 1
- *   QTY 2 bearing, found at 1    -> 1 here, and 1 whose place wasn't found
- *   QTY 3 flights, found at 1    -> 3 there (one balloon covers the run)
- *   QTY 4 hangers, found at 2    -> 2 + 2
- */
-export function splitQuantity(part, places){
-  const want = Number(part.quantity);
-  if(!(want > 0) || !Number.isFinite(want)) return { each: Array(places).fill(places > 1 ? 1 : part.quantity), unplaced: 0 };
-  if(want <= places) return { each: Array(places).fill(1), unplaced: 0 };
-  if(ALONG_RUN.test(String(part.item || '').trim())){
-    const base = Math.floor(want / places), extra = want % places;
-    return { each: Array.from({ length: places }, (_, i) => base + (i < extra ? 1 : 0)), unplaced: 0 };
+/** The table's count as a number, or null when it isn't one ("AR"). */
+function countOf(q){
+  const n = typeof q === 'number' ? q : parseFloat(String(q == null ? '' : q));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** The surest of several sightings (the first, on a tie). */
+const surest = list => list.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+
+/** Sightings of one number at practically the same spot on the same sheet
+ *  are the same balloon read twice. */
+function distinct(sightings){
+  const out = [];
+  for(const c of sightings){
+    const i = out.findIndex(o => o.source_page === c.source_page
+      && Math.abs(o.position.x - c.position.x) < 0.04 && Math.abs(o.position.y - c.position.y) < 0.04);
+    if(i < 0) out.push(c);
+    else if(c.confidence > out[i].confidence) out[i] = c;
   }
-  return { each: Array(places).fill(1), unplaced: want - places };
+  return out;
+}
+
+/**
+ * Where one table row goes, from every balloon found for it, and how many
+ * go at each place. A drawing shows the same part in several views -- the
+ * elevation, the plan, a detail -- and balloons it in each, so a sighting
+ * is not a part: a row gets at most one place per end of the machine, and
+ * the table's quantity is shared out over those places, never added to.
+ *
+ *   QTY 1 motor, ballooned in three views   -> 1
+ *   QTY 2 bearing, seen at both ends        -> 1 at each end
+ *   QTY 2 bearing, seen at one end          -> 1 there, 1 still to place
+ *   QTY 4 seals, seen at both ends          -> 2 at each end
+ *   QTY 4 hangers, 24 coupling bolts        -> one entry with all of them
+ *
+ * Returns the places and their counts, how many are still to place, and
+ * how many places the drawing showed (to report a count that disagrees).
+ */
+export function placesFor(part, sightings){
+  const hits = distinct(sightings);
+  const want = countOf(part.quantity);
+  if(ALONG_RUN.test(String(part.item || '').trim()) || hits.every(h => h.end === 'along_run')){
+    return { places: [{ callout: surest(hits), quantity: want }], missing: 0, drawn: 1 };
+  }
+  // One place per end the balloon search saw it at. Where it couldn't
+  // say, the places on the sheet that shows the part most: another sheet
+  // showing it is the same part again.
+  let found = ['drive_end', 'tail_end'].map(end => hits.filter(h => h.end === end)).filter(g => g.length).map(surest);
+  if(!found.length){
+    const bySheet = new Map();
+    for(const h of hits){
+      if(!bySheet.has(h.source_page)) bySheet.set(h.source_page, []);
+      bySheet.get(h.source_page).push(h);
+    }
+    found = [...bySheet.values()].reduce((a, b) => (b.length > a.length ? b : a));
+  }
+  const drawn = found.length;
+  if(want == null) return { places: [{ callout: surest(found), quantity: null }], missing: 0, drawn };
+  if(found.length > want){
+    const surer = new Set([...found].sort((a, b) => b.confidence - a.confidence).slice(0, want));
+    found = found.filter(c => surer.has(c));
+  }
+  if(found.length === 1){
+    // Seen at one place: parts at the ends come a pair to a machine far
+    // more often than two to one end, so half wait to be placed rather
+    // than being counted where they weren't seen.
+    const here = Math.ceil(want / 2);
+    return { places: [{ callout: found[0], quantity: here }], missing: want - here, drawn };
+  }
+  const each = Math.floor(want / found.length), extra = want % found.length;
+  return { places: found.map((c, i) => ({ callout: c, quantity: each + (i < extra ? 1 : 0) })), missing: 0, drawn };
 }
 
 /** A part instance carrying one callout's location. */
@@ -154,7 +205,7 @@ function place(part, callout, quantity){
     source_callout: callout.label || part.source_callout || '',
     position: callout.position,
     drawn_end: callout.end,
-    // How many of the row go at this place -- see splitQuantity().
+    // How many of the row go at this place -- see placesFor().
     quantity,
     extraction_method: 'callout',
     // The join is only as good as the balloon read that fed it.
@@ -202,21 +253,21 @@ export function joinPartsAndCallouts(parts, calloutPass){
       usedBalloons.add(key);
       // One table row can be several parts on the conveyor -- a flange
       // bearing listed once with QTY 2 is one at each end. Each place
-      // found gets its share; any not found are kept as a separate entry
-      // with no place, so they show up to be put at the right end rather
-      // than hiding inside another place's count.
-      const { each, unplaced: missing } = splitQuantity(part, hits.length);
-      hits.forEach((c, i) => components.push(place(part, c, each[i])));
+      // gets its share; any not found are kept as a separate entry with
+      // no place, so they show up to be put at the right end rather than
+      // hiding inside another place's count.
+      const { places, missing, drawn } = placesFor(part, hits);
+      for(const p of places) components.push(place(part, p.callout, p.quantity));
       if(missing > 0){
         components.push({ ...part, quantity: missing, position: null, installation_location: 'unknown' });
         unplaced.push(`${part.item_as_drawn || part.item} (${missing} of ${part.quantity})`);
       }
-      const want = Number(part.quantity);
-      if(isFinite(want) && want > 0 && want !== hits.length){
-        // Counted as above, but still reported: fewer places than the
-        // table says may be a missed balloon, more means the table or the
-        // balloon read is wrong, and we can't tell which.
-        quantityMismatches.push(`${part.item_as_drawn || part.item}: table says ${want}, found ${hits.length} on the drawing`);
+      const want = countOf(part.quantity);
+      if(want != null && drawn > want){
+        // Counted by the table, but reported: more places than it lists
+        // means the table or the balloon read is wrong, and we can't tell
+        // which.
+        quantityMismatches.push(`${part.item_as_drawn || part.item}: table says ${want}, found ${drawn} on the drawing`);
       }
       continue;
     }
@@ -250,6 +301,77 @@ export function joinPartsAndCallouts(parts, calloutPass){
       quantityMismatches: quantityMismatches.slice(0, 12)
     }
   };
+}
+
+/* ================================================================
+   The same row twice
+   ================================================================ */
+
+/** Every run of digits in a description: a different size is a
+ *  different part, however alike the words. */
+const sizesOf = s => (String(s || '').match(/\d+/g) || []).join(' ');
+
+/**
+ * Two parts-table rows that are one row read twice -- a drawing set that
+ * repeats its table on every sheet, a model that lists a row again. Same
+ * item number, and the same part: the same part number when both have
+ * one, otherwise the same kind of part with no size that disagrees. Rows
+ * with no item number have to match word for word.
+ */
+function sameRow(a, b){
+  const key = balloonKey(a.balloon);
+  if(key !== balloonKey(b.balloon)) return false;
+  const pa = squash(a.part_number), pb = squash(b.part_number);
+  if(pa && pb) return pa === pb;
+  const da = a.item_as_drawn || a.item, db = b.item_as_drawn || b.item;
+  const sa = sizesOf(da), sb = sizesOf(db);
+  if(sa && sb && sa !== sb) return false;
+  if(key == null) return squash(da) === squash(db);
+  return squash(da) === squash(db) || (!!squash(a.item) && squash(a.item) === squash(b.item));
+}
+
+/** Which of two readings of a row to keep: the PDF's own text over a
+ *  picture of it, then the surer, then the fuller. */
+const readingRank = p => (p.extraction_method === 'bom_table' ? 2 : 0) + (Number(p.confidence) || 0)
+  + (p.part_number ? 0.01 : 0) + (p.specification ? 0.01 : 0);
+
+/**
+ * The parts table with each row once. The count kept is the better
+ * reading's -- never a sum: a row read twice is still one row.
+ */
+export function dedupeParts(parts){
+  const kept = [];
+  let removed = 0;
+  for(const p of parts || []){
+    const i = kept.findIndex(k => sameRow(k, p));
+    if(i < 0){ kept.push(p); continue; }
+    removed++;
+    const [win, lose] = readingRank(p) > readingRank(kept[i]) ? [p, kept[i]] : [kept[i], p];
+    kept[i] = win.quantity == null && lose.quantity != null ? { ...win, quantity: lose.quantity } : win;
+  }
+  return { parts: kept, removed };
+}
+
+/**
+ * Entries of one table row that ended up at the same place -- the one
+ * still to place turning out to belong where the other went, say -- made
+ * one entry with their counts added. Every entry of a row is a share of
+ * that row's count, so adding them never counts anything twice.
+ */
+export function combineSameRows(components){
+  const out = [];
+  const at = new Map();
+  let combined = 0;
+  for(const c of components || []){
+    const key = [balloonKey(c.balloon) || '', squash(c.item_as_drawn || c.item), squash(c.part_number),
+      c.installation_location || 'unknown'].join('|');
+    if(!at.has(key)){ at.set(key, out.length); out.push(c); continue; }
+    combined++;
+    const i = at.get(key), a = out[i];
+    const qa = countOf(a.quantity), qc = countOf(c.quantity);
+    out[i] = { ...(a.position || !c.position ? a : c), quantity: qa != null && qc != null ? qa + qc : qa != null ? qa : qc };
+  }
+  return { components: out, combined };
 }
 
 /* ================================================================

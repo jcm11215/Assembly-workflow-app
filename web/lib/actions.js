@@ -87,9 +87,10 @@ export async function setChecklistItem(job, key, done){
  * parts are the part that matters, so a failed file upload is reported
  * back (`fileSaved: false`) rather than losing the scan.
  */
-export async function saveScan(job, { components, file, thumbnail }){
+export async function saveScan(job, { components, file, thumbnail, scanner = null }){
   const created = await api.post(`/api/jobs/${job.id}/blueprints`, {
     components,
+    scanner,
     thumbnail: thumbnail || null,
     fileName: file ? file.name : null,
     mimeType: file ? file.type : null

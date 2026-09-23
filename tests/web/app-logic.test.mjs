@@ -161,6 +161,35 @@ test('a two-sheet drawing reads into located parts and a title block', async () 
   assert.match(scanSummary(result.components, result.diagnostics), /^Found \d+ parts/);
 });
 
+test('a set that repeats its table and its balloons on every sheet comes out with each part once', async () => {
+  const row = (balloon, item, drawn, quantity) => ({ balloon, item, item_as_drawn: drawn, quantity, source_page: 1, extraction_method: 'bom_table', confidence: 0.9 });
+  const table = JSON.stringify({ parts: [
+    row(3, 'Motor', 'GEARMOTOR, 5HP', 1), row(7, 'Hanger Bearing', 'HANGER BRG', 2),
+    row(5, 'Bearing', 'FLG BRG 2-7/16', 2), row(5, 'Bearing', 'FLG BRG 2-7/16', 2)   // the model listing a row again
+  ] });
+  // Every view balloons the motor, the bearing at each end and a hanger.
+  const views = JSON.stringify({ callouts: [
+    { balloon: 3, source_page: 1, position: { x: 0.85, y: 0.4 }, end: 'drive_end', confidence: 0.9 },
+    { balloon: 5, source_page: 1, position: { x: 0.8, y: 0.5 }, end: 'drive_end', confidence: 0.9 },
+    { balloon: 5, source_page: 1, position: { x: 0.15, y: 0.5 }, end: 'tail_end', confidence: 0.9 },
+    { balloon: 7, source_page: 1, position: { x: 0.4, y: 0.5 }, end: 'along_run', confidence: 0.9 },
+    { balloon: 7, source_page: 1, position: { x: 0.6, y: 0.5 }, end: 'along_run', confidence: 0.9 }
+  ] });
+  aiReplies((system) => (/classify which kind of page/i.test(system)
+    ? JSON.stringify({ pages: [{ page: 1, view: 'general_assembly' }, { page: 2, view: 'bom' }, { page: 3, view: 'bom' }, { page: 4, view: 'detail_view' }] })
+    : /BALLOON CALLOUT is a small circle/i.test(system) ? views
+    : /transcribe the parts table/i.test(system) ? table
+    : JSON.stringify({ orientation: { drive_end_side: 'right' } })));
+  const img = n => [{ type: 'text', text: `PDF page ${n}:` }, { type: 'image', source: { media_type: 'image/jpeg', data: `REPEAT${n}` } }];
+  const result = await readDrawing([1, 2, 3, 4].flatMap(img));
+
+  assert.deepEqual(result.components.map(c => [c.balloon, c.installation_location, c.quantity]), [
+    ['3', 'drive_end', 1], ['5', 'drive_end', 1], ['5', 'tail_end', 1], ['7', 'hanger', 2]
+  ]);
+  assert.equal(result.diagnostics.repeatedRowsRemoved, 5, 'the second sheet\'s table and the repeated row');
+  assert.deepEqual(result.diagnostics.pagesRead.views, [1, 4], 'both views were searched');
+});
+
 test('a scan where every reading fails is an error, not an empty drawing', async () => {
   globalThis.fetch = async () => new Response(JSON.stringify({ error: 'API key not valid', code: 'ai_failed' }),
     { status: 502, headers: { 'Content-Type': 'application/json' } });
