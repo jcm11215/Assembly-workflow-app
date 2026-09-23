@@ -34,13 +34,14 @@ t('drive/tail bearing swap detected', M.validateComponents(specSwap, swapped).co
 
 // component whitelist -- the shop's list, and nothing else
 const loc = item => ({ item, installation_location: 'unknown' });
-const kept = M.normalizeComponents(['Drive', 'Gear Motor', 'Reducer', 'Waste Pack Seal', 'Gasket', 'Flange Bearing',
-  'Hanger Bearing', 'Coupling Shaft', 'Tail Shaft', 'Drive Shaft', 'Auger', 'Coupling Bolts', 'UHMW Liner'].map(loc));
-t('every listed part type is kept', kept.length === 13);
-const dropped = M.normalizeComponents(['Drive End Plate', 'Drive Guard', 'Trough', 'Cap Screw', 'Shroud', 'Coupling', 'Sprocket'].map(loc));
+const kept = M.normalizeComponents(['Drive', 'Gear Motor', 'Reducer', 'Waste Pack Seal', 'Flange Bearing',
+  'Hanger Bearing', 'Coupling Shaft', 'Tail Shaft', 'Drive Shaft', 'Shaft', 'Auger'].map(loc));
+t('every listed part type is kept', kept.length === 11);
+const dropped = M.normalizeComponents(['Drive End Plate', 'Drive Guard', 'Trough', 'Cap Screw', 'Shroud', 'Coupling', 'Sprocket',
+  'Gasket', 'Coupling Bolts', 'UHMW Liner'].map(loc));
 t('unlisted parts are dropped', dropped.length === 0);
 const bare = M.normalizeComponents([{ item: 'Shaft', installation_location: 'tail_end' }, { item: 'Shaft', installation_location: 'unknown' }]);
-t('bare "Shaft" is named from its location, dropped when it has none', bare.length === 1 && bare[0].item === 'Tail Shaft');
+t('bare "Shaft" is named from its location, kept as a shaft when it has none', bare.length === 2 && bare[0].item === 'Tail Shaft' && bare[1].item === 'Shaft');
 
 // confidence thresholds + safety override
 const clean = { errors: 0, conflicts: 0, warnings: 0 };
@@ -58,13 +59,13 @@ t('validateSpec unchanged and still works standalone', M.validateSpec(goodSpec).
 const drawn = M.normalizeComponents([
   { item: 'Hanger Bearing', item_as_drawn: 'HNGR BRG ASSY 2-7/16', installation_location: 'hanger' },
   { item: 'Bearing', item_as_drawn: '  FLG BRG, 2-7/16 BORE  ', installation_location: 'drive_end' },
-  { item: 'Gasket', installation_location: 'trough' },                       // model gave no verbatim wording
+  { item: 'Seal', installation_location: 'trough' },                       // model gave no verbatim wording
   { item: 'Motor', item_as_drawn: '', installation_location: 'drive_end' }   // explicitly empty
 ]);
 t('verbatim drawing wording is preserved exactly', drawn[0].item_as_drawn === 'HNGR BRG ASSY 2-7/16');
 t('category name is NOT overwritten by the drawing wording', drawn[0].item === 'Hanger Bearing');
 t('surrounding whitespace is trimmed but the wording is untouched', drawn[1].item_as_drawn === 'FLG BRG, 2-7/16 BORE');
-t('no verbatim wording falls back to the model item, not a guess', drawn[2].item_as_drawn === 'Gasket');
+t('no verbatim wording falls back to the model item, not a guess', drawn[2].item_as_drawn === 'Seal');
 t('empty verbatim wording falls back too', drawn[3].item_as_drawn === 'Motor');
 
 // A bare "SHAFT" is the case where the two names must not be conflated:
@@ -86,9 +87,9 @@ const posComps = M.normalizeComponents([
   { item: 'Drive', installation_location: 'drive_end', position: { x: 0.12, y: 0.55 } },
   { item: 'Reducer', installation_location: 'drive_end', position: null },
   { item: 'Bearing', installation_location: 'hanger' },                              // field absent entirely
-  { item: 'Gasket', installation_location: 'unknown', position: { x: 1.4, y: 0.5 } }, // out of range
+  { item: 'Seal', installation_location: 'unknown', position: { x: 1.4, y: 0.5 } }, // out of range
   { item: 'Seal', installation_location: 'unknown', position: { x: 'nope', y: 0.5 } },// non-numeric
-  { item: 'Coupling Bolts', installation_location: 'screw', position: { x: 0, y: 1 } } // boundary values
+  { item: 'Coupling Shaft', installation_location: 'screw', position: { x: 0, y: 1 } } // boundary values
 ]);
 t('valid in-range position kept as {x,y}', posComps[0].position && posComps[0].position.x === 0.12 && posComps[0].position.y === 0.55);
 t('explicit null position stays null', posComps[1].position === null);

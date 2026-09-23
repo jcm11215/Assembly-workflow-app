@@ -9,7 +9,6 @@
  */
 const RULES = [
   [/\b(hangers?|hngrs?)\b/i,                                         'Hanger Bearing'],
-  [/\b(coupling|cplg)\s*bolts?\b/i,                                   'Coupling Bolts'],
   [/\b(coupling|cplg)\s*shafts?\b/i,                                  'Coupling Shaft'],
   [/\btail\s*shafts?\b/i,                                            'Tail Shaft'],
   [/\bdrive\s*shafts?\b/i,                                           'Drive Shaft'],
@@ -18,10 +17,9 @@ const RULES = [
   [/\b(reducers?|gear\s*box(es)?|gear\s*reducers?)\b/i,              'Reducer'],
   [/\bdrives?\b(?!\s*(end|plate|guard|base|shaft))/i,                'Drive'],
   [/\b(seals?|waste\s*packs?|glands?)\b/i,                           'Seal'],
-  [/\bgaskets?\b/i,                                                  'Gasket'],
   [/\b(bearings?|brgs?|pillow\s*blocks?|flange\s*blocks?)\b/i,       'Bearing'],
   [/\b(augers?|flight(ing)?s?|screw\s*(assembly|assy|sections?))\b/i,'Auger'],
-  [/\buhmw\b/i,                                                      'UHMW']
+  [/\bshafts?\b/i,                                                   'Shaft']
 ];
 
 /** The part type for a description, or null when it isn't one the shop
