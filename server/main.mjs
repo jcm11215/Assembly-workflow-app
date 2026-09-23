@@ -13,6 +13,7 @@ import { openDb } from './db.mjs';
 import { createApp } from './app.mjs';
 import { pruneSessions, setupCodeIfNeeded, keepSetupCodeIn } from './auth.mjs';
 import { autoPick } from './models.mjs';
+import { resumeScans, pruneScans } from './scans.mjs';
 import { scheduleBackups } from './backup.mjs';
 import { closeAll } from './live.mjs';
 
@@ -41,11 +42,14 @@ server.listen(config.port, config.host, () => {
   // Models installed since the last start go to work without anyone
   // having to open Settings.
   autoPick(db);
+  // Scans a restart interrupted carry on.
+  resumeScans(db, paths.files);
 });
 
 const timers = [
   scheduleBackups(db),
-  setInterval(() => pruneSessions(db), 6 * 3600000)
+  setInterval(() => pruneSessions(db), 6 * 3600000),
+  setInterval(() => pruneScans(db, paths.files), 6 * 3600000)
 ];
 
 function shutdown(signal){

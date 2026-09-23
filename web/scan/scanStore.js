@@ -23,8 +23,16 @@ const DB_VERSION = 1;
 const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** Used when IndexedDB is unavailable, and as the read-through cache in
- *  front of it so a repeated lookup within one scan costs nothing. */
+ *  front of it so a repeated lookup within one scan costs nothing. The
+ *  server, which runs scans for months without a restart, has only this,
+ *  so it is kept to the most recent readings. */
 const memory = new Map();
+const MEMORY_LIMIT = 400;
+function remember(key, value){
+  memory.delete(key);
+  memory.set(key, value);
+  while(memory.size > MEMORY_LIMIT) memory.delete(memory.keys().next().value);
+}
 
 let dbPromise = null;
 function openDb(){
@@ -106,7 +114,7 @@ export async function readLayer(key){
     });
     if(!row) return undefined;
     if(Date.now() - row.at > MAX_AGE_MS){ deleteLayer(key); return undefined; }
-    memory.set(key, row.value);
+    remember(key, row.value);
     return row.value;
   } catch { return undefined; }
 }
@@ -114,7 +122,7 @@ export async function readLayer(key){
 /** Stores one finished reading. Fire and forget -- a scan must not wait
  *  on, or fail because of, a cache write. */
 export function writeLayer(key, value, meta){
-  memory.set(key, value);
+  remember(key, value);
   openDb().then(db => {
     if(!db) return;
     try { tx(db, 'readwrite').put({ key, value, at: Date.now(), ...(meta || {}) }); }

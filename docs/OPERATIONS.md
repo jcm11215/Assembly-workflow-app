@@ -21,6 +21,7 @@ Everything the app keeps is in **`/var/lib/assembly-workflow`**:
 ```
 assembly.db        the database (jobs, people, checklists, notes, …)
 files/<job>/…      every drawing ever uploaded, named as uploaded
+files/scans/       drawings waiting to be read (cleared as each scan finishes)
 backups/           nightly copies of the database
 ```
 
@@ -83,6 +84,10 @@ DATA_DIR=/var/lib/assembly-workflow node server/cli.mjs legacy-auth off`.
 - **Someone forgot their password.** Team → Set password, or
   `assembly-workflow reset-password <login>`. Only an admin can do this;
   there is no email reset.
+- **Where is my scan?** Scans run on the server and show at the top of
+  the app for the person who started them, on any of their devices, until
+  they're put away. A restart (an update, say) doesn't lose one: it runs
+  again when the server is back.
 - **Scans fail.** Settings → AI shows whether Ollama answers and which
   model does each job; **Test it** sends a real request. From the server,
   `assembly-workflow status` and `systemctl status ollama`. "Too large for the local model's context" is

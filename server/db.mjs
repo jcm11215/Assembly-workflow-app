@@ -270,6 +270,30 @@ const MIGRATIONS = [
   // part again in every view that showed it.
   `
   alter table blueprints add column scanner integer;
+  `,
+
+  // 6: blueprint scans run on the server, so one carries on whatever the
+  // device that started it does. The prepared pages and the original file
+  // wait on disk (files/scans/) until the scan is done with them.
+  `
+  create table scans (
+    id                 text primary key,
+    job_id             text references jobs(id) on delete cascade,
+    created_by         text references users(id) on delete set null,
+    status             text not null check (status in ('queued','running','done','saved','failed','cancelled')),
+    progress           text not null default '',
+    include_job_fields integer not null default 0,
+    file_name          text,
+    mime_type          text,
+    thumbnail          blob,
+    result             text,
+    error              text,
+    blueprint_id       text references blueprints(id) on delete set null,
+    dismissed          integer not null default 0,
+    created_at         text not null,
+    updated_at         text not null
+  );
+  create index scans_by_user on scans(created_by, created_at);
   `
 ];
 

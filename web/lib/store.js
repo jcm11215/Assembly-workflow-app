@@ -20,6 +20,7 @@ const initial = {
   tasks: [],
   completions: [],
   ai: { label: 'Local AI', ready: false },
+  scans: [],                  // drawing scans the server is running for me (ScanBanner)
   activity: null,             // loaded when the Activity screen first opens
   jobFilter: 'open',          // the Jobs screen's filter
   homeFilters: { lead: '', priority: '', stage: '', due: '', blocked: false }, // the Home dashboard's, shared by all its charts

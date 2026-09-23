@@ -1,60 +1,56 @@
 /**
- * Scanning a drawing: pick or photograph it, choose PDF pages, and let the
- * AI read it.
+ * Scanning a drawing: pick or photograph it, choose PDF pages, and hand
+ * it to the server to read.
  *
- *   NewJobFromDrawing  reads the title block too, then opens the new-job
- *                      form filled in; the scan is saved with the job.
- *   RescanJob          reads an existing job's drawing and saves it as the
- *                      job's newest scan.
+ * This device only prepares the pages -- renders them and reads their
+ * text, a few seconds with the screen kept on. The server does the
+ * reading (server/scans.mjs), so it carries on whatever this device does
+ * next, and its progress shows at the top of the app (ScanBanner.js).
+ *
+ *   NewJobFromDrawing  reads the title block too; once it's read, the
+ *                      new-job form opens filled in from it.
+ *   RescanJob          reads an existing job's drawing -- the one saved
+ *                      with it, unless another is picked -- and saves it
+ *                      as the job's newest scan.
  */
 import { html, useEffect, useState } from '../vendor/index.js';
 import { useStore } from '../lib/store.js';
-import { saveScan, logActivity } from '../lib/actions.js';
-import { explainAiError } from '../lib/ai.js';
-import { api, fetchBlob } from '../lib/api.js';
+import { startScan } from '../lib/actions.js';
+import { fetchBlob } from '../lib/api.js';
 import { Field } from '../ui/kit.js';
 import { Icon } from '../ui/icons.js';
-import { openModal, Sheet, toast } from '../ui/overlays.js';
-import { JobForm } from '../jobs/JobForm.js';
+import { Sheet, toast } from '../ui/overlays.js';
 import { MAX_PDF_PAGES, parsePageSelection, pdfPageCount } from './pdf.js';
-import { contentFor, readDrawing, scanSummary, diagnosticsWorthLogging } from './pipeline.js';
+import { contentFor } from './pipeline.js';
 
 export function NewJobFromDrawing({ close }){
   return html`<${ScanForm} title="New job from a drawing" close=${close} includeJobFields=${true}
     intro="Photograph a paper drawing or pick a saved image or PDF. The AI reads the title block for the job number, customer and description, and pulls out the parts -- you check everything before it's saved."
-    button="Read the drawing"
-    onRead=${({ file, result, thumbnail }) => {
-      close();
-      const tb = result.titleBlock;
-      openModal(JobForm, {
-        prefill: { jobNumber: tb.jobNumber, customer: tb.customer, description: tb.description },
-        scan: { components: result.components, file, thumbnail, scanner: result.scanner }
-      });
-      toast(scanSummary(result.components, result.diagnostics), { ms: 6000 });
-    }} />`;
+    button="Read the drawing" />`;
 }
 
 export function RescanJob({ jobId, close }){
   const job = useStore(s => s.jobs.find(j => j.id === jobId));
   if(!job) return null;
-  return html`<${ScanForm} title=${`Scan the drawing · ${job.jobNumber}`} close=${close}
-    intro=${job.blueprint
+  const bp = job.blueprint;
+  return html`<${ScanForm} title=${`Scan the drawing · ${job.jobNumber}`} close=${close} jobId=${job.id}
+    intro=${bp
       ? 'The new scan becomes what everyone sees on this job. Earlier scans and their files are kept.'
       : 'Photograph a paper drawing or pick a saved image or PDF. The AI pulls out the parts and where they sit.'}
     button="Scan"
-    onRead=${async ({ file, result, thumbnail }) => {
-      const { fileSaved } = await saveScan(job, { components: result.components, file, thumbnail, scanner: result.scanner });
-      close();
-      toast(scanSummary(result.components, result.diagnostics), { ms: 6000, kind: result.components.length ? 'ok' : 'info' });
-      if(!fileSaved) toast('The parts were saved, but the drawing file could not be uploaded. Try again to attach it.', { ms: 8000, kind: 'error' });
-    }}
-    jobNumber=${job.jobNumber} jobId=${job.id}
-    saved=${job.blueprint && job.blueprint.hasFile
-      ? { url: `/api/blueprints/${job.blueprint.id}/file`, name: job.blueprint.fileName || `${job.jobNumber} drawing`, type: job.blueprint.mimeType }
-      : null} />`;
+    saved=${bp && bp.hasFile ? { url: `/api/blueprints/${bp.id}/file`, name: bp.fileName || `${job.jobNumber} drawing`, type: bp.mimeType } : null} />`;
 }
 
-function ScanForm({ title, intro, button, includeJobFields = false, onRead, close, jobNumber = null, jobId = null, saved = null }){
+/** Keeps the screen on while the pages are prepared: a phone that locks
+ *  halfway pauses the work until it's unlocked. */
+async function keepAwake(){
+  try {
+    const lock = await navigator.wakeLock.request('screen');
+    return () => lock.release().catch(() => {});
+  } catch { return () => {}; }
+}
+
+function ScanForm({ title, intro, button, includeJobFields = false, close, jobId = null, saved = null }){
   const ai = useStore(s => s.ai);
   const [file, setFile] = useState(null);
   // A job's drawing is already on the server: scanning it again needs no
@@ -100,29 +96,19 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
   const read = async () => {
     setBusy(true);
     setError(null);
+    const letSleep = await keepAwake();
     try {
       const { blocks, thumbnail } = await contentFor(file, selection.pages, { withText: true, onStatus: setStatus });
-      // Corrections people made to earlier scans. A scan without them is
-      // still a scan, so a failure here is never fatal.
-      const learned = await api.get('/api/parts/learned')
-        .then(r => new Map(r.names.map(n => [n.key, { item: n.item, location: n.location }])))
-        .catch(() => null);
-      const result = await readDrawing(blocks, { includeJobFields, learned, onStatus: setStatus });
-      if(result.diagnostics.learnedKeys.length){
-        api.post('/api/parts/learned/used', { keys: result.diagnostics.learnedKeys }).catch(() => {});
-      }
-      if(diagnosticsWorthLogging(result.components, result.diagnostics)){
-        logActivity('Blueprint scan diagnostics', { text: `${jobNumber || 'New job'}: ${scanSummary(result.components, result.diagnostics)}`,
-          jobNumber, ...result.diagnostics }, jobId ? { type: 'job', id: jobId } : null);
-      }
-      await onRead({ file, result, thumbnail });
+      setStatus('Sending it to the server…');
+      await startScan({ jobId, includeJobFields, file, thumbnail, blocks });
+      close();
+      toast('The server is reading the drawing. You can leave this screen or lock the phone: it carries on, and shows at the top of the app.',
+        { ms: 7000, kind: 'ok' });
     } catch (e) {
       console.error(e);
-      const saved = e.readingsAlreadySaved ? ` ${e.readingsAlreadySaved} reading(s) of this drawing are saved, so trying again only re-reads the rest.` : '';
-      setError(explainAiError(e) + saved);
-      logActivity('Blueprint scan failed', { text: `${jobNumber || 'New job'}: ${explainAiError(e)}`, jobNumber },
-        jobId ? { type: 'job', id: jobId } : null);
+      setError((e && e.message) || String(e));
     } finally {
+      letSleep();
       setBusy(false);
       setStatus('');
     }
@@ -147,7 +133,10 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
         <//>`}
       ${error && html`<p class="error-text">${error}</p>`}
       <button class="btn btn-primary btn-block" disabled=${!file || busy || !!selection.error} onClick=${read}>
-        ${busy ? (status || 'Reading the drawing…') : button}
+        ${busy ? (status || 'Preparing the pages…') : button}
       </button>
+      <p class="hint">${busy
+        ? 'Keep this screen open for a moment while the pages are prepared.'
+        : 'The server does the reading: once it has started, you can leave this screen.'}</p>
     <//>`;
 }

@@ -11,6 +11,7 @@ import { Icon } from '../ui/icons.js';
 import { initials, Logo } from '../ui/kit.js';
 import { openModal, Sheet } from '../ui/overlays.js';
 import { lazy } from '../ui/lazy.js';
+import { ScanBanner } from '../scan/ScanBanner.js';
 
 import { Home } from '../screens/Home.js';
 import { Jobs } from '../screens/Jobs.js';
@@ -94,6 +95,7 @@ export function Shell(){
 
       <main id="main">
         <div class="page">
+          <${ScanBanner} />
           ${route.name === 'job'
             ? html`<${JobPage} id=${route.id} key=${route.id} />`
             : html`<${Screen} query=${route.query} key=${`${route.name}?${new URLSearchParams(route.query)}`} />`}

@@ -113,6 +113,12 @@ test('a new job is read off a drawing', { skip }, async () => {
   await admin.setInputFiles('input[type=file]', path.join(import.meta.dirname, 'drawing.pdf'));
   await admin.getByText('all will be scanned').waitFor();
   await admin.click('button:has-text("Read the drawing")');
+  // The server reads it: the dialog closes as soon as it has the pages,
+  // and the banner at the top offers the new job once it's read -- here,
+  // after moving to another screen in the meantime.
+  await admin.locator('.scan-bar').waitFor({ timeout: 30000 });
+  await admin.goto(BASE + '/#/jobs');
+  await admin.click('.scan-bar button:has-text("Review new job")', { timeout: 30000 });
   await admin.locator('input[name=jobNumber]').waitFor({ timeout: 30000 });
   assert.equal(await admin.inputValue('input[name=jobNumber]'), '2024-017H');
   await admin.click('button:has-text("Create job")');
@@ -131,6 +137,7 @@ test('a new job is read off a drawing', { skip }, async () => {
   assert.equal(bp.hasFile, true);
   assert.equal(bp.mimeType, 'application/pdf');
   assert.equal(bp.scanner, 2, 'saved with the scanner that read it');
+  assert.equal(await admin.locator('.scan-bar').count(), 0, 'the banner is gone once the job has its scan');
 });
 
 test('a document added to the knowledge base is cited by the assistant', { skip }, async () => {

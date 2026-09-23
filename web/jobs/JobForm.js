@@ -1,11 +1,11 @@
 /**
  * Create or edit a job's details (admins). A new job can come pre-filled
- * from a blueprint scan; the scan is saved against the job the moment the
- * job exists.
+ * from a drawing the server has read (`scan`: {id, parts}); the scan is
+ * saved to the job the moment the job exists.
  */
 import { html } from '../vendor/index.js';
 import { useStore } from '../lib/store.js';
-import { createJob, updateJob, deleteJob, saveScan } from '../lib/actions.js';
+import { createJob, updateJob, deleteJob, attachScan } from '../lib/actions.js';
 import { navigate, jobLink } from '../lib/router.js';
 import { todayISO } from '../../shared/dates.js';
 import { Field, Select, submitting } from '../ui/kit.js';
@@ -35,10 +35,9 @@ export function JobForm({ job, prefill = {}, scan = null, close }){
     navigate(jobLink(created.id));
     if(scan){
       try {
-        const { fileSaved } = await saveScan(created, scan);
-        if(!fileSaved) toast('Job saved with its parts, but the drawing file could not be uploaded. Re-scan to attach it.', { ms: 8000, kind: 'error' });
-        else if(!scan.components.length) toast('Job saved with the drawing, but the scan found no parts on it. Re-scan, or add parts by hand.', { ms: 8000 });
-        else toast(`Job saved with ${scan.components.length} parts from the drawing.`, { kind: 'ok' });
+        await attachScan(scan.id, created);
+        if(!scan.parts) toast('Job saved with the drawing, but the scan found no parts on it. Re-scan, or add parts by hand.', { ms: 8000 });
+        else toast(`Job saved with ${scan.parts} parts from the drawing.`, { kind: 'ok' });
       } catch (e) {
         toastError(e, 'Job saved, but the scan could not be attached: ');
       }
@@ -76,7 +75,7 @@ export function JobForm({ job, prefill = {}, scan = null, close }){
           <${Select} name="assignedTo" value=${v.assignedTo || ''}
                      options=${[{ value: '', label: 'Unassigned' }, ...team.map(u => ({ value: u.id, label: u.fullName }))]} />
         <//>
-        ${scan && html`<p class="hint">The drawing and ${scan.components.length} scanned parts will be attached when you save.</p>`}
+        ${scan && html`<p class="hint">The drawing and ${scan.parts} scanned part${scan.parts === 1 ? '' : 's'} will be attached when you save.</p>`}
         <button type="submit" class="btn btn-primary btn-block">${job ? 'Save' : 'Create job'}</button>
       </form>
       ${job && html`<button type="button" class="btn btn-danger-outline btn-block" onClick=${remove}>Delete job</button>`}

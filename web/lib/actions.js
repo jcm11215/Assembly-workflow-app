@@ -83,28 +83,44 @@ export async function setChecklistItem(job, key, done){
 /* ---------------- blueprints ---------------- */
 
 /**
- * Saves a scan: parts and thumbnail first, then the original file. The
- * parts are the part that matters, so a failed file upload is reported
- * back (`fileSaved: false`) rather than losing the scan.
+ * Hands a drawing to the server to read (server/scans.mjs): the prepared
+ * pages and the original file in one upload -- the pages as JSON, the
+ * file's bytes straight after, `?meta=` saying where one ends.
  */
-export async function saveScan(job, { components, file, thumbnail, scanner = null }){
-  const created = await api.post(`/api/jobs/${job.id}/blueprints`, {
-    components,
-    scanner,
-    thumbnail: thumbnail || null,
-    fileName: file ? file.name : null,
-    mimeType: file ? file.type : null
+export async function startScan({ jobId = null, includeJobFields = false, file, thumbnail = null, blocks }){
+  const meta = new TextEncoder().encode(JSON.stringify({
+    jobId, includeJobFields, fileName: file.name, mimeType: file.type, thumbnail, blocks
+  }));
+  const { scan } = await api.post(`/api/scans?meta=${meta.length}`, new Blob([meta, file]), { contentType: 'application/octet-stream' });
+  applyScan(scan);
+  return scan;
+}
+
+/** Merges a scan, unless the copy already held is newer: its live
+ *  progress can arrive before the response that started it. */
+export function applyScan(scan){
+  setState(s => {
+    const held = s.scans.find(x => x.id === scan.id);
+    if(held && held.updatedAt > scan.updatedAt) return null;
+    return { scans: scan.dismissed ? without(s.scans, scan.id) : upsert(s.scans, scan, { prepend: true }) };
   });
-  applyJob(created.job);
-  if(!file) return { blueprint: created.blueprint, fileSaved: true };
-  try {
-    const up = await api.put(`/api/blueprints/${created.blueprint.id}/file`, file, { contentType: file.type || 'application/octet-stream' });
-    applyJob(up.job);
-    return { blueprint: up.blueprint, fileSaved: true };
-  } catch (e) {
-    console.error('blueprint file upload failed', e);
-    return { blueprint: created.blueprint, fileSaved: false };
-  }
+}
+
+/** Puts a scan away; one still waiting or running is stopped. */
+export async function dismissScan(scan){
+  await api.del(`/api/scans/${scan.id}`);
+  setState(s => ({ scans: without(s.scans, scan.id) }));
+}
+
+export async function retryScan(scan){
+  applyScan((await api.post(`/api/scans/${scan.id}/retry`)).scan);
+}
+
+/** Saves a read new-job scan to the job just created from it. */
+export async function attachScan(scanId, job){
+  const res = await api.post(`/api/scans/${scanId}/attach`, { jobId: job.id });
+  setState(s => ({ scans: without(s.scans, scanId) }));
+  return applyJob(res.job);
 }
 
 /** Parts-list edits. Each answers with the updated job. */

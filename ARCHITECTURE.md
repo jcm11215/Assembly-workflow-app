@@ -18,6 +18,7 @@ it: SQLite is built into Node 22, and the browser libraries are vendored.
 │  live.mjs     Server-Sent Events: every change pushed to every open app     │
 │  ai.mjs       AI settings, and asking the local AI                          │
 │  ollama.mjs   the local models: chat, drawings, embeddings, downloads       │
+│  scans.mjs    reading drawings in the background, one at a time             │
 │  knowledge.mjs  documents + corrections the assistant searches              │
 │  files.mjs    drawings on disk, a folder per job                            │
 │  backup.mjs   nightly VACUUM INTO copies                                    │
@@ -81,11 +82,29 @@ live stream immediately.
 
 ## Drawings
 
-A scan is saved in two requests: the parts list and a thumbnail as JSON,
-then the original file as raw bytes (`PUT /api/blueprints/:id/file`). Every
-scan is kept as a new version; the newest drives the job. Files are named
-the way they were uploaded, in a folder per job number, so they can be
-found on the server without the app.
+A scan runs on the server, so it carries on whatever the device that
+started it does -- the screen left, the phone locked, the app closed. The
+device does the quick part: it renders the pages and reads their text
+(a few seconds, with the screen kept on), then sends those pages and the
+original file in one upload (`POST /api/scans`: the pages as JSON, the
+file's bytes straight after, `?meta=` giving the JSON's length).
+`server/scans.mjs` runs the AI steps with the same code the app uses
+(`web/scan/pipeline.js`), one scan at a time since they share the GPU,
+and pushes progress to the person who started it; the app shows it at
+the top of every screen (`web/scan/ScanBanner.js`), on each of their
+devices. A re-scan saves itself as the job's newest blueprint. A new job
+from a drawing waits, read, until someone reviews it and creates the job
+(`POST /api/scans/:id/attach`). A scan can be stopped (after the question
+it is on) and a failed one tried again, asking only what failed. The
+pages wait in `files/scans/` until the scan is done with them; a scan a
+restart interrupted runs again, and finished ones are cleared after a
+week.
+
+Every scan is kept as a new blueprint version; the newest drives the
+job. Files are named the way they were uploaded, in a folder per job
+number, so they can be found on the server without the app. A blueprint
+can also be saved directly, in two requests (`POST
+/api/jobs/:id/blueprints`, then `PUT /api/blueprints/:id/file`).
 
 ## AI
 

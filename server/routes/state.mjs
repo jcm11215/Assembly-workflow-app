@@ -8,6 +8,8 @@ import { todayISO } from '../../shared/dates.js';
 import { openStream } from '../live.mjs';
 import { getSetting } from '../db.mjs';
 import { aiSummary } from '../ai.mjs';
+import { listScans } from '../scans.mjs';
+import { can } from '../../shared/roles.js';
 
 export default function register(r){
 
@@ -25,6 +27,8 @@ export default function register(r){
       tasks,
       completions: listCompletions(db, window.from, window.to),
       ai: aiSummary(getSetting(db, 'ai', {})),
+      // Drawing scans this person started that are running or waiting on them.
+      scans: can(ctx.user.role, 'blueprint.manage') ? listScans(db, ctx.user.id) : [],
       serverToday: todayISO()
     };
   });
