@@ -263,6 +263,9 @@ test('hand-editing parts: add, edit, reorder, remove', async () => {
   assert.equal(added.data.component.extraction_method, 'manual');
   const edited = await admin.patch(`/api/components/${added.data.component.id}`, { stage: 'drive' });
   assert.equal(edited.data.component.installation_location, 'drive_end');
+  const numbered = await admin.patch(`/api/components/${added.data.component.id}`, { balloon: ' 12 ' });
+  assert.equal(numbered.data.component.balloon, '12');
+  assert.equal((await admin.patch(`/api/components/${added.data.component.id}`, { balloon: '' })).data.component.balloon, null);
 
   const [a, b] = saved.data.blueprint.components;
   await admin.put(`/api/blueprints/${bpId}/order`, { ids: [added.data.component.id, b.id, a.id] });

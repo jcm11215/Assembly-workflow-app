@@ -1,5 +1,6 @@
 /** PDF -> page images, and image downscaling for upload. */
-import { findTable, readTable, tableIsClean } from './tableText.js';
+import { findHeader, findTable, readTable, tableIsClean } from './tableText.js';
+import { ocrRuns } from './ocr.js';
 
 export function fileToBase64Raw(file){
   return new Promise((resolve,reject)=>{
@@ -218,19 +219,29 @@ export async function pdfFileToImages(file, maxPages, maxDim, quality, pageNumbe
     // Real pixel size travels with the page: cropping to a region of it
     // needs the aspect ratio, and the canvas is the only place it's known
     // without decoding the image again.
-    let text = '', index = null, crop = null;
+    let text = '', index = null, crop = null, hasText = false;
     if(opts.textLayer){
       // Never worth failing a scan over: the image is the real input.
       try {
         const items = (await page.getTextContent()).items;
         text = textLayerFromItems(items);
         const runs = textRuns(items, (x, y) => baseViewport.convertToViewportPoint(x, y), baseViewport);
+        hasText = runs.length > 0;
         if(runs.length){
           index = indexPage(runs);
           // A table read cleanly from the text needs no picture of it.
           if(index.bomBox && !index.table) crop = await renderCrop(page, baseViewport, index.bomBox, runs, quality);
         }
       } catch (e) { console.error('reading the PDF text failed', e); }
+    }
+    // A scanned sheet has no text of its own: recognise it, at a higher
+    // resolution than the AI sees, so small table print is legible.
+    if(opts.ocr && !hasText){
+      try {
+        if(opts.onStatus) opts.onStatus(`Reading the text on page ${i}…`);
+        const big = await renderPage(page, baseViewport, 2800);
+        ({ index, crop } = await ocrIndex(big, quality));
+      } catch (e) { console.error('text recognition failed', e); }
     }
     images.push({base64: dataUrl.split(',')[1], mime:'image/jpeg', page: i,
                  width: canvas.width, height: canvas.height, text,
@@ -256,6 +267,80 @@ async function renderCrop(page, baseViewport, box, runs, quality){
   await page.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, -bx * vp.width, -by * vp.height] }).promise;
   const inside = runs.filter(r => inBox({ x: r.x + r.w / 2, y: r.y + r.h / 2 }, box)).map(r => r.item);
   return { base64: canvas.toDataURL('image/jpeg', quality).split(',')[1], mime: 'image/jpeg', box, text: textLayerFromItems(inside) };
+}
+
+async function renderPage(page, baseViewport, maxDim){
+  const scale = Math.max(0.5, Math.min(maxDim / baseViewport.width, maxDim / baseViewport.height, 4));
+  const vp = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return canvas;
+}
+
+/** [x, y, w, h] of a canvas as a JPEG no longer than maxDim on a side. */
+function cropCanvas(canvas, box, quality, maxDim = 1600){
+  const [bx, by, bw, bh] = box;
+  const sx = bx * canvas.width, sy = by * canvas.height, sw = bw * canvas.width, sh = bh * canvas.height;
+  const scale = Math.min(1, maxDim / Math.max(sw, sh));
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(sw * scale)); out.height = Math.max(1, Math.round(sh * scale));
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  return { base64: out.toDataURL('image/jpeg', quality).split(',')[1], mime: 'image/jpeg', box, text: '' };
+}
+
+/**
+ * Text recognition on a sheet with no text of its own, turned into the
+ * same index a CAD PDF's text gives: numbers, the parts table's box, the
+ * table itself if it reads cleanly -- and a crop of the table otherwise.
+ */
+export async function ocrIndex(canvas, quality = 0.8){
+  let runs = await ocrRuns(canvas, { mode: '11' });
+  if(!runs.length) return { index: null, crop: null };
+  // Scattered-text reading finds the table's header but drops its lone
+  // item numbers; read the area around the header again as a column of
+  // text, which keeps them, and use that for the table.
+  const header = findHeader(runs);
+  if(header){
+    const left = Math.max(0, Math.min(...header.map(h => h.p.x)) - 0.04);
+    const right = Math.min(1, Math.max(...header.map(h => h.p.x + h.p.w)) + 0.45);
+    const hy = header[0].p.y;
+    const region = [left, Math.max(0, hy - 0.45), right - left, Math.min(1, hy + 0.47) - Math.max(0, hy - 0.45)];
+    const again = await ocrRuns(canvas, { mode: '4', region });
+    if(again.length){
+      runs = runs.filter(r => !inBox({ x: r.x + r.w / 2, y: r.y + r.h / 2 }, region)).concat(again);
+    }
+  }
+  const index = indexPage(runs);
+  // Recognised text can drop a word; only a table with every row
+  // described is used as read. Otherwise the AI reads the crop.
+  if(index.table && !index.table.every(r => r.description)) index.table = null;
+  const crop = index.bomBox && !index.table ? cropCanvas(canvas, index.bomBox, quality) : null;
+  return { index: { ...index, ocr: true }, crop };
+}
+
+/** A photo on a canvas for text recognition, at most maxDim on a side. */
+export function imageFileToCanvas(file, maxDim = 2800){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image file.')); };
+    img.src = url;
+  });
 }
 
 // Shrinks an already-decoded base64 image to a genuinely tiny preview

@@ -68,8 +68,9 @@ const isNumber = s => /^\d{1,3}$/.test(String(s).trim());
  * over the header -- CAD tables grow either way. Returns null when there
  * is no table.
  */
-export function findTable(runs){
-  const ph = phrases(runs);
+/** The parts table's header row -- an item column and at least one
+ *  other kind on one line -- as [{p, kind}] left to right, or null. */
+export function findHeader(runs, ph = phrases(runs)){
   const heads = ph.map(p => ({ p, kind: kindOf(p.str) })).filter(h => h.kind);
   let header = null;
   for(const h of heads){
@@ -77,8 +78,13 @@ export function findTable(runs){
     const kinds = new Set(row.map(o => o.kind));
     if(kinds.has('item') && kinds.size >= 2 && (!header || row.length > header.length)) header = row;
   }
+  return header && header.slice().sort((a, b) => a.p.x - b.p.x);
+}
+
+export function findTable(runs){
+  const ph = phrases(runs);
+  const header = findHeader(runs, ph);
   if(!header) return null;
-  header = header.slice().sort((a, b) => a.p.x - b.p.x);
 
   const itemHead = header.find(h => h.kind === 'item').p;
   const colX = centreX(itemHead), tol = Math.max(0.02, itemHead.w);

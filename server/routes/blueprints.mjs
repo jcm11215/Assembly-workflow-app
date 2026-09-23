@@ -203,6 +203,7 @@ export default function register(r){
     if('item' in body) sets.item = v.text(body.item, 'Part name', { max: 300 }) || 'Unspecified item';
     if('specification' in body) sets.specification = v.text(body.specification, 'Specification', { max: 1000 });
     if('quantity' in body) sets.quantity = v.optionalNumber(body.quantity, 'Quantity', { min: 0, max: 100000 });
+    if('balloon' in body) sets.balloon = body.balloon == null || String(body.balloon).trim() === '' ? null : v.text(body.balloon, 'Item number', { max: 20 });
     if('stage' in body){
       sets.stage = v.oneOf(body.stage, COMPONENT_STAGES, 'Category');
       sets.installation_location = STAGE_TO_LOCATION[sets.stage];

@@ -6,11 +6,16 @@
  * Nothing is invented: a part only gets an arrow if the scan could point
  * at it, and the sheet under the arrows is the uploaded drawing itself.
  * On a phone the margins are too narrow for names, so labels become a
- * numbered legend under the drawing.
+ * legend under the drawing.
+ *
+ * Every tag is the drawing's own item number -- the one in its parts
+ * table and on its balloons -- so the picture, the paper drawing and the
+ * parts list all agree. A part at several places carries the same number
+ * at each, and appears once in the legend.
  */
 import { html, useEffect, useState } from '../vendor/index.js';
 import { fetchBlob } from '../lib/api.js';
-import { layoutCallouts, frameForParts, frameImageStyle, arrowHead, GUTTER, IMAGE_LEFT, IMAGE_WIDTH } from './calloutLayout.js';
+import { layoutCallouts, batchByNumber, frameForParts, frameImageStyle, arrowHead, GUTTER, IMAGE_LEFT, IMAGE_WIDTH } from './calloutLayout.js';
 import { partGroup } from '../domain/parts.js';
 
 /** Sheet 1 is the general arrangement -- what "what you're building" means. */
@@ -44,14 +49,16 @@ function loadSheet(bp){
 
 const colorFor = c => partGroup(c).color;
 
-function Label({ c, number, full }){
+function Label({ c, number, full, places = 1, total = null }){
   const drawn = (c.item_as_drawn || '').trim();
   const same = drawn.toLowerCase().replace(/\s+/g, ' ') === (c.item || '').toLowerCase().replace(/\s+/g, ' ');
+  const qty = total || c.quantity;
   return html`
     <span class="cv-num" style=${{ background: colorFor(c) }}>${number}</span>
     <span class="cv-label-text">
-      <span class="cv-label-item">${c.item}${c.quantity ? html` <span class="cv-label-qty">×${c.quantity}</span>` : ''}</span>
+      <span class="cv-label-item">${c.item}${qty ? html` <span class="cv-label-qty">×${qty}</span>` : ''}</span>
       ${full && drawn && !same && html`<span class="cv-label-drawn">${drawn}</span>`}
+      ${full && places > 1 && html`<span class="cv-label-drawn">at ${places} places on the drawing</span>`}
     </span>`;
 }
 
@@ -95,13 +102,17 @@ export function Diagram({ job }){
   const imageStyle = frame ? frameImageStyle(frame, sheet.width, sheet.height) : null;
   const cropped = !!imageStyle;
   const { callouts } = layoutCallouts(onSheet, cropped ? frame : null);
+  // The legend's count for an item is the parts table's, over every place
+  // -- including any the scan couldn't find on the sheet.
+  const totalFor = number => bp.components.filter(c => String(c.balloon ?? '').trim() === String(number))
+    .reduce((n, c) => n + (Number(c.quantity) || 0), 0);
   const aspect = imageStyle ? imageStyle.aspectRatio : (canCrop ? sheet.width / sheet.height : null);
   const vbW = 100 * (aspect || 1);
 
   return html`
     <div class="cv" style=${{ '--cv-gutter': `${GUTTER}%` }}>
       <svg class="cv-leaders" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        ${callouts.map(c => html`<line key=${c.number} x1=${c.anchorX} y1=${c.labelY} x2=${c.tailX} y2=${c.tailY}
+        ${callouts.map(c => html`<line key=${c.order} x1=${c.anchorX} y1=${c.labelY} x2=${c.tailX} y2=${c.tailY}
                                         stroke=${colorFor(c.component)} stroke-width="1" vector-effect="non-scaling-stroke" />`)}
       </svg>
       <div class="cv-sheet-wrap" style=${{ marginLeft: `${IMAGE_LEFT}%`, width: `${IMAGE_WIDTH}%` }}>
@@ -119,7 +130,7 @@ export function Diagram({ job }){
               const head = arrowHead(fromX, fromY, toX, toY, 3.2);
               const end = head ? head[0] : [toX, toY];
               const col = colorFor(c.component);
-              return html`<g key=${c.number}>
+              return html`<g key=${c.order}>
                 <line x1=${fromX} y1=${fromY} x2=${end[0]} y2=${end[1]} stroke=${col} stroke-width="0.9" vector-effect="non-scaling-stroke" />
                 ${head && html`<polygon points=${head.map(p => p.join(',')).join(' ')} fill=${col} />`}
               </g>`;
@@ -127,18 +138,18 @@ export function Diagram({ job }){
           </svg>`}
         ${callouts.map(c => {
           const at = aspect ? c.tail : c.inFrame;
-          return html`<span key=${c.number} class=${`cv-tag${aspect ? '' : ' cv-tag-on-part'}`} title=${c.component.item}
+          return html`<span key=${c.order} class=${`cv-tag${aspect ? '' : ' cv-tag-on-part'}`} title=${`Item ${c.number}: ${c.component.item}`}
                             style=${{ left: `${at.x * 100}%`, top: `${at.y * 100}%`, background: colorFor(c.component) }}>${c.number}</span>`;
         })}
       </div>
       ${callouts.map(c => html`
-        <div key=${c.number} class=${`cv-label cv-label-${c.side}`} style=${{ top: `${c.labelY}%` }}>
+        <div key=${c.order} class=${`cv-label cv-label-${c.side}`} style=${{ top: `${c.labelY}%` }}>
           <${Label} c=${c.component} number=${c.number} full=${false} />
         </div>`)}
     </div>
     ${canCrop && html`<div class="cv-under"><button class="btn btn-sm" onClick=${() => setWhole(!whole)}>
       ${cropped ? 'Show whole sheet' : 'Show just the conveyor'}</button></div>`}
     <ol class="cv-legend">
-      ${callouts.map(c => html`<li key=${c.number} class="cv-legend-row"><${Label} c=${c.component} number=${c.number} full=${true} /></li>`)}
+      ${batchByNumber(callouts).map(b => html`<li key=${b.key} class="cv-legend-row"><${Label} c=${b.component} number=${b.number} places=${b.places} total=${totalFor(b.number) || null} full=${true} /></li>`)}
     </ol>`;
 }

@@ -25,7 +25,8 @@
  * split and asked about each half (scanLayers.js).
  */
 import { askAI } from '../lib/ai.js';
-import { MAX_PDF_PAGES, fileToImageBase64Resized, inBox, pdfFileToImages, shrinkBase64Image } from './pdf.js';
+import { MAX_PDF_PAGES, fileToImageBase64Resized, imageFileToCanvas, inBox, ocrIndex, pdfFileToImages, shrinkBase64Image } from './pdf.js';
+import { ocrDone } from './ocr.js';
 import { PROMPT_VERSIONS, buildCalloutPrompt, buildLayoutPrompt, buildPageClassificationPrompt, buildPartsListPrompt, pagesByRole } from './prompt.js';
 import { parseJsonLenient } from './jsonRepair.js';
 import { preparePages, readQuestion } from './scanLayers.js';
@@ -74,7 +75,7 @@ export function pageOfBlocks(contentBlocks){
   const pairs = [];
   let current = null;
   for(const b of contentBlocks){
-    const m = b.type === 'text' && /^PDF page (\d+)/.exec(b.text || '');
+    const m = b.type === 'text' && /^(?:PDF )?page (\d+)/i.exec(b.text || '');
     if(m){ current = { page: Number(m[1]), blocks: [b] }; pairs.push(current); continue; }
     if(b.type === 'image' && (!current || current.blocks.some(x => x.type === 'image' && !x.role))){
       if(b.role){ if(current) current.blocks.push(b); continue; }
@@ -99,9 +100,18 @@ const indexOf = p => (p.blocks.find(b => b.type === 'image' && !b.role) || {}).i
  * right when pages are skipped; with `withText`, each page also carries
  * its selectable text (only the local AI is sent it).
  */
-export async function contentFor(file, pageNumbers, { withText = false } = {}){
+export async function contentFor(file, pageNumbers, { withText = false, ocr = true, onStatus = null } = {}){
+  try {
+    return await renderContent(file, pageNumbers, { withText, ocr, onStatus });
+  } finally {
+    ocrDone();
+  }
+}
+
+async function renderContent(file, pageNumbers, { withText, ocr, onStatus }){
   if(file.type === 'application/pdf'){
-    const images = await pdfFileToImages(file, MAX_PDF_PAGES, 1600, 0.75, pageNumbers, { textLayer: withText });
+    if(onStatus) onStatus('Opening the drawing…');
+    const images = await pdfFileToImages(file, MAX_PDF_PAGES, 1600, 0.75, pageNumbers, { textLayer: withText, ocr, onStatus });
     if(!images.length) throw new Error('The PDF has no readable pages.');
     const thumbnail = await shrinkBase64Image(images[0].base64, images[0].mime).catch(() => null);
     return {
@@ -121,7 +131,26 @@ export async function contentFor(file, pageNumbers, { withText = false } = {}){
   }
   const { base64, mime } = await fileToImageBase64Resized(file);
   const thumbnail = await shrinkBase64Image(base64, mime).catch(() => null);
-  return { thumbnail, blocks: [{ type: 'image', source: { type: 'base64', media_type: mime, data: base64 } }] };
+  // A photo has no text of its own: recognise it, so its parts table
+  // and item numbers are found the same way as on a PDF.
+  let index = null, crop = null;
+  if(ocr){
+    try {
+      if(onStatus) onStatus('Reading the text on the photo…');
+      ({ index, crop } = await ocrIndex(await imageFileToCanvas(file)));
+    } catch (e) { console.error('text recognition failed', e); }
+  }
+  return {
+    thumbnail,
+    blocks: [
+      { type: 'text', text: 'Page 1 (a photo):' },
+      { type: 'image', source: { type: 'base64', media_type: mime, data: base64 }, ...(index ? { index } : {}) },
+      ...(crop ? [
+        { type: 'text', role: 'bom-crop', text: 'The parts table in the photo, enlarged:' },
+        { type: 'image', role: 'bom-crop', source: { type: 'base64', media_type: crop.mime, data: crop.base64 } }
+      ] : [])
+    ]
+  };
 }
 
 /**
@@ -129,9 +158,10 @@ export async function contentFor(file, pageNumbers, { withText = false } = {}){
  * sheet per request is smaller, faster and better read by a local model
  * than several at once; each sheet's answer is cached on its own.
  */
-async function perSheet(spec, pages, tally, blocksFor){
+async function perSheet(spec, pages, tally, blocksFor, onStatus, label){
   const answers = [];
   for(const p of pages){
+    if(onStatus) onStatus(`${label} on page ${p.page}…`);
     const r = await readQuestion(spec, [{ ...p, blocks: blocksFor(p) }], tally);
     if(r.error) console.error(`${spec.question}, page ${p.page}: ${r.error.message}`);
     answers.push(r);
@@ -191,7 +221,7 @@ function balloonHints(page, itemNumbers){
  * Throws only when nothing at all could be read -- a scan that never
  * happened, which the person needs to see as such.
  */
-export async function readDrawing(blocks, { includeJobFields = false, learned = null } = {}){
+export async function readDrawing(blocks, { includeJobFields = false, learned = null, onStatus = () => {} } = {}){
   evictOld();
   const pages = preparePages(pageOfBlocks(blocks));
   const allPages = pages.map(p => p.page);
@@ -218,6 +248,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
   const allHaveText = pages.every(p => indexOf(p));
   let classification = null, classifiedBy = 'none';
   if(allPages.length > 1 && !(allHaveText && tablePages.length)){
+    onStatus('Sorting out which sheet is which…');
     const c = await readQuestion(layer('classify', PROMPT_VERSIONS.classify, buildPageClassificationPrompt,
       'Classify each page.', mergeClassification), pages.map(p => ({ ...p, blocks: sheetBlocks(p) })), tally);
     classification = c.error ? null : c.parsed;
@@ -234,7 +265,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
   const askPages = forPages(bomPages).filter(p => !textTables.includes(p));
   const partsPass = askPages.length
     ? await perSheet(layer('parts', PROMPT_VERSIONS.parts, () => buildPartsListPrompt(includeJobFields),
-        'Transcribe the parts list from this page.', mergeParts), askPages, tally, tableBlocks)
+        'Transcribe the parts list from this page.', mergeParts), askPages, tally, tableBlocks, onStatus, 'Reading the parts table')
     : { question: 'parts', parsed: { parts: [] }, error: null };
   const partsParsed = parsedOf(partsPass);
   const { parts: withLearning, used: learnedUsed, keys: learnedKeys } = applyLearned([...fromText, ...(partsParsed.parts || [])], learned);
@@ -252,6 +283,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
   // 3: which side is the drive end, from the main view -- one sheet,
   // a few words each way.
   const mainView = viewPages[0] || pages[0];
+  onStatus('Finding the drive end…');
   const layoutPass = await readQuestion(layer('layout', PROMPT_VERSIONS.layout, () => buildLayoutPrompt(includeJobFields),
     'Which side is the drive end?', mergeLayout), [{ ...mainView, blocks: sheetBlocks(mainView) }], tally);
   if(layoutPass.error) console.error(`layout: ${layoutPass.error.message}`);
@@ -260,8 +292,8 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
 
   // 4: the balloons for exactly those items, one view at a time, with
   // where the PDF's text already shows each number as a starting point.
-  const items = tableParts.map(p => ({ balloon: p.balloon, item_as_drawn: p.item_as_drawn, item: p.item }));
-  const calloutVersion = `${PROMPT_VERSIONS.callouts}:${hashContent(JSON.stringify([items.map(i => [i.balloon, i.item_as_drawn]), driveSide]))}`;
+  const items = tableParts.map(p => ({ balloon: p.balloon, item_as_drawn: p.item_as_drawn, item: p.item, quantity: p.quantity }));
+  const calloutVersion = `${PROMPT_VERSIONS.callouts}:${hashContent(JSON.stringify([items.map(i => [i.balloon, i.item_as_drawn, i.quantity]), driveSide]))}`;
   const withHints = p => {
     const hints = balloonHints(p, itemNumbers);
     if(!hints.length) return sheetBlocks(p);
@@ -270,7 +302,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
   };
   const calloutPass = (tableParts.length || partsPass.error)
     ? await perSheet(layer('callouts', calloutVersion, () => buildCalloutPrompt(items, driveSide),
-        'Find these balloons on this page.', mergeCallouts), viewPages, tally, withHints)
+        'Find these balloons on this page.', mergeCallouts), viewPages, tally, withHints, onStatus, 'Finding the balloons')
     : { parsed: { callouts: [], unballooned: [] } };
 
   const readings = [partsPass, layoutPass, calloutPass];

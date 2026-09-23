@@ -119,18 +119,43 @@ function labelMatchesPart(label, part){
   return !!category && squash(a) === category;
 }
 
+/** Parts that run along the conveyor: a single balloon covers every one
+ *  of them (three flights, four hangers), so their count stays with the
+ *  places found rather than being split off as "not found". */
+const ALONG_RUN = /^(auger|coupling|hanger|uhmw)/i;
+
+/**
+ * How many of a table row go at each place found for it, so the counts
+ * always add up to the table's quantity. `want` is that quantity (or
+ * NaN), `places` how many places were found.
+ *
+ *   QTY 2, found at 2 places     -> 1 + 1
+ *   QTY 1, found at 1 place      -> 1
+ *   QTY 2 bearing, found at 1    -> 1 here, and 1 whose place wasn't found
+ *   QTY 3 flights, found at 1    -> 3 there (one balloon covers the run)
+ *   QTY 4 hangers, found at 2    -> 2 + 2
+ */
+export function splitQuantity(part, places){
+  const want = Number(part.quantity);
+  if(!(want > 0) || !Number.isFinite(want)) return { each: Array(places).fill(places > 1 ? 1 : part.quantity), unplaced: 0 };
+  if(want <= places) return { each: Array(places).fill(1), unplaced: 0 };
+  if(ALONG_RUN.test(String(part.item || '').trim())){
+    const base = Math.floor(want / places), extra = want % places;
+    return { each: Array.from({ length: places }, (_, i) => base + (i < extra ? 1 : 0)), unplaced: 0 };
+  }
+  return { each: Array(places).fill(1), unplaced: want - places };
+}
+
 /** A part instance carrying one callout's location. */
-function place(part, callout, instances){
+function place(part, callout, quantity){
   return {
     ...part,
     source_page: callout.source_page != null ? callout.source_page : part.source_page,
     source_callout: callout.label || part.source_callout || '',
     position: callout.position,
     drawn_end: callout.end,
-    // A row that says QTY 4 and balloons in four places is four things,
-    // one per location -- so each instance counts as one. With a single
-    // location the table's count is the only count there is, and stays.
-    quantity: instances > 1 ? 1 : part.quantity,
+    // How many of the row go at this place -- see splitQuantity().
+    quantity,
     extraction_method: 'callout',
     // The join is only as good as the balloon read that fed it.
     confidence: Math.min(part.confidence == null ? 0.5 : part.confidence, callout.confidence)
@@ -175,12 +200,22 @@ export function joinPartsAndCallouts(parts, calloutPass){
     const hits = key != null ? (byBalloon.get(key) || []) : [];
     if(hits.length){
       usedBalloons.add(key);
-      hits.forEach(c => components.push(place(part, c, hits.length)));
+      // One table row can be several parts on the conveyor -- a flange
+      // bearing listed once with QTY 2 is one at each end. Each place
+      // found gets its share; any not found are kept as a separate entry
+      // with no place, so they show up to be put at the right end rather
+      // than hiding inside another place's count.
+      const { each, unplaced: missing } = splitQuantity(part, hits.length);
+      hits.forEach((c, i) => components.push(place(part, c, each[i])));
+      if(missing > 0){
+        components.push({ ...part, quantity: missing, position: null, installation_location: 'unknown' });
+        unplaced.push(`${part.item_as_drawn || part.item} (${missing} of ${part.quantity})`);
+      }
       const want = Number(part.quantity);
       if(isFinite(want) && want > 0 && want !== hits.length){
-        // Reported, never reconciled: we don't know whether the table
-        // over-counts or the view under-balloons, and picking one would
-        // be inventing an answer.
+        // Counted as above, but still reported: fewer places than the
+        // table says may be a missed balloon, more means the table or the
+        // balloon read is wrong, and we can't tell which.
         quantityMismatches.push(`${part.item_as_drawn || part.item}: table says ${want}, found ${hits.length} on the drawing`);
       }
       continue;
@@ -189,7 +224,7 @@ export function joinPartsAndCallouts(parts, calloutPass){
     const i = byText.findIndex((c, idx) => !usedText.has(idx) && c.label && labelMatchesPart(c.label, part));
     if(i >= 0){
       usedText.add(i);
-      components.push(place(part, byText[i], 1));
+      components.push(place(part, byText[i], part.quantity));
       continue;
     }
 

@@ -57,6 +57,7 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
   const [pageCount, setPageCount] = useState(null);
   const [pages, setPages] = useState('');
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
   const [error, setError] = useState(null);
 
   const isPdf = file && file.type === 'application/pdf';
@@ -81,13 +82,13 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
     setBusy(true);
     setError(null);
     try {
-      const { blocks, thumbnail } = await contentFor(file, selection.pages, { withText: true });
+      const { blocks, thumbnail } = await contentFor(file, selection.pages, { withText: true, onStatus: setStatus });
       // Corrections people made to earlier scans. A scan without them is
       // still a scan, so a failure here is never fatal.
       const learned = await api.get('/api/parts/learned')
         .then(r => new Map(r.names.map(n => [n.key, { item: n.item, location: n.location }])))
         .catch(() => null);
-      const result = await readDrawing(blocks, { includeJobFields, learned });
+      const result = await readDrawing(blocks, { includeJobFields, learned, onStatus: setStatus });
       if(result.diagnostics.learnedKeys.length){
         api.post('/api/parts/learned/used', { keys: result.diagnostics.learnedKeys }).catch(() => {});
       }
@@ -104,6 +105,7 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
         jobId ? { type: 'job', id: jobId } : null);
     } finally {
       setBusy(false);
+      setStatus('');
     }
   };
 
@@ -125,7 +127,7 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
         <//>`}
       ${error && html`<p class="error-text">${error}</p>`}
       <button class="btn btn-primary btn-block" disabled=${!file || busy || !!selection.error} onClick=${read}>
-        ${busy ? 'Reading the drawing… this can take a minute' : button}
+        ${busy ? (status || 'Reading the drawing…') : button}
       </button>
     <//>`;
 }

@@ -73,6 +73,28 @@ t('a count the drawing disagrees with is reported, not reconciled', () => {
   }
 });
 
+t('one table row, QTY 2, is one part at each place found', () => {
+  const { components } = joinPartsAndCallouts([part(5, 'Bearing', { quantity: 2 })], {
+    callouts: [callout(5, .1, .5), callout(5, .9, .5)]
+  });
+  eq(components.map(c => c.quantity).join(','), '1,1', 'one each');
+});
+t('QTY 2 found at one place: the other is kept, with no place, not folded in', () => {
+  const { components, report } = joinPartsAndCallouts([part(5, 'Bearing', { quantity: 2 })], { callouts: [callout(5, .9, .5)] });
+  eq(components.length, 2, 'two entries');
+  eq(components[0].quantity, 1, 'one where it was found');
+  eq(components[1].quantity, 1, 'one still to place');
+  eq(components[1].position, null, 'with no place');
+  if (!/1 of 2/.test(report.notVisible.join())) throw new Error('not reported: ' + report.notVisible);
+});
+t('parts along the run stay together: QTY 3 flights, one balloon, 3 there', () => {
+  const { components } = joinPartsAndCallouts([part(11, 'Auger', { quantity: 3 })], { callouts: [callout(11, .5, .5)] });
+  eq(components.length, 1, 'one entry');
+  eq(components[0].quantity, 3, 'all three');
+  const hangers = joinPartsAndCallouts([part(7, 'Hanger Bearing', { quantity: 4 })], { callouts: [callout(7, .3, .5), callout(7, .6, .5)] });
+  eq(hangers.components.map(c => c.quantity).join(','), '2,2', 'the count still adds up');
+});
+
 console.log('\n=== drawings that label in words instead of numbers ===');
 t('a text callout matches its table row by wording', () => {
   const { components } = joinPartsAndCallouts([part(null, 'Motor', { item_as_drawn: 'GEARMOTOR, 3/4HP' })], {

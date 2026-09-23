@@ -126,7 +126,8 @@ const SECURITY_HEADERS = {
     "default-src 'self'",
     "img-src 'self' data: blob:",
     "style-src 'self' 'unsafe-inline'",
-    "script-src 'self'",
+    // WebAssembly only (the OCR engine for scanned drawings), not eval.
+    "script-src 'self' 'wasm-unsafe-eval'",
     "worker-src 'self' blob:",
     "frame-src 'self' blob:",
     "object-src 'self' blob:",
@@ -173,7 +174,8 @@ const TYPES = {
   '.jpg': 'image/jpeg',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
-  '.map': 'application/json'
+  '.map': 'application/json',
+  '.wasm': 'application/wasm'
 };
 
 /**

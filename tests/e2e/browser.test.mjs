@@ -119,6 +119,10 @@ test('a new job is read off a drawing', { skip }, async () => {
   await admin.getByRole('tab', { name: /Drawing/ }).click({ timeout: 15000 });
   await admin.locator('.cv-sheet').waitFor({ timeout: 15000 });
   assert.equal(await admin.locator('.part').count(), 4);
+  // The picture's tags are the drawing's own item numbers, a repeated
+  // part keeping its number at each place, and the parts list shows them.
+  assert.deepEqual((await admin.locator('.cv-tag').allTextContents()).sort(), ['11', '3', '7', '7']);
+  assert.deepEqual((await admin.locator('.part .item-no').allTextContents()).sort(), ['11', '3', '7', '7']);
 
   const state = await api(admin, 'GET', '/api/state');
   const bp = state.jobs.find(j => j.jobNumber === '2024-017H').blueprint;

@@ -146,14 +146,47 @@ export function frameImageStyle(frame, pageW, pageH){
   };
 }
 
+/** The drawing's item number for a part, as text, or null. */
+export function itemNumber(c){
+  const v = c && c.balloon;
+  return v == null || String(v).trim() === '' ? null : String(v).trim();
+}
+
+/** A, B, ... Z, AA, AB ... */
+function letterFor(i){
+  let s = '';
+  for(i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s;
+  return s;
+}
+
+/**
+ * Callouts sharing an item number, for the legend: one line per number
+ * with how many places it appears, in legend order.
+ */
+export function batchByNumber(callouts){
+  const out = [];
+  const seen = new Map();
+  for(const c of callouts){
+    const b = seen.get(c.number);
+    if(b){ b.places++; continue; }
+    const row = { number: c.number, component: c.component, places: 1, key: c.order };
+    seen.set(c.number, row);
+    out.push(row);
+  }
+  return out;
+}
+
 /**
  * @param components  each needs {position:{x,y}} in 0..1; anything without
  *                    a position is skipped by the caller, not here.
  * @param frame       when cropping, the region being shown -- callout
  *                    points are then placed within it rather than the page.
- * @returns {{image:{left,width}, callouts:[...]}} callouts carry the
- *          1-based `number`, the label box position,
- *          and the point on the drawing the leader line runs to.
+ * @returns {{image:{left,width}, callouts:[...]}} each callout carries
+ *          `number` -- the drawing's own item number for the part, so the
+ *          tag on the picture matches the balloon on the paper and the
+ *          row in the parts table; a letter for a part with none --
+ *          `order` (1-based, reading order, unique; use it as a key), the
+ *          label box position, and the point the leader line runs to.
  */
 export function layoutCallouts(components, frame){
   const list = (components || []).filter(c => c && c.position);
@@ -185,6 +218,12 @@ export function layoutCallouts(components, frame){
   }
   const ordered = rows.flatMap(r => r.items.sort((a, b) => a.position.x - b.position.x));
   ordered.forEach((c, i) => { c._n = i + 1; });
+  // The drawing's item number when the part has one. The same number on
+  // several parts (a hanger bearing at three places) is the same row of
+  // the table, so it keeps the same tag. A part with none gets a letter,
+  // in reading order, so it is never mistaken for an item number.
+  let letters = 0;
+  const tag = new Map(ordered.map(c => [c, itemNumber(c) ?? letterFor(letters++)]));
 
   // A part on the left half gets a left-hand label: the leader line then
   // runs outward to the nearest edge instead of crossing the drawing.
@@ -210,7 +249,8 @@ export function layoutCallouts(components, frame){
         y: p.y
       };
       callouts.push({
-        number: c._n,
+        number: tag.get(c),
+        order: c._n,
         component: c,
         side,
         // Where the label box sits, and the edge of it the line leaves from.
@@ -229,7 +269,9 @@ export function layoutCallouts(components, frame){
     });
   }
 
-  callouts.sort((a, b) => a.number - b.number);
+  // Legend order: item numbers ascending, then the lettered parts.
+  const rank = c => { const n = Number(c.number); return Number.isFinite(n) ? n : 1e6; };
+  callouts.sort((a, b) => rank(a) - rank(b) || a.order - b.order);
   ordered.forEach(c => { delete c._n; });
   return { image: { left: IMAGE_LEFT, width: IMAGE_WIDTH }, callouts };
 }

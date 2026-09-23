@@ -3,7 +3,7 @@
 // modes worth pinning down are overlapping labels, leader lines dragged
 // across the whole sheet, and numbering that doesn't match how a person
 // reads a drawing.
-const { layoutCallouts, frameForParts, pointInFrame, frameImageStyle, arrowHead,
+const { layoutCallouts, batchByNumber, frameForParts, pointInFrame, frameImageStyle, arrowHead,
         GUTTER, IMAGE_LEFT, IMAGE_WIDTH, MIN_LABEL_GAP, TAIL_LEN } =
   await import('../../web/scan/calloutLayout.js');
 
@@ -59,12 +59,12 @@ t('labels on a side keep the parts\' top-to-bottom order', () => {
 console.log('\n=== numbering reads like a drawing: left-to-right, top-to-bottom ===');
 t('same row numbers left to right', () => {
   const { callouts } = layoutCallouts([at(0.8, 0.20, 'right'), at(0.2, 0.22, 'left')]);
-  const n = Object.fromEntries(callouts.map(c => [c.component.item, c.number]));
+  const n = Object.fromEntries(callouts.map(c => [c.component.item, c.order]));
   if (n.left !== 1 || n.right !== 2) throw new Error(JSON.stringify(n));
 });
 t('a clearly lower part numbers after a higher one, whatever its x', () => {
   const { callouts } = layoutCallouts([at(0.1, 0.80, 'low'), at(0.9, 0.10, 'high')]);
-  const n = Object.fromEntries(callouts.map(c => [c.component.item, c.number]));
+  const n = Object.fromEntries(callouts.map(c => [c.component.item, c.order]));
   if (n.high !== 1 || n.low !== 2) throw new Error(JSON.stringify(n));
 });
 t('a run of parts at the same height numbers straight across, left to right', () => {
@@ -84,14 +84,30 @@ t('a run of parts at the same height numbers straight across, left to right', ()
   // Any input order must give the same answer; a cyclic comparator won't.
   for (const perm of [run, [...run].reverse(), [run[2], run[4], run[0], run[3], run[1]]]) {
     const order = layoutCallouts(perm).callouts
-      .sort((a, b) => a.number - b.number).map(c => c.component.item).join(',');
+      .sort((a, b) => a.order - b.order).map(c => c.component.item).join(',');
     if (order !== expected) throw new Error('got ' + order);
   }
 });
-t('numbers are 1..n with no gaps or repeats', () => {
+t('reading order is 1..n with no gaps or repeats', () => {
   const comps = Array.from({ length: 9 }, (_, i) => at((i % 3) / 3 + 0.1, Math.floor(i / 3) / 3 + 0.1, 'P' + i));
-  const nums = layoutCallouts(comps).callouts.map(c => c.number).sort((a, b) => a - b);
+  const nums = layoutCallouts(comps).callouts.map(c => c.order).sort((a, b) => a - b);
   if (nums.join(',') !== '1,2,3,4,5,6,7,8,9') throw new Error(nums.join(','));
+});
+
+console.log('\n=== tags are the drawing\'s own item numbers ===');
+t('a part is tagged with its item number, and repeats share it', () => {
+  const comps = [
+    { item: 'Motor', balloon: '3', position: { x: 0.9, y: 0.5 } },
+    { item: 'Hanger Bearing', balloon: '7', position: { x: 0.3, y: 0.5 } },
+    { item: 'Hanger Bearing', balloon: '7', position: { x: 0.6, y: 0.5 } },
+    { item: 'Seal', position: { x: 0.1, y: 0.5 } }
+  ];
+  const { callouts } = layoutCallouts(comps);
+  const tags = callouts.map(c => c.number).join(',');
+  if (tags !== '3,7,7,A') throw new Error('got ' + tags);
+  const batch = batchByNumber(callouts).map(b => `${b.number}x${b.places}`).join(',');
+  if (batch !== '3x1,7x2,Ax1') throw new Error('got ' + batch);
+  if (new Set(callouts.map(c => c.order)).size !== 4) throw new Error('order is not a unique key');
 });
 
 console.log('\n=== points land on the drawing, not in the gutters ===');
