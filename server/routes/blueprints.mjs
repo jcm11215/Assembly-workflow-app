@@ -12,6 +12,7 @@ import { toComponent } from '../records.mjs';
 import { pushJob } from './jobs.mjs';
 import { relativePathFor, writeFileAtomic, absolutePath, safeMimeType } from '../files.mjs';
 import * as v from '../validate.mjs';
+import { learnKey } from '../../shared/partNames.js';
 
 export const COMPONENT_STAGES = ['trough', 'screw', 'drive', 'bearings', 'tail', 'other'];
 const LOCATIONS = ['drive_end', 'tail_end', 'trough', 'screw', 'hanger', 'other', 'unknown'];
@@ -24,6 +25,31 @@ const STAGE_TO_LOCATION = {
 };
 
 const unit = x => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : Math.min(1, Math.max(0, Number(x))));
+
+/**
+ * Remembers a correction to a scanned part by its description, so the
+ * next scan reads it the same way. A new type is always remembered. A
+ * new end only when that description appears once on this drawing: the
+ * same bearing at both ends of a conveyor says nothing about which end
+ * the next one is at.
+ */
+function learnCorrection(ctx, existing, sets){
+  const drawn = String(existing.item_as_drawn || '').trim();
+  const key = learnKey(drawn);
+  if(!key || existing.extraction_method === 'manual') return;
+  const item = 'item' in sets && sets.item !== existing.item ? sets.item : null;
+  let location = null;
+  if('stage' in sets && sets.stage !== existing.stage){
+    const same = ctx.db.all('select item_as_drawn from components where blueprint_id = ?', existing.blueprint_id)
+      .filter(c => learnKey(c.item_as_drawn) === key).length;
+    if(same === 1) location = sets.installation_location;
+  }
+  if(!item && !location) return;
+  ctx.db.run(`insert into part_names (key, drawn, item, location, updated_by, updated_at) values (?, ?, ?, ?, ?, ?)
+              on conflict(key) do update set drawn = excluded.drawn, item = coalesce(excluded.item, part_names.item),
+                location = coalesce(excluded.location, part_names.location), updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+    key, drawn, item, location, ctx.user.id, now());
+}
 
 /** A component from a scan or the edit form, checked and cleaned. */
 function cleanComponent(c, sortOrder){
@@ -184,6 +210,7 @@ export default function register(r){
     const keys = Object.keys(sets);
     if(!keys.length) throw badRequest('Nothing to change.');
     ctx.db.run(`update components set ${keys.map(k => `${k} = ?`).join(', ')} where id = ?`, ...keys.map(k => sets[k]), existing.id);
+    learnCorrection(ctx, existing, sets);
     ctx.log('Part edited', { text: `${existing.job_number}: ${sets.item || existing.item}`, jobNumber: existing.job_number },
       { type: 'job', id: existing.job_id });
     return {
@@ -198,6 +225,36 @@ export default function register(r){
     ctx.log('Part removed', { text: `${existing.job_number}: ${existing.item}`, jobNumber: existing.job_number },
       { type: 'job', id: existing.job_id });
     return { job: pushJob(ctx.db, existing.job_id) };
+  }, { perm: 'blueprint.manage' });
+
+    /* ---------------- learned part names ---------------- */
+
+  /** Every correction the scan has learned, newest first. */
+  r.get('/api/parts/learned', ctx => ({
+    names: ctx.db.all(`select p.*, u.full_name as updated_by_name from part_names p
+                        left join users u on u.id = p.updated_by order by p.updated_at desc`).map(p => ({
+      key: p.key, drawn: p.drawn, item: p.item || '', location: p.location || '',
+      usedCount: p.used_count, updatedAt: p.updated_at, updatedByName: p.updated_by_name || ''
+    }))
+  }), { perm: 'blueprint.manage' });
+
+  /** Forgets one: later scans read that description afresh. */
+  r.delete('/api/parts/learned/:key', ctx => {
+    const row = ctx.db.get('select * from part_names where key = ?', ctx.params.key);
+    if(!row) throw notFound('That learned name');
+    ctx.db.run('delete from part_names where key = ?', row.key);
+    ctx.log('Learned part name forgotten', { text: row.drawn });
+    return { ok: true };
+  }, { perm: 'blueprint.manage' });
+
+  /** A scan applied these learned names: counted, so the list shows
+   *  which ones earn their keep. */
+  r.post('/api/parts/learned/used', async ctx => {
+    const { keys } = await ctx.json();
+    for(const k of (Array.isArray(keys) ? keys : []).slice(0, 500)){
+      ctx.db.run('update part_names set used_count = used_count + 1 where key = ?', String(k));
+    }
+    return { ok: true };
   }, { perm: 'blueprint.manage' });
 
   /** New display order for a blueprint's parts: `ids` in order. */

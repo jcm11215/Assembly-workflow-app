@@ -247,6 +247,22 @@ const MIGRATIONS = [
         and json_extract(a.detail, '$.to') = 'complete'),
     updated_at)
   where stage = 'complete';
+  `,
+
+  // 4: corrections people make to scanned parts, remembered by the
+  // part's description so later scans read it the same way. `key` is
+  // shared/partNames.js learnKey(); item and location are each set only
+  // once someone has corrected that.
+  `
+  create table part_names (
+    key         text primary key,
+    drawn       text not null,
+    item        text,
+    location    text,
+    used_count  integer not null default 0,
+    updated_by  text references users(id) on delete set null,
+    updated_at  text not null
+  );
   `
 ];
 

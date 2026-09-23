@@ -17,6 +17,10 @@ export const PART_GROUPS = [
   { id: 'other',  label: 'Other',           color: '#98a1a9', stage: 'other' }
 ];
 
+/** The part types a scan keeps (scan/categories.js), for correcting one. */
+export const PART_TYPES = ['Drive', 'Motor', 'Reducer', 'Seal', 'Gasket', 'Bearing', 'Hanger Bearing',
+  'Drive Shaft', 'Tail Shaft', 'Coupling Shaft', 'Auger', 'Coupling Bolts', 'UHMW'];
+
 const GROUP_BY_STAGE = { drive: 'drive', tail: 'tail', screw: 'auger', bearings: 'hanger' };
 
 /** A part's group. A leftover trough-stage part (troughs are no longer

@@ -4,7 +4,7 @@
  * one the scan missed.
  */
 import { html, useState } from '../vendor/index.js';
-import { PART_GROUPS, partGroup, tipForPart } from '../domain/parts.js';
+import { PART_GROUPS, PART_TYPES, partGroup, tipForPart } from '../domain/parts.js';
 import { addComponent, updateComponent, deleteComponent, reorderComponents } from '../lib/actions.js';
 import { useCan } from '../lib/permissions.js';
 import { fmtWhen } from '../lib/format.js';
@@ -43,7 +43,8 @@ export function PartsList({ job }){
         </div>
         ${canEdit && html`<button class="btn btn-sm" onClick=${() => setEditing(!editing)}>${editing ? 'Done' : 'Edit parts'}</button>`}
       </div>
-      ${editing && html`<p class="hint">The scanner doesn't always get it right -- fix, reorder, remove or add anything here.</p>`}
+      ${editing && html`<p class="hint">The scanner doesn't always get it right -- fix, reorder, remove or add anything here.
+        A type or end you fix is remembered, and the next scan reads that part the same way.</p>`}
       ${!parts.length && !editing && html`<p class="hint">
         The drawing is attached, but the scan didn't find any parts on it. Re-scanning often works on a second try;
         otherwise an admin can add them by hand with Edit parts.</p>`}
@@ -55,7 +56,8 @@ export function PartsList({ job }){
                         first=${i === 0} last=${i === g.parts.length - 1}
                         onUp=${() => move(g, i, -1)} onDown=${() => move(g, i, 1)}
                         onRemove=${() => run(() => deleteComponent(c.id))}
-                        onRegroup=${stage => run(() => updateComponent(c.id, { stage }))} />`)}
+                        onRegroup=${stage => run(() => updateComponent(c.id, { stage }))}
+                        onRetype=${item => run(() => updateComponent(c.id, { item }))} />`)}
           ${editing && html`
             <form class="part-add" onSubmit=${submitting(async (f, form) => {
               await addComponent(bp.id, { item: f.item, specification: f.specification, quantity: f.quantity || null, stage: g.stage });
@@ -70,7 +72,7 @@ export function PartsList({ job }){
     </div>`;
 }
 
-function PartRow({ part: c, anyPlaced, editing, first, last, onUp, onDown, onRemove, onRegroup }){
+function PartRow({ part: c, anyPlaced, editing, first, last, onUp, onDown, onRemove, onRegroup, onRetype }){
   const [tipOpen, setTipOpen] = useState(false);
   const tip = editing ? null : tipForPart(c);
   const drawn = (c.item_as_drawn || '').trim();
@@ -89,9 +91,15 @@ function PartRow({ part: c, anyPlaced, editing, first, last, onUp, onDown, onRem
         ${c.part_number && html`<div class="part-pn">PN ${c.part_number}</div>`}
         <div class="part-qty">Qty: ${c.quantity ?? '--'}</div>
         ${editing && html`
-          <select class="part-group-select" aria-label="Category" onChange=${e => onRegroup(e.currentTarget.value)}>
-            ${PART_GROUPS.map(g => html`<option key=${g.id} value=${g.stage} selected=${partGroup(c).id === g.id}>${g.label}</option>`)}
-          </select>`}
+          <div class="part-edit-row">
+            <select class="part-group-select" aria-label="Type" onChange=${e => onRetype(e.currentTarget.value)}>
+              ${!PART_TYPES.includes(c.item) && html`<option value="" selected disabled>${c.item}</option>`}
+              ${PART_TYPES.map(t => html`<option key=${t} value=${t} selected=${c.item === t}>${t}</option>`)}
+            </select>
+            <select class="part-group-select" aria-label="Where it goes" onChange=${e => onRegroup(e.currentTarget.value)}>
+              ${PART_GROUPS.map(g => html`<option key=${g.id} value=${g.stage} selected=${partGroup(c).id === g.id}>${g.label}</option>`)}
+            </select>
+          </div>`}
         ${tipOpen && html`<${TipCard} tip=${tip} />`}
       </div>
       ${editing && html`

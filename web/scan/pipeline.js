@@ -165,13 +165,16 @@ export function partsFromTable(rows, page){
  */
 export function applyLearned(parts, learned){
   let used = 0;
+  const keys = new Set();
   const out = (parts || []).map(p => {
-    const hit = learned && p && p.item_as_drawn ? learned.get(learnKey(p.item_as_drawn)) : null;
+    const key = p && p.item_as_drawn ? learnKey(p.item_as_drawn) : '';
+    const hit = learned && key ? learned.get(key) : null;
     if(!hit) return p;
     used++;
+    keys.add(key);
     return { ...p, ...(hit.item ? { item: hit.item } : {}), ...(hit.location ? { installation_location: hit.location } : {}), learned: true };
   });
-  return { parts: out, used };
+  return { parts: out, used, keys: [...keys] };
 }
 
 /** "3 at (0.86, 0.41)" hints: where the table's item numbers appear on a
@@ -234,7 +237,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
         'Transcribe the parts list from this page.', mergeParts), askPages, tally, tableBlocks)
     : { question: 'parts', parsed: { parts: [] }, error: null };
   const partsParsed = parsedOf(partsPass);
-  const { parts: withLearning, used: learnedUsed } = applyLearned([...fromText, ...(partsParsed.parts || [])], learned);
+  const { parts: withLearning, used: learnedUsed, keys: learnedKeys } = applyLearned([...fromText, ...(partsParsed.parts || [])], learned);
   const { components: tableParts, report: filterReport } = normalizeComponentsDetailed({ parts: withLearning });
   const itemNumbers = new Set(tableParts.map(p => Number(p.balloon)).filter(n => Number.isFinite(n)));
 
@@ -298,6 +301,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
       tablesReadFromText: textTables.map(p => p.page),
       tablesEnlarged: tablePages.filter(n => !textTables.some(p => p.page === n)),
       correctionsApplied: learnedUsed,
+      learnedKeys,
       failedReadings: readings.filter(r => r.error).map(r => ({ pass: r.error.pass || r.question || 'reading', message: r.error.message })),
       incompleteReadings: readings.filter(r => r.partial).map(r => `${r.question || 'reading'}: ${r.partial.message}`),
       repairedReadings: tally.repairs,

@@ -632,6 +632,8 @@ div.col{cursor:default;}
 .part-pn,.part-qty{font-size:13px;color:var(--text-3);}
 .part-controls{display:flex;gap:2px;}
 .part-group-select{margin-top:6px;max-width:260px;}
+.part-edit-row{display:flex;flex-wrap:wrap;gap:0 8px;}
+.part-edit-row .part-group-select{flex:1 1 150px;}
 .part-add{display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface-2);}
 .part-add input{flex:1 1 140px;min-width:0;}
 .part-add input.qty{flex:0 0 80px;}

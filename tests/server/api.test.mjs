@@ -274,6 +274,31 @@ test('hand-editing parts: add, edit, reorder, remove', async () => {
   assert.deepEqual(latest.blueprint.components.map(c => c.item), ['C', 'B']);
 });
 
+test('corrections to scanned parts are learned for the next scan', async () => {
+  const job = await newJob();
+  const saved = await admin.post(`/api/jobs/${job.id}/blueprints`, { components: [
+    { item: 'Unspecified item', item_as_drawn: 'HB 2-7/16', stage: 'other', extraction_method: 'bom_table' },
+    { item: 'Bearing', item_as_drawn: 'FLG BRG 2-7/16', stage: 'drive', installation_location: 'drive_end', extraction_method: 'callout' },
+    { item: 'Bearing', item_as_drawn: 'FLG BRG 2-7/16', stage: 'drive', installation_location: 'drive_end', extraction_method: 'callout' },
+    { item: 'Seal', item_as_drawn: 'W.P. SEAL', stage: 'drive', installation_location: 'drive_end', extraction_method: 'callout' }
+  ]});
+  const [hb, brgA, , seal] = saved.data.blueprint.components;
+  await admin.patch(`/api/components/${hb.id}`, { item: 'Hanger Bearing', stage: 'bearings' });
+  await admin.patch(`/api/components/${brgA.id}`, { stage: 'tail' });        // one of two: not learned
+  await admin.patch(`/api/components/${seal.id}`, { stage: 'tail' });        // the only one: learned
+  const names = (await admin.get('/api/parts/learned')).data.names;
+  const by = Object.fromEntries(names.map(n => [n.key, n]));
+  assert.deepEqual([by['HB 2 7 16'].item, by['HB 2 7 16'].location], ['Hanger Bearing', 'hanger']);
+  assert.equal(by['FLG BRG 2 7 16'], undefined, 'a part at both ends teaches nothing about ends');
+  assert.deepEqual([by['W P SEAL'].item, by['W P SEAL'].location], ['', 'tail_end']);
+
+  await admin.post('/api/parts/learned/used', { keys: ['W P SEAL'] });
+  assert.equal((await admin.get('/api/parts/learned')).data.names.find(n => n.key === 'W P SEAL').usedCount, 1);
+  assert.equal((await admin.delete(`/api/parts/learned/${encodeURIComponent('W P SEAL')}`)).status, 200);
+  assert.equal((await admin.get('/api/parts/learned')).data.names.length, 1);
+  assert.equal((await trainee.get('/api/parts/learned')).status, 403);
+});
+
 /* ---------------- activity & admin ---------------- */
 
 test('non-admins see only their own activity', async () => {

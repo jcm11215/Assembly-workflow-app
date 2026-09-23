@@ -13,16 +13,21 @@ import { confirmAction, toast, toastError } from '../ui/overlays.js';
 
 const SECTIONS = [
   { id: 'documents', label: 'Documents' },
-  { id: 'corrections', label: 'Corrections' }
+  { id: 'corrections', label: 'Corrections' },
+  { id: 'names', label: 'Part names' }
 ];
+
+const LOCATION_LABEL = { drive_end: 'Drive end', tail_end: 'Tail end', screw: 'Augers', hanger: 'Hanger bearings', trough: 'Trough', other: 'Other', unknown: 'Other' };
 
 const ACCEPT = '.pdf,.docx,.txt,.md,.csv,.tsv,.json,.log,.yaml,.yml,.html,.htm';
 
 export function Knowledge(){
   const [section, setSection] = useState('documents');
   const [data, setData] = useState(null);
+  const [names, setNames] = useState(null);
   const load = () => api.get('/api/knowledge').then(setData).catch(toastError);
-  useEffect(() => { load(); }, []);
+  const loadNames = () => api.get('/api/parts/learned').then(r => setNames(r.names)).catch(toastError);
+  useEffect(() => { load(); loadNames(); }, []);
 
   return html`
     <${PageHeader} title="Knowledge" sub="Documents the assistant searches, and corrections staff have made to its answers" />
@@ -37,8 +42,9 @@ export function Knowledge(){
         }}>Re-index everything<//>
       </div>`}
     <${Tabs} label="Section" value=${section} onChange=${setSection}
-      options=${SECTIONS.map(s => ({ ...s, count: data ? data[s.id].length : null }))} />
-    ${!data ? html`<p class="hint">Loading…</p>`
+      options=${SECTIONS.map(s => ({ ...s, count: s.id === 'names' ? (names ? names.length : null) : data ? data[s.id].length : null }))} />
+    ${section === 'names' ? html`<${PartNames} names=${names} reload=${loadNames} />`
+      : !data ? html`<p class="hint">Loading…</p>`
       : section === 'documents' ? html`<${Documents} data=${data} reload=${load} />`
       : html`<${Corrections} data=${data} reload=${load} />`}`;
 }
@@ -138,6 +144,37 @@ function Documents({ data, reload }){
             <button class="icon-btn danger" onClick=${() => remove(d)} aria-label=${`Remove ${d.title}`} title="Remove"><${Icon} name="trash" size=${18} /></button>
           </div>`)}
       </div>`}`;
+}
+
+/* ---------------- part names ---------------- */
+
+/** What drawing scans have learned from people fixing scanned parts. */
+function PartNames({ names, reload }){
+  if(!names) return html`<p class="hint">Loading…</p>`;
+  const forget = async n => {
+    if(!(await confirmAction({ title: `Forget “${n.drawn}”?`, message: 'Later scans read this part afresh.', confirmLabel: 'Forget', danger: true }))) return;
+    await api.del(`/api/parts/learned/${encodeURIComponent(n.key)}`).catch(toastError);
+    reload();
+  };
+  if(!names.length){
+    return html`<div class="card"><${Empty} icon="scan">Nothing learned yet. When someone fixes a scanned part's type or where it goes
+      (Edit parts, on a job), the next scan reads that part the same way.<//></div>`;
+  }
+  return html`
+    <p class="hint">Fixes people made to scanned parts. Every scan applies these to a part with the same description.</p>
+    <div class="card">
+      ${names.map(n => html`
+        <div key=${n.key} class="doc-row">
+          <div class="doc-main">
+            <div class="doc-title">${n.drawn}</div>
+            <div class="doc-meta">
+              ${[n.item && `Type: ${n.item}`, n.location && `Goes: ${LOCATION_LABEL[n.location] || n.location}`].filter(Boolean).join(' · ')}
+              · used ${plural(n.usedCount, 'time')} · ${n.updatedByName || 'Someone'}, ${fmtWhen(n.updatedAt)}
+            </div>
+          </div>
+          <button class="icon-btn danger" onClick=${() => forget(n)} aria-label=${`Forget ${n.drawn}`} title="Forget"><${Icon} name="trash" size=${18} /></button>
+        </div>`)}
+    </div>`;
 }
 
 /* ---------------- corrections ---------------- */

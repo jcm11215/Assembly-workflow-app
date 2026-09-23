@@ -11,6 +11,7 @@ import { html, useEffect, useState } from '../vendor/index.js';
 import { useStore } from '../lib/store.js';
 import { saveScan, logActivity } from '../lib/actions.js';
 import { explainAiError } from '../lib/ai.js';
+import { api } from '../lib/api.js';
 import { Field } from '../ui/kit.js';
 import { Icon } from '../ui/icons.js';
 import { openModal, Sheet, toast } from '../ui/overlays.js';
@@ -81,7 +82,15 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
     setError(null);
     try {
       const { blocks, thumbnail } = await contentFor(file, selection.pages, { withText: true });
-      const result = await readDrawing(blocks, { includeJobFields });
+      // Corrections people made to earlier scans. A scan without them is
+      // still a scan, so a failure here is never fatal.
+      const learned = await api.get('/api/parts/learned')
+        .then(r => new Map(r.names.map(n => [n.key, { item: n.item, location: n.location }])))
+        .catch(() => null);
+      const result = await readDrawing(blocks, { includeJobFields, learned });
+      if(result.diagnostics.learnedKeys.length){
+        api.post('/api/parts/learned/used', { keys: result.diagnostics.learnedKeys }).catch(() => {});
+      }
       if(diagnosticsWorthLogging(result.components, result.diagnostics)){
         logActivity('Blueprint scan diagnostics', { text: `${jobNumber || 'New job'}: ${scanSummary(result.components, result.diagnostics)}`,
           jobNumber, ...result.diagnostics }, jobId ? { type: 'job', id: jobId } : null);
