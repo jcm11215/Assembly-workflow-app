@@ -642,7 +642,7 @@ div.col{cursor:default;}
   vertical-align:1px;
 }
 .part-add{display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface-2);}
-.part-add input{flex:1 1 140px;min-width:0;}
+.part-add input,.part-add select{flex:1 1 140px;min-width:0;}
 .part-add input.qty{flex:0 0 80px;}
 
 /* drawing */

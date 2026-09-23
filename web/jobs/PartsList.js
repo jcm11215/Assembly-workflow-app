@@ -117,12 +117,16 @@ export function PartsList({ job }){
                         onRenumber=${balloon => run(() => updateComponent(c.id, { balloon }))} />`)}
           ${editing && html`
             <form class="part-add" onSubmit=${submitting(async (f, form) => {
-              await addComponent(bp.id, { item: f.item, specification: f.specification, quantity: f.quantity || null,
-                balloon: f.balloon || null, stage: g.stage });
+              await addComponent(bp.id, { item: f.item, item_as_drawn: f.item_as_drawn, specification: f.specification,
+                quantity: f.quantity || null, balloon: f.balloon || null, stage: g.stage });
               form.reset();
             })}>
               <input name="balloon" placeholder="Item #" class="qty" inputmode="numeric" aria-label="Item number" />
-              <input name="item" placeholder="Part name" required />
+              <select name="item" required aria-label="Part type">
+                <option value="" selected disabled>Part type…</option>
+                ${PART_TYPES.map(t => html`<option key=${t} value=${t}>${t}</option>`)}
+              </select>
+              <input name="item_as_drawn" placeholder="Wording on drawing" aria-label="As written on the drawing" />
               <input name="specification" placeholder="Spec (optional)" />
               <input name="quantity" type="number" min="0" step="any" placeholder="Qty" class="qty" />
               <button type="submit" class="btn btn-primary btn-sm">Add</button>
