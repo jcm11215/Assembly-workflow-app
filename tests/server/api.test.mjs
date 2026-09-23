@@ -296,15 +296,14 @@ test('an admin can reset a password', async () => {
   assert.equal((await c.post('/api/session', { login: 'forgetful', password: 'brand new pass' })).status, 200);
 });
 
-test('AI settings never hand keys back', async () => {
+test('only admins change the AI settings, and everyone sees whether it is set up', async () => {
   assert.equal((await assembler.get('/api/settings/ai')).status, 403);
-  const saved = await admin.put('/api/settings/ai', { provider: 'openrouter', openrouter: { key: 'sk-or-secret-1234' } });
+  assert.equal((await assembler.put('/api/settings/ai', { chatModel: 'x' })).status, 403);
+  const saved = await admin.put('/api/settings/ai', { chatModel: 'qwen2.5:7b', visionModel: 'minicpm-v' });
   assert.equal(saved.status, 200);
-  assert.equal(saved.data.openrouter.keySet, true);
-  assert.equal(saved.data.openrouter.keyHint, '…1234');
-  assert.ok(!JSON.stringify(saved.data).includes('secret'));
+  assert.equal(saved.data.visionModel, 'minicpm-v');
   const state = (await assembler.get('/api/state')).data;
-  assert.deepEqual(state.ai, { provider: 'openrouter', label: 'OpenRouter', ready: true });
+  assert.deepEqual(state.ai, { label: 'Local AI', ready: true });
 });
 
 test('only PDFs and images are accepted as drawing files', async () => {

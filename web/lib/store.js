@@ -19,7 +19,7 @@ const initial = {
   errors: [],
   tasks: [],
   completions: [],
-  ai: { provider: 'gemini', label: 'Google Gemini', ready: false },
+  ai: { label: 'Local AI', ready: false },
   activity: null,             // loaded when the Activity screen first opens
   jobFilter: 'all',           // the dashboard filter; the metric tiles set it too
   aiPull: null,               // a local model downloading (admins only): { model, status, total, completed, done? }

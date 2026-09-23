@@ -41,8 +41,8 @@ export async function answer(question){
     'manufacturing shop. Answer from the shop data below. Be concise and practical: short paragraphs or bullets, name job numbers, ' +
     'and rank priorities by overdue status, priority and open blockers. When the shop\'s knowledge base is quoted below, use it and name the document. For a shift summary or planning report, use short headers ' +
     'and end with an action list. Do not repeat the raw data back.\n\n' + shopContext(getState());
-  const { text, substitution, sources, knowledgeNote } = await askAI(system, question, { knowledge: question });
-  return { text: text || 'No answer came back. Try again.', substitution, sources, knowledgeNote };
+  const { text, sources, knowledgeNote } = await askAI(system, question, { knowledge: question });
+  return { text: text || 'No answer came back. Try again.', sources, knowledgeNote };
 }
 
 /* ---------------- actions ---------------- */

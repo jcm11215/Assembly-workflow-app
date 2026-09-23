@@ -105,7 +105,7 @@ test('a job is created, ticked, and seen live by a second person', { skip }, asy
 });
 
 test('a new job is read off a drawing', { skip }, async () => {
-  await api(admin, 'PUT', '/api/settings/ai', { provider: 'local', local: { url: `http://127.0.0.1:${PORT + 1}`, chatModel: 'fake-chat', visionModel: 'fake-vision', fallback: false } });
+  await api(admin, 'PUT', '/api/settings/ai', { url: `http://127.0.0.1:${PORT + 1}`, chatModel: 'fake-chat', visionModel: 'fake-vision' });
   await admin.goto(BASE + '/#/');
   await admin.click('text=New job from a drawing');
   await admin.setInputFiles('input[type=file]', path.join(import.meta.dirname, 'drawing.pdf'));

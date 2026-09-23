@@ -118,13 +118,10 @@ export async function readDrawing(blocks, { includeJobFields = false } = {}){
   };
 
   const tally = { reused: 0, requests: 0, splits: 0, repairs: [] };
-  const substitutions = [];
   const layer = (question, promptVersion, buildPrompt, instruction, merge) => ({
     question, promptVersion, buildPrompt, instruction, merge,
     call: async (system, pageBlocks, text) => {
-      const out = await askAI(system, [...pageBlocks, { type: 'text', text }]);
-      if(out.substitution) substitutions.push(out.substitution);
-      return out.text;
+      return (await askAI(system, [...pageBlocks, { type: 'text', text }])).text;
     },
     parse: text => parseJsonReply(text, question)
   });
@@ -185,8 +182,7 @@ export async function readDrawing(blocks, { includeJobFields = false } = {}){
       repairedReadings: tally.repairs,
       requestsMade: tally.requests,
       readingsReused: tally.reused,
-      timesDivided: tally.splits,
-      substitution: substitutions[0] || null
+      timesDivided: tally.splits
     }
   };
 }
@@ -195,14 +191,13 @@ export async function readDrawing(blocks, { includeJobFields = false } = {}){
 export function scanSummary(components, d){
   const reused = d.readingsReused
     ? ` (${d.readingsReused} reading${d.readingsReused === 1 ? '' : 's'} carried over from the last attempt)` : '';
-  const sub = d.substitution ? ` Read by ${d.substitution.used}: ${d.substitution.asked} ${d.substitution.reason || 'was busy'}.` : '';
-  if(components.length) return `Found ${components.length} part${components.length === 1 ? '' : 's'} on the drawing${reused}.${sub}`;
+  if(components.length) return `Found ${components.length} part${components.length === 1 ? '' : 's'} on the drawing${reused}.`;
   const failed = d.failedReadings.map(f => f.pass);
-  if(failed.includes('parts')) return `The parts list couldn't be read (${failed.join(' and ')} failed). Try again -- it often works on a second attempt.${sub}`;
+  if(failed.includes('parts')) return `The parts list couldn't be read (${failed.join(' and ')} failed). Try again -- it often works on a second attempt.`;
   if((d.droppedNames || []).length && !d.kept){
-    return `The scan found ${d.returnedByAi} items, but none are parts this app tracks (${d.droppedNames.slice(0, 3).join(', ')}…). Add what you need by hand.${sub}`;
+    return `The scan found ${d.returnedByAi} items, but none are parts this app tracks (${d.droppedNames.slice(0, 3).join(', ')}…). Add what you need by hand.`;
   }
-  return `The scan finished but found no parts on this drawing. Re-scanning sometimes helps; otherwise add them by hand.${sub}`;
+  return `The scan finished but found no parts on this drawing. Re-scanning sometimes helps; otherwise add them by hand.`;
 }
 
 /** Only worth recording when a scan came back thin or something failed. */

@@ -1,79 +1,40 @@
-// The AI providers' retry and fallback rules, against stand-in responses.
+// The local AI: settings, message shaping, and retry rules.
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { callAI, retryAfterMs, normalizeSettings, applyEdit, adminView } from '../../server/ai.mjs';
+import { callAI, aiSettings, applyEdit, aiSummary } from '../../server/ai.mjs';
 import { toUserMessage, fitProblem, normalizeOllamaUrl } from '../../server/ollama.mjs';
 
 const realFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = realFetch; });
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const geminiOk = text => json(200, { candidates: [{ content: { parts: [{ text }] } }] });
+const chatOk = text => json(200, { message: { content: text }, done: true, prompt_eval_count: 10, eval_count: 5 });
 
-test('retry-after comes from the RetryInfo detail, the message, or the header', () => {
-  assert.equal(retryAfterMs({ error: { details: [{ retryDelay: '1.5s' }] } }), 1500);
-  assert.equal(retryAfterMs({ error: { message: 'Please retry in 2.2s.' } }), 2200);
-  assert.equal(retryAfterMs({}, new Headers({ 'retry-after': '3' })), 3000);
-  assert.equal(retryAfterMs({}), null);
-});
-
-test('Gemini: a 429 waits and retries the same model', async () => {
-  const models = [];
+test('a model that fails once while loading is asked again', async () => {
   let n = 0;
-  globalThis.fetch = async url => {
-    models.push(/models\/([^:]+):/.exec(url)[1]);
-    return ++n === 1 ? json(429, { error: { message: 'quota', details: [{ retryDelay: '0.01s' }] } }) : geminiOk('fine');
-  };
-  const out = await callAI({ provider: 'gemini', gemini: { key: 'k', model: 'gemini-a' } }, 'sys', 'hi');
+  globalThis.fetch = async () => (++n === 1 ? json(500, { error: 'model is loading' }) : chatOk('fine'));
+  const out = await callAI({ chatModel: 'qwen2.5:7b' }, 'sys', 'hi');
   assert.equal(out.text, 'fine');
-  assert.deepEqual(models, ['gemini-a', 'gemini-a']);
-  assert.equal(out.substitution, null);
+  assert.equal(n, 2);
 });
 
-test('Gemini: an overloaded model is swapped for the next one, and says so', async () => {
-  globalThis.fetch = async url => (url.includes('gemini-a:')
-    ? json(503, { error: { message: 'The model is overloaded.' } })
-    : geminiOk('from another model'));
-  const out = await callAI({ provider: 'gemini', gemini: { key: 'k', model: 'gemini-a' } }, 'sys', 'hi');
-  assert.equal(out.text, 'from another model');
-  assert.equal(out.substitution.asked, 'gemini-a');
+test('an unreachable Ollama is reported as unreachable, not retried', async () => {
+  let n = 0;
+  globalThis.fetch = async () => { n++; throw new TypeError('fetch failed'); };
+  await assert.rejects(callAI({ chatModel: 'x' }, 's', 'x'), e => e.unreachable && /Is Ollama running/.test(e.message));
+  assert.equal(n, 1);
 });
 
-test('Gemini: a rejected key is never retried', async () => {
-  let calls = 0;
-  globalThis.fetch = async () => { calls++; return json(400, { error: { message: 'API key not valid.' } }); };
-  await assert.rejects(callAI({ provider: 'gemini', gemini: { key: 'bad' } }, 's', 'x'), /API key not valid/);
-  assert.equal(calls, 1);
+test('no model picked is a setup problem the app can explain', async () => {
+  await assert.rejects(callAI({}, 's', 'x'), e => e.notConfigured);
+  assert.deepEqual(aiSummary({}), { label: 'Local AI', ready: false });
 });
 
-test('OpenRouter: the real reason is dug out of error.metadata.raw', async () => {
-  globalThis.fetch = async () => json(400, { error: { message: 'Provider returned error', metadata: { raw: JSON.stringify({ error: { message: 'image input not supported' } }) } } });
-  await assert.rejects(callAI({ provider: 'openrouter', openrouter: { key: 'k' } }, 's', 'x'), /Provider returned error: image input not supported/);
-});
-
-test('Local AI: unreachable falls back to OpenRouter when allowed, and says so', async () => {
-  globalThis.fetch = async url => {
-    if(String(url).startsWith('http://local')) throw new TypeError('fetch failed');
-    return json(200, { choices: [{ message: { content: 'from openrouter' } }] });
-  };
-  const settings = { provider: 'local', local: { url: 'http://local', chatModel: 'qwen2.5:7b', fallback: true }, openrouter: { key: 'or', model: 'm/free' } };
-  const out = await callAI(settings, 's', 'x');
-  assert.equal(out.text, 'from openrouter');
-  assert.match(out.substitution.used, /OpenRouter/);
-  // Remembered as down for a minute: the next call goes straight to the fallback.
-  const again = await callAI(settings, 's', 'x');
-  assert.equal(again.substitution.reason, 'was unreachable a moment ago');
-});
-
-test('settings: keys are kept unless replaced, and never shown back', () => {
-  let s = applyEdit({}, { provider: 'openrouter', openrouter: { key: 'sk-secret-9876', model: 'x/y' } });
-  s = applyEdit(s, { openrouter: { model: 'x/z' } });
-  assert.equal(s.openrouter.key, 'sk-secret-9876');
-  assert.equal(s.openrouter.model, 'x/z');
-  assert.ok(!JSON.stringify(adminView(s)).includes('secret'));
-  assert.equal(applyEdit(s, { openrouter: { key: '' } }).openrouter.key, '');
-  assert.throws(() => applyEdit(s, { provider: 'skynet' }));
-  assert.equal(normalizeSettings(null).provider, 'gemini');
+test('settings from the earlier version, with a provider and a local section, still read', () => {
+  const s = aiSettings({ provider: 'gemini', gemini: { key: 'k' }, local: { chatModel: 'qwen2.5:7b', url: 'box:11434' } });
+  assert.equal(s.chatModel, 'qwen2.5:7b');
+  assert.equal(s.url, 'http://box:11434');
+  assert.ok(!('gemini' in s));
 });
 
 test('Ollama addresses are tidied, and blank means this machine', () => {
@@ -83,12 +44,12 @@ test('Ollama addresses are tidied, and blank means this machine', () => {
 });
 
 test('local AI settings: models and sizes kept within bounds', () => {
-  const s = applyEdit({}, { provider: 'local', local: { chatModel: 'qwen2.5:7b', contextTokens: 999999, temperature: '0.5' } });
-  assert.equal(s.local.chatModel, 'qwen2.5:7b');
-  assert.equal(s.local.contextTokens, 131072);
-  assert.equal(s.local.temperature, 0.5);
-  assert.equal(s.local.embedModel, 'nomic-embed-text');
-  assert.equal(applyEdit(s, { local: { visionModel: 'minicpm-v' } }).local.chatModel, 'qwen2.5:7b');
+  const s = applyEdit({}, { chatModel: 'qwen2.5:7b', contextTokens: 999999, temperature: '0.5' });
+  assert.equal(s.chatModel, 'qwen2.5:7b');
+  assert.equal(s.contextTokens, 131072);
+  assert.equal(s.temperature, 0.5);
+  assert.equal(s.embedModel, 'nomic-embed-text');
+  assert.equal(applyEdit(s, { visionModel: 'minicpm-v' }).chatModel, 'qwen2.5:7b');
 });
 
 test('Ollama messages: pages keep their captions and text layers', () => {

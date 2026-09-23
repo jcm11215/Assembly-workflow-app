@@ -57,9 +57,8 @@ export function Assistant(){
     const id = push({ role: 'ai', loading: true, text: 'Thinking…' });
     setBusy(true);
     try {
-      const { text: reply, substitution, sources, knowledgeNote } = await answer(text);
-      patch(id, { loading: false, text: reply, question: text, sources,
-                  note: [substitution && `Answered by ${substitution.used}.`, knowledgeNote].filter(Boolean).join(' ') || null });
+      const { text: reply, sources, knowledgeNote } = await answer(text);
+      patch(id, { loading: false, text: reply, question: text, sources, note: knowledgeNote });
     } catch (e) {
       patch(id, { loading: false, error: true, text: explainAiError(e) });
     } finally { setBusy(false); }
@@ -93,7 +92,7 @@ export function Assistant(){
 
   return html`
     <h2 class="screen-title">Assistant</h2>
-    ${!ai.ready && html`<p class="error-text">The AI (${ai.label}) isn't set up yet. An admin can set it up in Settings.</p>`}
+    ${!ai.ready && html`<p class="error-text">The local AI isn't set up yet. An admin can set it up in Settings.</p>`}
     <div class="quick">
       ${QUICK.map(q => html`<button key=${q} class="chip" disabled=${busy} onClick=${() => ask(q)}>${q}</button>`)}
     </div>

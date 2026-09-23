@@ -1,7 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer } from './harness.mjs';
-import { resetLocalState } from '../../server/ai.mjs';
 import { startFakeOllama } from '../fake-ollama.mjs';
 
 let srv, admin, assembler;
@@ -71,9 +70,8 @@ test('a change by one person reaches another person\'s open app', async () => {
 /* ---------------- the local AI (a stand-in Ollama) ---------------- */
 
 test('a drawing goes to the vision model with its PDF text layer', async () => {
-  resetLocalState();
   const fake = await startFakeOllama({ chat: () => '{"ok":true}' });
-  await admin.put('/api/settings/ai', { provider: 'local', local: { url: fake.url, chatModel: 'fake-chat', visionModel: 'fake-vision' } });
+  await admin.put('/api/settings/ai', { url: fake.url, chatModel: 'fake-chat', visionModel: 'fake-vision' });
   const res = await assembler.post('/api/ai/chat', {
     system: 'Read the drawing.',
     content: [
@@ -92,9 +90,8 @@ test('a drawing goes to the vision model with its PDF text layer', async () => {
   assert.match(sent.messages[0].content, /authorized employee/);
 });
 
-test('an unreachable local AI with no fallback says so plainly', async () => {
-  resetLocalState();
-  await admin.put('/api/settings/ai', { provider: 'local', local: { url: 'http://127.0.0.1:9', chatModel: 'x', fallback: false } });
+test('an unreachable local AI says so plainly', async () => {
+  await admin.put('/api/settings/ai', { url: 'http://127.0.0.1:9', chatModel: 'x' });
   const res = await assembler.post('/api/ai/chat', { system: 's', content: 'hi' });
   assert.equal(res.status, 502);
   assert.equal(res.data.unreachable, true);
@@ -102,10 +99,9 @@ test('an unreachable local AI with no fallback says so plainly', async () => {
 });
 
 test('knowledge: a document and a correction reach the answer, and are cited', async () => {
-  resetLocalState();
   let system = '';
   const fake = await startFakeOllama({ chat: body => { system = body.messages[0].content; return 'Torque them to 45 ft-lb.'; } });
-  await admin.put('/api/settings/ai', { provider: 'local', local: { url: fake.url, chatModel: 'fake-chat', visionModel: 'fake-vision' } });
+  await admin.put('/api/settings/ai', { url: fake.url, chatModel: 'fake-chat', visionModel: 'fake-vision' });
 
   const text = 'Hanger bearing bolts: torque hanger bearing bolts to 45 ft-lb, then re-check after first run.';
   const up = await admin.raw('POST', '/api/knowledge/documents?name=Hanger%20procedure.md&collection=procedures', new TextEncoder().encode(text));
@@ -144,7 +140,7 @@ test('knowledge: a document and a correction reach the answer, and are cited', a
 
 test('knowledge: a PDF waits for the text the browser reads from it', async () => {
   const fake = await startFakeOllama();
-  await admin.put('/api/settings/ai', { local: { url: fake.url } });
+  await admin.put('/api/settings/ai', { url: fake.url });
   const up = await admin.raw('POST', '/api/knowledge/documents?name=Manual.pdf', new Uint8Array([37, 80, 68, 70, 1, 2, 3]));
   assert.equal(up.data.needsText, true);
   assert.equal(up.data.document.status, 'pending');
@@ -159,7 +155,7 @@ test('knowledge: a PDF waits for the text the browser reads from it', async () =
 
 test('the local model list and a download, through Ollama', async () => {
   const fake = await startFakeOllama();
-  await admin.put('/api/settings/ai', { local: { url: fake.url } });
+  await admin.put('/api/settings/ai', { url: fake.url });
   const st = await admin.get('/api/ai/local');
   assert.equal(st.data.up, true);
   assert.deepEqual(st.data.models.map(m => m.id), ['fake-chat', 'fake-vision', 'nomic-embed-text']);
@@ -168,8 +164,8 @@ test('the local model list and a download, through Ollama', async () => {
   fake.close();
 });
 
-test('asking with no provider set up is a 409 the app can explain', async () => {
-  await admin.put('/api/settings/ai', { provider: 'gemini', gemini: { key: '' } });
+test('asking with no model picked is a 409 the app can explain', async () => {
+  await admin.put('/api/settings/ai', { chatModel: '', visionModel: '' });
   const res = await assembler.post('/api/ai/chat', { system: 's', content: 'hi' });
   assert.equal(res.status, 409);
   assert.equal(res.data.code, 'ai_not_configured');

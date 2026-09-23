@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { uuid, getSetting, putSetting } from './db.mjs';
-import { normalizeSettings, applyEdit } from './ai.mjs';
+import { aiSettings, applyEdit } from './ai.mjs';
 import { writeFileAtomic } from './files.mjs';
 import { collectionOf, extOf, sha256, ACCEPTED } from './knowledge.mjs';
 
@@ -28,18 +28,17 @@ export async function importLocalAi(db, filesDir, folder, log = console.log){
   const embedModel = cfg.embed_model || 'nomic-embed-text';
 
   // Its model choices, where this app has none yet.
-  const current = normalizeSettings(getSetting(db, 'ai', {}));
-  const edit = { local: {} };
-  // Nothing else set up yet: the local AI is the one to use.
-  if(!current.gemini.key && !current.openrouter.key) edit.provider = 'local';
-  if(!current.local.chatModel && cfg.chat_model) edit.local.chatModel = cfg.chat_model;
-  if(!current.local.visionModel && cfg.vision_model) edit.local.visionModel = cfg.vision_model;
-  if(!getSetting(db, 'ai', null)?.local?.embedModel) edit.local.embedModel = embedModel;
-  if(cfg.ollama_url && !getSetting(db, 'ai', null)?.local?.url) edit.local.url = cfg.ollama_url;
-  if(cfg.context_tokens) edit.local.contextTokens = cfg.context_tokens;
-  if(cfg.vision_context_tokens) edit.local.visionContextTokens = cfg.vision_context_tokens;
-  if(cfg.temperature != null) edit.local.temperature = cfg.temperature;
-  putSetting(db, 'ai', applyEdit(getSetting(db, 'ai', {}), edit));
+  const saved = getSetting(db, 'ai', null);
+  const current = aiSettings(saved);
+  const edit = {};
+  if(!current.chatModel && cfg.chat_model) edit.chatModel = cfg.chat_model;
+  if(!current.visionModel && cfg.vision_model) edit.visionModel = cfg.vision_model;
+  if(!(saved?.embedModel || saved?.local?.embedModel)) edit.embedModel = embedModel;
+  if(cfg.ollama_url && !(saved?.url || saved?.local?.url)) edit.url = cfg.ollama_url;
+  if(cfg.context_tokens) edit.contextTokens = cfg.context_tokens;
+  if(cfg.vision_context_tokens) edit.visionContextTokens = cfg.vision_context_tokens;
+  if(cfg.temperature != null) edit.temperature = cfg.temperature;
+  putSetting(db, 'ai', applyEdit(saved, edit));
 
   const old = new DatabaseSync(dbFile, { readOnly: true });
   const cols = new Set(old.prepare('pragma table_info(documents)').all().map(c => c.name));

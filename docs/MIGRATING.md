@@ -63,8 +63,9 @@ was never finished uploading in the old app.
   single Assembler role become **Assembler A**; Assembler B stays **Assembler B**.
   Every assembler can now work every job -- assignment is who leads a job,
   not who may touch it.
-- **AI keys.** The old app kept them in each browser; the new one keeps
-  them on the server. An admin enters them once under **Settings → AI**.
+- **AI.** The old app used Gemini or OpenRouter with keys kept in each
+  browser. The new one uses only the shop's own AI (Ollama), set up once
+  by an admin under **Settings → AI**. No keys are needed.
 
 ## From the stand-alone Local AI Assistant
 

@@ -9,12 +9,12 @@
 import fs from 'node:fs';
 import { badRequest, conflict, notFound, MB } from '../http.mjs';
 import { uuid, now, getSetting } from '../db.mjs';
-import { normalizeSettings } from '../ai.mjs';
+import { aiSettings } from '../ai.mjs';
 import { writeFileAtomic, absolutePath, deleteJobFiles } from '../files.mjs';
 import * as kb from '../knowledge.mjs';
 import * as v from '../validate.mjs';
 
-const localOf = db => normalizeSettings(getSetting(db, 'ai', {})).local;
+const localOf = db => aiSettings(getSetting(db, 'ai', {}));
 
 export const toDoc = r => ({
   id: r.id, title: r.title, collection: kb.collectionOf(r.collection), fileName: r.file_name, mimeType: r.mime_type,

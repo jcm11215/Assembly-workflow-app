@@ -85,9 +85,9 @@ fi
 
 if ! command -v ollama >/dev/null 2>&1; then
   echo
-  echo "For the local AI (drawings, the assistant and its knowledge base on this machine), install Ollama:"
+  echo "The AI (drawings, the assistant and its knowledge base) needs Ollama on this machine:"
   echo "  curl -fsSL https://ollama.com/install.sh | sh"
-  echo "then pick models in the app under Settings -> AI. (Gemini or OpenRouter work without it.)"
+  echo "then pick models in the app under Settings -> AI."
 fi
 if systemctl list-unit-files localai.service >/dev/null 2>&1 && systemctl is-enabled --quiet localai 2>/dev/null; then
   echo

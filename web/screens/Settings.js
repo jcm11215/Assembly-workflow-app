@@ -38,8 +38,7 @@ export function Settings({ close }){
       <h3 class="section-title">AI</h3>
       ${isAdmin
         ? html`<${AiSettings} />`
-        : html`<p class="hint">Drawings and the assistant use <b>${ai.label}</b>${ai.ready ? '.' : ', which an admin has not set up yet.'}
-            An admin changes this here.</p>`}
+        : html`<p class="hint">Drawings and the assistant use the shop's local AI${ai.ready ? '.' : ', which an admin has not set up yet.'}</p>`}
     <//>`;
 }
 
@@ -59,77 +58,33 @@ function PasswordForm({ onDone }){
     </form>`;
 }
 
-const PROVIDERS = [
-  { value: 'gemini', label: 'Google Gemini' },
-  { value: 'openrouter', label: 'OpenRouter' },
-  { value: 'local', label: 'Local AI (Ollama, on the shop\'s own hardware)' }
-];
-
 function AiSettings(){
   const [s, setS] = useState(null);
-  const [provider, setProvider] = useState('gemini');
-  const [models, setModels] = useState({});
   const [test, setTest] = useState(null);
 
-  useEffect(() => {
-    api.get('/api/settings/ai').then(v => { setS(v); setProvider(v.provider); }).catch(toastError);
-  }, []);
+  useEffect(() => { api.get('/api/settings/ai').then(setS).catch(toastError); }, []);
   if(!s) return html`<p class="hint">Loading…</p>`;
 
   const save = submitting(async f => {
-    const edit = { provider: f.provider };
-    if(f.provider === 'gemini') edit.gemini = { model: f.model, ...(f.key ? { key: f.key } : {}) };
-    if(f.provider === 'openrouter') edit.openrouter = { model: f.model, ...(f.key ? { key: f.key } : {}) };
-    if(f.provider === 'local'){
-      edit.local = {
-        url: f.url, chatModel: f.chatModel, visionModel: f.visionModel, embedModel: f.embedModel,
-        contextTokens: f.contextTokens, visionContextTokens: f.visionContextTokens, temperature: f.temperature,
-        fallback: f.fallback === 'on'
-      };
-    }
-    if(f.orKey) edit.openrouter = { ...(edit.openrouter || {}), key: f.orKey };
-    setS(await api.put('/api/settings/ai', edit));
+    setS(await api.put('/api/settings/ai', {
+      url: f.url, chatModel: f.chatModel, visionModel: f.visionModel, embedModel: f.embedModel,
+      contextTokens: f.contextTokens, visionContextTokens: f.visionContextTokens, temperature: f.temperature
+    }));
     setTest(null);
     toast('AI settings saved.', { kind: 'ok' });
   });
 
-  const loadModels = async p => {
-    try { setModels({ ...models, [p]: (await api.get(`/api/ai/models?provider=${p}`)).models }); }
-    catch (e) { toastError(e); }
-  };
-
-  const cfg = s[provider];
-  const modelList = models[provider];
   return html`
-    <p class="hint">Reads drawings and answers the assistant for everyone. Keys are stored on the server and never shown again.</p>
-    <form onSubmit=${save} key=${provider}>
-      <${Field} label="Provider">
-        <${Select} name="provider" value=${provider} options=${PROVIDERS} onChange=${e => setProvider(e.currentTarget.value)} />
-      <//>
-
-      ${provider !== 'local' && html`
-        <${Field} label=${provider === 'gemini' ? 'Gemini API key' : 'OpenRouter API key'}
-                  hint=${cfg.keySet ? `A key is saved (${cfg.keyHint}). Leave blank to keep it.` : 'No key saved yet.'}>
-          <input name="key" type="password" autocomplete="off" spellcheck="false" placeholder=${cfg.keySet ? 'Keep the saved key' : 'Paste the key'} />
-        <//>
-        <${Field} label="Model" hint=${provider === 'gemini' ? 'If this model is busy, another Gemini model answers and the scan says so.' : 'It must be able to read images.'}>
-          ${modelList
-            ? html`<${Select} name="model" value=${cfg.model}
-                              options=${[...(modelList.some(m => m.id === cfg.model) ? [] : [{ value: cfg.model, label: `${cfg.model} (saved; not in the list)` }]),
-                                         ...modelList.map(m => ({ value: m.id, label: `${m.name}${m.free ? ' -- free' : ''}` }))]} />`
-            : html`<input name="model" defaultValue=${cfg.model} spellcheck="false" />`}
-        <//>
-        <button type="button" class="btn btn-sm" onClick=${() => loadModels(provider)}>Load the model list</button>`}
-
-      ${provider === 'local' && html`<${LocalAi} cfg=${cfg} orKeySet=${s.openrouter.keySet} />`}
-
+    <p class="hint">The shop's own AI, run by Ollama on the server. It reads drawings and answers the assistant for everyone;
+      nothing leaves the shop's hardware.</p>
+    <form onSubmit=${save}>
+      <${LocalAi} cfg=${s} />
       <div class="row-actions">
         <button type="submit" class="btn btn-primary">Save</button>
         <${AsyncButton} class="btn" busyLabel="Testing…" onClick=${async () => setTest(await api.post('/api/ai/test'))}>Test the saved settings<//>
       </div>
       ${test && html`<p class=${test.ok ? 'ok-text' : 'error-text'}>
-        ${test.ok ? `Working: ${test.provider} answered in ${(test.ms / 1000).toFixed(1)} s.` : `Not working: ${test.error}`}
-        ${test.substitution && ` (${test.substitution.used} answered instead of ${test.substitution.asked})`}</p>`}
+        ${test.ok ? `Working: the local AI answered in ${(test.ms / 1000).toFixed(1)} s.` : `Not working: ${test.error}`}</p>`}
     </form>`;
 }
 
@@ -148,7 +103,7 @@ const SUGGESTED = [
  * what Ollama has installed, and a model it doesn't have can be downloaded
  * from here.
  */
-function LocalAi({ cfg, orKeySet }){
+function LocalAi({ cfg }){
   const [status, setStatus] = useState(null);
   const pull = useStore(s => s.aiPull);
   const pullRef = useRef(null);
@@ -229,9 +184,5 @@ function LocalAi({ cfg, orKeySet }){
       <${Field} label="Context size for drawings (tokens)" hint="Bigger fits more pages per request, and needs more memory. Scans split pages that don't fit.">
         <input name="visionContextTokens" type="number" min="2048" max="131072" step="1024" defaultValue=${cfg.visionContextTokens} /><//>
       <${Field} label="Temperature" hint="Lower is more literal. 0.3 suits reading drawings."><input name="temperature" type="number" min="0" max="2" step="0.1" defaultValue=${cfg.temperature} /><//>
-    </details>
-
-    <label class="check"><input type="checkbox" name="fallback" defaultChecked=${cfg.fallback} />
-      Use OpenRouter when the local AI is off. ${orKeySet ? 'An OpenRouter key is saved.' : 'Needs an OpenRouter key:'}</label>
-    ${!orKeySet && html`<${Field} label="OpenRouter key (for the fallback)"><input name="orKey" type="password" autocomplete="off" /><//>`}`;
+    </details>`;
 }

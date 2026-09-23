@@ -79,10 +79,8 @@ Run from `/opt/assembly-workflow` as `sudo -u assembly env DATA_DIR=/var/lib/ass
   assembly-workflow`)? Does `tailscale serve status` still show port 8080?
 - **Someone forgot their password.** Admin → Team → Set password. Only an
   admin can do this; there is no email reset.
-- **Scans fail.** Settings → AI → Test the saved settings. The message is
-  the provider's own ("API key not valid", "quota exceeded"). For the local
-  AI, Settings → AI shows whether Ollama answers and what it has
-  installed; from the server, `curl http://127.0.0.1:11434/api/tags` and
+- **Scans fail.** Settings → AI → Test the saved settings; that page also
+  shows whether Ollama answers and what it has installed; from the server, `curl http://127.0.0.1:11434/api/tags` and
   `systemctl status ollama`. "Too large for the local model's context" is
   handled by splitting pages; if a scan still fails, raise the drawing
   context size under Advanced, or pick a vision model that uses fewer

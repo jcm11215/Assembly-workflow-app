@@ -11,11 +11,10 @@ SQLite database and the drawings in a folder beside it. Phones, tablets and
 computers reach it over [Tailscale](https://tailscale.com), so it is never
 on the public internet.
 
-The AI that reads drawings and answers the assistant can run on the same
-hardware too: the app drives [Ollama](https://ollama.com) directly, and
-keeps a knowledge base of the shop's own documents and staff corrections
-that the assistant answers from. Google Gemini or OpenRouter can stand in
-(or be used instead) if you'd rather not run models locally.
+The AI that reads drawings and answers the assistant runs on the same
+hardware: the app drives [Ollama](https://ollama.com) directly, and keeps a
+knowledge base of the shop's own documents and staff corrections that the
+assistant answers from. Nothing is sent to an outside AI service.
 
 ## Running it
 

@@ -16,7 +16,7 @@ it: SQLite is built into Node 22, and the browser libraries are vendored.
 │  routes/*     one file per area; permissions checked per handler            │
 │  records.mjs  rows → the exact objects the app renders                      │
 │  live.mjs     Server-Sent Events: every change pushed to every open app     │
-│  ai.mjs       Gemini / OpenRouter / local AI, keys held here                │
+│  ai.mjs       AI settings, and asking the local AI                          │
 │  ollama.mjs   the local models: chat, drawings, embeddings, downloads       │
 │  knowledge.mjs  documents + corrections the assistant searches              │
 │  files.mjs    drawings on disk, a folder per job                            │
@@ -89,11 +89,10 @@ found on the server without the app.
 
 ## AI
 
-The app never talks to an AI provider directly. It sends a prompt and
-content blocks to `POST /api/ai/chat`, and the server calls whichever
-provider an admin set up, with retries: it waits out rate limits, switches
-away from an overloaded Gemini model, and falls back from the local AI to
-OpenRouter if allowed. A substitution is reported, never silent.
+The AI runs on the shop's own hardware, with Ollama; no outside AI service
+is used. The app sends a prompt and content blocks to `POST /api/ai/chat`,
+and the server asks Ollama, trying once more if a model fails while
+loading.
 
 **Local AI.** `ollama.mjs` calls Ollama's native `/api/chat`, not its
 OpenAI-style endpoint, because only the native one honours `num_ctx`: a
@@ -114,4 +113,4 @@ question>` and adds the best passages -- weighted by collection, so the
 shop's own procedures outrank vendor catalogs -- and any staff correction
 to a similar question, labelled as overriding everything else. So a
 correction counts from the next question on, with no retraining. The
-search runs on the local embedding model whichever provider answers.
+search runs on the local embedding model.

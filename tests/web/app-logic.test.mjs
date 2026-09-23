@@ -65,7 +65,7 @@ function aiReplies(fn){
   globalThis.fetch = async (url, opt) => {
     const body = JSON.parse(opt.body);
     const text = fn(body.system, body.content);
-    return new Response(JSON.stringify({ text, substitution: null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ text }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
 }
 
