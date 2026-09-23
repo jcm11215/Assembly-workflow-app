@@ -374,3 +374,13 @@ test('removing a scanned part teaches later scans to leave it out', async () => 
   const names = (await admin.get('/api/parts/learned')).data.names;
   assert.equal(names.find(n => n.key === 'FOOT W END SHAFT').item, 'Not a part');
 });
+
+test('clearing away a repeated part teaches nothing', async () => {
+  const job = await newJob();
+  const saved = await admin.post(`/api/jobs/${job.id}/blueprints`, { components: [
+    { item: 'Bearing', item_as_drawn: 'FLG BRG 3-7/16 REPEAT', extraction_method: 'callout' },
+    { item: 'Bearing', item_as_drawn: 'FLG BRG 3-7/16 REPEAT', extraction_method: 'callout' }] });
+  await admin.delete(`/api/components/${saved.data.blueprint.components[0].id}`);
+  const names = (await admin.get('/api/parts/learned')).data.names;
+  assert.ok(!names.some(n => n.key === 'FLG BRG 3 7 16 REPEAT'));
+});

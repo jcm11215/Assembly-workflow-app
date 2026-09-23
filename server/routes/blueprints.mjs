@@ -241,9 +241,13 @@ export default function register(r){
     const existing = loadComponent(ctx.db, ctx.params.id);
     ctx.db.run('delete from components where id = ?', existing.id);
     // A scanned part removed is remembered as not a part, so the next
-    // scan leaves that description out.
+    // scan leaves that description out -- unless another entry with the
+    // same description is still on the list: then it was a repeat being
+    // cleared away, not a part that doesn't belong.
     const key = learnKey(existing.item_as_drawn);
-    if(key && existing.extraction_method !== 'manual'){
+    const twin = key && ctx.db.all('select item_as_drawn from components where blueprint_id = ?', existing.blueprint_id)
+      .some(c => learnKey(c.item_as_drawn) === key);
+    if(key && !twin && existing.extraction_method !== 'manual'){
       ctx.db.run(`insert into part_names (key, drawn, item, location, updated_by, updated_at) values (?, ?, ?, null, ?, ?)
                   on conflict(key) do update set drawn = excluded.drawn, item = excluded.item, location = null,
                     updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
