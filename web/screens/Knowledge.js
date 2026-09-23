@@ -21,8 +21,8 @@ const LOCATION_LABEL = { drive_end: 'Drive end', tail_end: 'Tail end', screw: 'A
 
 const ACCEPT = '.pdf,.docx,.txt,.md,.csv,.tsv,.json,.log,.yaml,.yml,.html,.htm';
 
-export function Knowledge(){
-  const [section, setSection] = useState('documents');
+export function Knowledge({ query = {} }){
+  const [section, setSection] = useState(SECTIONS.some(s => s.id === query.section) ? query.section : 'documents');
   const [data, setData] = useState(null);
   const [names, setNames] = useState(null);
   const load = () => api.get('/api/knowledge').then(setData).catch(toastError);

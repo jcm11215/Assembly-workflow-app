@@ -100,6 +100,17 @@ pages wait in `files/scans/` until the scan is done with them; a scan a
 restart interrupted runs again, and finished ones are cleared after a
 week.
 
+**Calibration** (the Scan testing screen). Marking a job's parts list
+correct (`POST /api/blueprints/:id/correct`) makes it that drawing's
+answer key (`answer_keys`), and the scan learns from the difference
+between what it found and the checked list: every part's type and end,
+and to leave out what it kept that isn't a part (`part_names`, the same
+table hand corrections go to). A test scan (`POST /api/scans` with
+`testKeyId`) reads the drawing again, is scored against the key
+(`shared/calibration.js`), and saves nothing to the job; Re-test all does
+every checked drawing, so a change to the scanner or the model shows
+straight away as scores going up or down.
+
 Every scan is kept as a new blueprint version; the newest drives the
 job. Files are named the way they were uploaded, in a folder per job
 number, so they can be found on the server without the app. A blueprint

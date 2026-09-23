@@ -15,6 +15,10 @@
  * of a job saves itself as the job's newest blueprint; a new job from a
  * drawing waits, done, until someone reviews it and creates the job.
  * Scans a restart interrupted start again when the server is back.
+ *
+ * A test scan (`test_key_id`, the Scan testing screen) reads a drawing
+ * that has an answer key, is scored against it (calibration.mjs), and
+ * saves nothing to the job.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,6 +28,7 @@ import { broadcast } from './live.mjs';
 import { logActivity } from './app.mjs';
 import { createBlueprint } from './routes/blueprints.mjs';
 import { readDrawing, scanSummary, diagnosticsWorthLogging } from '../web/scan/pipeline.js';
+import { pushKey, recordTest } from './calibration.mjs';
 
 /** Finished scans are cleared away after this long. */
 const KEEP_MS = 7 * 24 * 3600 * 1000;
@@ -61,13 +66,16 @@ export function toScan(r, db){
 
 /** The scans a person hasn't put away, newest first. */
 export function listScans(db, userId){
-  return db.all('select * from scans where created_by = ? and dismissed = 0 order by created_at desc limit 20', userId)
+  return db.all('select * from scans where created_by = ? and dismissed = 0 and test_key_id is null order by created_at desc limit 20', userId)
     .map(r => toScan(r, db));
 }
 
 function push(db, id){
   const r = db.get('select * from scans where id = ?', id);
-  if(r) broadcast('scan', toScan(r, db), u => u.id === r.created_by);
+  if(!r) return;
+  // A test scan's progress shows on its answer key, not in the banner.
+  if(r.test_key_id) pushKey(db, r.test_key_id);
+  else broadcast('scan', toScan(r, db), u => u.id === r.created_by);
 }
 
 function set(db, id, fields){
@@ -77,16 +85,16 @@ function set(db, id, fields){
 }
 
 /** Queues a scan whose pages and file have arrived, and returns it. */
-export function startScan(db, filesDir, user, { jobId = null, includeJobFields = false, fileName = null, mimeType = null, thumbnail = null, blocks, fileBytes = null }){
+export function startScan(db, filesDir, user, { jobId = null, includeJobFields = false, fileName = null, mimeType = null, thumbnail = null, blocks, fileBytes = null, testKeyId = null }){
   const id = uuid();
   fs.mkdirSync(dirOf(filesDir), { recursive: true });
   fs.writeFileSync(pagesFile(filesDir, id), JSON.stringify(blocks));
-  if(fileBytes && fileBytes.length) fs.writeFileSync(originalFile(filesDir, id), fileBytes);
+  if(fileBytes && fileBytes.length && !testKeyId) fs.writeFileSync(originalFile(filesDir, id), fileBytes);
   const t = now();
   try {
-    db.run(`insert into scans (id, job_id, created_by, status, progress, include_job_fields, file_name, mime_type, thumbnail, created_at, updated_at)
-            values (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)`,
-      id, jobId, user.id, 'Waiting its turn…', includeJobFields ? 1 : 0, fileName, mimeType, thumbnail, t, t);
+    db.run(`insert into scans (id, job_id, created_by, status, progress, include_job_fields, file_name, mime_type, thumbnail, test_key_id, created_at, updated_at)
+            values (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, jobId, user.id, 'Waiting its turn…', includeJobFields ? 1 : 0, fileName, mimeType, thumbnail, testKeyId, t, t);
   } catch (err) {
     cleanUp(filesDir, id);
     throw err;
@@ -156,6 +164,12 @@ async function runOne(db, filesDir, scan){
   } catch (err) {
     if(stopped(db, scan.id)){ finishStopped(db, filesDir, scan.id); return; }
     const message = explain(err);
+    if(scan.test_key_id){
+      set(db, scan.id, { status: 'failed', progress: '', error: message, dismissed: 1 });
+      cleanUp(filesDir, scan.id);
+      recordTest(db, scan.test_key_id, { error: message });
+      return;
+    }
     set(db, scan.id, { status: 'failed', progress: '', error: message });
     logActivity(db, user, 'Blueprint scan failed', { text: `${jobLabel(db, scan)}: ${message}` }, scan.job_id ? { type: 'job', id: scan.job_id } : null);
     return;
@@ -163,6 +177,13 @@ async function runOne(db, filesDir, scan){
   if(stopped(db, scan.id)){ finishStopped(db, filesDir, scan.id); return; }
 
   const summary = scanSummary(result.components, result.diagnostics);
+  if(scan.test_key_id){
+    set(db, scan.id, { status: 'done', progress: '', dismissed: 1,
+      result: JSON.stringify({ components: result.components, titleBlock: result.titleBlock, summary, scanner: result.scanner }) });
+    cleanUp(filesDir, scan.id);
+    recordTest(db, scan.test_key_id, { components: result.components, summary });
+    return;
+  }
   for(const k of result.diagnostics.learnedKeys) db.run('update part_names set used_count = used_count + 1 where key = ?', k);
   if(diagnosticsWorthLogging(result.components, result.diagnostics)){
     logActivity(db, user, 'Blueprint scan diagnostics', { text: `${jobLabel(db, scan)}: ${summary}`, ...result.diagnostics },

@@ -88,6 +88,12 @@ DATA_DIR=/var/lib/assembly-workflow node server/cli.mjs legacy-auth off`.
   the app for the person who started them, on any of their devices, until
   they're put away. A restart (an update, say) doesn't lose one: it runs
   again when the server is back.
+- **Scans get parts wrong.** Fix the job's parts list (Edit parts) and
+  press **Mark list correct**: the scanner learns from every difference.
+  **Scan testing** re-reads your checked drawings and scores them, so
+  after an update or a model change you can see whether scans got better
+  or worse, part by part. Each scan's result line also says what it left
+  out and why.
 - **Scans fail.** Settings → AI shows whether Ollama answers and which
   model does each job; **Test it** sends a real request. From the server,
   `assembly-workflow status` and `systemctl status ollama`. "Too large for the local model's context" is

@@ -43,7 +43,7 @@ export function RescanJob({ jobId, close }){
 
 /** Keeps the screen on while the pages are prepared: a phone that locks
  *  halfway pauses the work until it's unlocked. */
-async function keepAwake(){
+export async function keepAwake(){
   try {
     const lock = await navigator.wakeLock.request('screen');
     return () => lock.release().catch(() => {});

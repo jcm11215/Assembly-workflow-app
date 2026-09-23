@@ -21,6 +21,7 @@ const initial = {
   completions: [],
   ai: { label: 'Local AI', ready: false },
   scans: [],                  // drawing scans the server is running for me (ScanBanner)
+  calibration: null,          // the Scan testing screen's data, once it has opened
   activity: null,             // loaded when the Activity screen first opens
   jobFilter: 'open',          // the Jobs screen's filter
   homeFilters: { lead: '', priority: '', stage: '', due: '', blocked: false }, // the Home dashboard's, shared by all its charts

@@ -6,7 +6,7 @@
  * was down is picked up by one full reload when it comes back.
  */
 import { getState, setState, upsert, without } from './store.js';
-import { applyJob, applyScan, reloadState } from './actions.js';
+import { applyJob, applyKey, applyScan, reloadState } from './actions.js';
 
 let source = null;
 let droppedSince = null;
@@ -45,6 +45,7 @@ const handlers = {
   activity: a => setState(s => (s.activity ? { activity: [a, ...s.activity.filter(x => x.id !== a.id)].slice(0, 500) } : null)),
   ai: summary => setState({ ai: summary }),
   scan: sc => applyScan(sc),
+  calibration: key => applyKey(key),
   'ai-models': downloads => setState({ aiDownloads: downloads })
 };
 

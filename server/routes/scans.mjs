@@ -45,12 +45,16 @@ export default function register(r){
     const fileBytes = body.subarray(metaLength);
     if(fileBytes.length > MAX_FILE) throw badRequest('That drawing is too large (60 MB at most).');
 
-    const job = meta.jobId ? v.job(ctx.db, meta.jobId) : null;
+    // A test scan (Scan testing) reads a checked drawing again, for a score.
+    const key = meta.testKeyId ? ctx.db.get('select id from answer_keys where id = ?', String(meta.testKeyId)) : null;
+    if(meta.testKeyId && !key) throw badRequest('That checked drawing is gone.');
+    const job = meta.jobId && !key ? v.job(ctx.db, meta.jobId) : null;
     const thumbnail = meta.thumbnail ? Buffer.from(String(meta.thumbnail), 'base64') : null;
     if(thumbnail && thumbnail.length > MAX_THUMBNAIL) throw badRequest('The thumbnail is too large.');
     const scan = startScan(ctx.db, ctx.filesDir, ctx.user, {
       jobId: job ? job.id : null,
-      includeJobFields: !job && v.bool(meta.includeJobFields),
+      includeJobFields: !job && !key && v.bool(meta.includeJobFields),
+      testKeyId: key ? key.id : null,
       fileName: v.text(meta.fileName, 'File name', { max: 200 }) || null,
       mimeType: safeMimeType(meta.mimeType),
       thumbnail,

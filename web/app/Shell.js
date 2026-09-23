@@ -26,6 +26,7 @@ const Assistant = lazy(() => import('../screens/Assistant.js'), 'Assistant');
 const Knowledge = lazy(() => import('../screens/Knowledge.js'), 'Knowledge');
 const Team = lazy(() => import('../screens/Admin.js'), 'Admin');
 const Activity = lazy(() => import('../screens/Activity.js'), 'Activity');
+const Calibration = lazy(() => import('../screens/Calibration.js'), 'Calibration');
 
 const NAV = [
   { id: 'home', label: 'Home', icon: 'home', href: '#/' },
@@ -36,15 +37,16 @@ const NAV = [
   { id: 'assistant', label: 'Assistant', icon: 'sparkle' },
   { group: 'Admin', perm: 'team.manage' },
   { id: 'knowledge', label: 'Knowledge', icon: 'book', perm: 'knowledge.manage' },
+  { id: 'calibration', label: 'Scan testing', icon: 'scan', perm: 'blueprint.manage' },
   { id: 'team', label: 'Team', icon: 'team', perm: 'team.manage' },
   { id: 'activity', label: 'Activity', icon: 'activity', perm: 'activity.all' }
 ];
 const TABS = ['home', 'jobs', 'issues', 'tasks'];
 
 const SCREENS = { home: Home, jobs: Jobs, issues: Issues, tasks: Tasks, notes: Notes, assistant: Assistant,
-                  knowledge: Knowledge, team: Team, activity: Activity, settings: Settings };
+                  knowledge: Knowledge, calibration: Calibration, team: Team, activity: Activity, settings: Settings };
 const TITLES = { home: 'Home', jobs: 'Jobs', job: 'Job', issues: 'Issues', tasks: 'Tasks', notes: 'Notes', assistant: 'Assistant',
-                 knowledge: 'Knowledge', team: 'Team', activity: 'Activity', settings: 'Settings' };
+                 knowledge: 'Knowledge', calibration: 'Scan testing', team: 'Team', activity: 'Activity', settings: 'Settings' };
 
 const hrefOf = n => n.href || `#/${n.id}`;
 

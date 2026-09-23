@@ -60,6 +60,8 @@ export function toBlueprint(r, components){
     // Which scanner read it (web/scan/pipeline.js SCANNER); null before
     // that was recorded.
     scanner: r.scanner ?? null,
+    // Someone checked this list and marked it correct (Scan testing).
+    checked: !!r.checked,
     extractedAt: r.extracted_at,
     extractedByName: r.extracted_by_name || '',
     components
@@ -71,7 +73,8 @@ function latestBlueprints(db, jobIds){
   if(!jobIds.length) return new Map();
   const rows = db.all(`
     select b.id, b.job_id, b.version, b.file_path, b.original_filename, b.mime_type, b.extracted_at, b.scanner,
-           b.thumbnail is not null as has_thumbnail, u.full_name as extracted_by_name
+           b.thumbnail is not null as has_thumbnail, u.full_name as extracted_by_name,
+           exists(select 1 from answer_keys k where k.blueprint_id = b.id) as checked
       from blueprints b left join users u on u.id = b.extracted_by
      where b.job_id in (${inList(jobIds)})
        and b.version = (select max(version) from blueprints x where x.job_id = b.job_id)`, ...jobIds);

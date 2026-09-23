@@ -87,13 +87,30 @@ export async function setChecklistItem(job, key, done){
  * pages and the original file in one upload -- the pages as JSON, the
  * file's bytes straight after, `?meta=` saying where one ends.
  */
-export async function startScan({ jobId = null, includeJobFields = false, file, thumbnail = null, blocks }){
+export async function startScan({ jobId = null, includeJobFields = false, file, thumbnail = null, blocks, testKeyId = null }){
   const meta = new TextEncoder().encode(JSON.stringify({
-    jobId, includeJobFields, fileName: file.name, mimeType: file.type, thumbnail, blocks
+    jobId, includeJobFields, fileName: file.name, mimeType: file.type, thumbnail, blocks, testKeyId
   }));
-  const { scan } = await api.post(`/api/scans?meta=${meta.length}`, new Blob([meta, file]), { contentType: 'application/octet-stream' });
-  applyScan(scan);
+  // A test scan (Scan testing) needs only the pages: its drawing is saved already.
+  const body = new Blob(testKeyId ? [meta] : [meta, file]);
+  const { scan } = await api.post(`/api/scans?meta=${meta.length}`, body, { contentType: 'application/octet-stream' });
+  if(!testKeyId) applyScan(scan);
   return scan;
+}
+
+/** This parts list is right: it becomes the drawing's answer key, and
+ *  the scan learns from what it got wrong (Scan testing). */
+export async function markListCorrect(blueprintId){
+  const res = await api.post(`/api/blueprints/${blueprintId}/correct`);
+  applyJob(res.job);
+  applyKey(res.key);
+  return res;
+}
+
+/** A checked drawing's latest, merged into the Scan testing screen's
+ *  list once that has loaded. */
+export function applyKey(key){
+  setState(s => (s.calibration ? { calibration: { ...s.calibration, keys: upsert(s.calibration.keys, key) } } : null));
 }
 
 /** Merges a scan, unless the copy already held is newer: its live

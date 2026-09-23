@@ -8,10 +8,10 @@
  */
 import { html, useState } from '../vendor/index.js';
 import { PART_GROUPS, PART_TYPES, partGroup, tipForPart } from '../domain/parts.js';
-import { addComponent, updateComponent, deleteComponent, reorderComponents } from '../lib/actions.js';
+import { addComponent, updateComponent, deleteComponent, reorderComponents, markListCorrect } from '../lib/actions.js';
 import { useCan } from '../lib/permissions.js';
 import { fmtWhen } from '../lib/format.js';
-import { openModal, toastError } from '../ui/overlays.js';
+import { confirmAction, openModal, toast, toastError } from '../ui/overlays.js';
 import { submitting } from '../ui/kit.js';
 import { TipCard } from './Tips.js';
 
@@ -53,6 +53,22 @@ export function PartsList({ job }){
 
   const run = fn => fn().catch(toastError);
 
+  /** The list is right: the drawing's answer key, which the scanner
+   *  learns from and is tested against (Scan testing). */
+  const markCorrect = () => run(async () => {
+    const ok = await confirmAction({
+      title: 'Mark this list correct?',
+      message: 'The scanner learns from it: every part here, with its type and end, and anything it found that isn\'t here. '
+        + 'Check nothing is missing first. You can re-test this drawing under Scan testing.',
+      confirmLabel: 'Mark correct'
+    });
+    if(!ok) return;
+    const res = await markListCorrect(bp.id);
+    const s = res.firstScore;
+    toast(`Marked correct.${s ? ` The scan got ${s.score}% right.` : ''} ${res.learned.length ? `Learned ${res.learned.length} correction${res.learned.length === 1 ? '' : 's'}.` : 'Nothing new to learn.'}`,
+      { kind: 'ok', ms: 7000 });
+  });
+
   /** Swaps a part with its neighbour inside its group, then saves the
    *  whole list's order in one request. */
   const move = (group, index, delta) => run(async () => {
@@ -67,9 +83,14 @@ export function PartsList({ job }){
       <div class="parts-head">
         <div>
           <b>Parts from the drawing</b> <span class="count">${parts.length}</span>
-          <div class="hint">Scan ${bp.version}${bp.extractedByName ? ` by ${bp.extractedByName}` : ''} · ${fmtWhen(bp.extractedAt)}</div>
+          <div class="hint">Scan ${bp.version}${bp.extractedByName ? ` by ${bp.extractedByName}` : ''} · ${fmtWhen(bp.extractedAt)}
+            ${bp.checked && html` · <span class="checked-tag" title="Marked correct: the scanner is tested against this list">✓ Checked</span>`}</div>
         </div>
-        ${canEdit && html`<button class="btn btn-sm" onClick=${() => setEditing(!editing)}>${editing ? 'Done' : 'Edit parts'}</button>`}
+        ${canEdit && html`<div class="parts-head-actions">
+          ${!editing && parts.length > 0 && html`<button class="btn btn-sm" onClick=${markCorrect}
+            title="This list is right: the scanner learns from it">${bp.checked ? 'Update checked list' : 'Mark list correct'}</button>`}
+          <button class="btn btn-sm" onClick=${() => setEditing(!editing)}>${editing ? 'Done' : 'Edit parts'}</button>
+        </div>`}
       </div>
       ${editing && html`<p class="hint">The scanner doesn't always get it right -- fix, reorder, remove or add anything here.
         A type or end you fix is remembered, and the next scan reads that part the same way. A part you remove is left out of later scans.</p>`}

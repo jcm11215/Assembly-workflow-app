@@ -294,6 +294,26 @@ const MIGRATIONS = [
     updated_at         text not null
   );
   create index scans_by_user on scans(created_by, created_at);
+  `,
+
+  // 7: scan calibration. A job's parts list someone checked and marked
+  // correct is its answer key; test scans of its drawing are scored
+  // against it (Scan testing screen). `parts` is the checked list,
+  // `first_score` how the scan did before it was checked, `history` the
+  // test scans' scores, newest last -- all JSON.
+  `
+  create table answer_keys (
+    id           text primary key,
+    job_id       text not null unique references jobs(id) on delete cascade,
+    blueprint_id text references blueprints(id) on delete set null,
+    parts        text not null,
+    first_score  text,
+    history      text not null default '[]',
+    created_by   text references users(id) on delete set null,
+    created_at   text not null,
+    updated_at   text not null
+  );
+  alter table scans add column test_key_id text references answer_keys(id) on delete cascade;
   `
 ];
 

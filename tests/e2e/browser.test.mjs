@@ -140,6 +140,24 @@ test('a new job is read off a drawing', { skip }, async () => {
   assert.equal(await admin.locator('.scan-bar').count(), 0, 'the banner is gone once the job has its scan');
 });
 
+test('a checked parts list becomes a test the scanner is scored against', { skip }, async () => {
+  const job = (await api(admin, 'GET', '/api/state')).jobs.find(j => j.jobNumber === '2024-017H');
+  await admin.goto(`${BASE}/#/jobs/${job.id}`);
+  await admin.getByRole('tab', { name: /Drawing/ }).click();
+  await admin.click('button:has-text("Mark list correct")');
+  await admin.click('.sheet button:has-text("Mark correct")');
+  await admin.locator('.checked-tag').waitFor();
+
+  await admin.goto(`${BASE}/#/calibration`);
+  const row = admin.locator('.cal-row', { hasText: '2024-017H' });
+  await row.waitFor();
+  await row.locator('button:has-text("Re-test")').click();
+  await row.locator('.cal-score b', { hasText: '100%' }).waitFor({ timeout: 30000 });
+  await row.locator('button:has-text("Details")').click();
+  await row.getByText('3 of 3 parts exactly right').waitFor();
+  assert.equal(await admin.locator('.scan-bar').count(), 0, 'a test scan never shows in the banner');
+});
+
 test('a document added to the knowledge base is cited by the assistant', { skip }, async () => {
   await admin.goto(BASE + '/#/knowledge');
   await admin.setInputFiles('input[type=file]', {
@@ -191,7 +209,7 @@ test('settings shows the AI as ready once its models are installed', { skip }, a
 
 test('every screen opens without an error', { skip }, async () => {
   const screens = ['', 'jobs', 'jobs?view=board', 'issues', 'issues?tab=errors', 'tasks', 'notes', 'assistant',
-    'knowledge', 'team', 'activity', 'settings', 'board', 'blockers', 'errors', 'admin'];
+    'knowledge', 'knowledge?section=names', 'calibration', 'team', 'activity', 'settings', 'board', 'blockers', 'errors', 'admin'];
   for(const s of screens){
     await admin.goto(`${BASE}/#/${s}`);
     await admin.locator('.page-head, .job-head').first().waitFor();

@@ -12,7 +12,7 @@
  */
 import { useEffect, useState } from '../vendor/index.js';
 
-export const SCREENS = ['home', 'jobs', 'issues', 'tasks', 'notes', 'assistant', 'knowledge', 'team', 'activity', 'settings'];
+export const SCREENS = ['home', 'jobs', 'issues', 'tasks', 'notes', 'assistant', 'knowledge', 'calibration', 'team', 'activity', 'settings'];
 
 const ALIASES = {
   dashboard: { name: 'home' },

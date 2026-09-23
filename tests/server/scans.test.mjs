@@ -157,3 +157,40 @@ test('a scan a restart interrupted runs again', async () => {
   const versions = srv.db.get('select count(*) as n from blueprints where job_id = ?', job.id).n;
   assert.equal(versions, 2);
 });
+
+test('a checked list teaches the scan, and a test scan is scored against it', async () => {
+  const job = await newJob('CAL-1');
+  const { data } = await upload(admin, { jobId: job.id, fileName: 'CAL.pdf', mimeType: 'application/pdf', blocks: pages('cal1') });
+  assert.equal(await settled(data.scan.id), 'saved');
+  let bp = (await admin.get('/api/state')).data.jobs.find(j => j.id === job.id).blueprint;
+  assert.equal(bp.checked, false);
+
+  // The motor isn't wanted on this list: take it off and mark the rest right.
+  const motor = bp.components.find(c => c.item === 'Motor');
+  await admin.delete(`/api/components/${motor.id}`);
+  const marked = await admin.post(`/api/blueprints/${bp.id}/correct`);
+  assert.equal(marked.status, 200, JSON.stringify(marked.data));
+  assert.equal(marked.data.firstScore.score, 67, 'two of the three right, one extra');
+  assert.deepEqual(marked.data.firstScore.extra, ['GEARMOTOR, 5HP 39RPM TEFC']);
+  assert.ok(marked.data.learned.some(l => l.item === 'Not a part' && /GEARMOTOR/.test(l.drawn)));
+  assert.equal(marked.data.job.blueprint.checked, true);
+
+  const cal = (await admin.get('/api/calibration')).data;
+  const key = cal.keys.find(k => k.jobId === job.id);
+  assert.equal(key.parts, 2);
+  assert.equal(key.hasFile, true);
+  assert.ok(cal.recent.some(s => s.id === data.scan.id));
+  assert.equal((await assembler.get('/api/calibration')).status, 403);
+
+  // A test scan reads it again: scored, not saved, not in the banner.
+  const test = (await upload(admin, { testKeyId: key.id, jobId: job.id, blocks: pages('cal1b') })).data.scan;
+  assert.equal(await settled(test.id), 'done');
+  const after = (await admin.get('/api/calibration')).data.keys.find(k => k.id === key.id);
+  assert.equal(after.last.score, 100, 'the motor is left out now');
+  assert.equal(after.history.length, 1);
+  assert.ok(!(await admin.get('/api/scans')).data.scans.some(s => s.id === test.id));
+  assert.equal(srv.db.get('select count(*) as n from blueprints where job_id = ?', job.id).n, 1, 'nothing saved to the job');
+
+  assert.equal((await admin.delete(`/api/calibration/keys/${key.id}`)).status, 200);
+  assert.ok(!(await admin.get('/api/calibration')).data.keys.some(k => k.id === key.id));
+});
