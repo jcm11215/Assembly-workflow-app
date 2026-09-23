@@ -19,7 +19,8 @@ const RULES = [
   [/\b(seals?|waste\s*packs?|glands?)\b/i,                           'Seal'],
   [/\b(bearings?|brgs?|pillow\s*blocks?|flange\s*blocks?)\b/i,       'Bearing'],
   [/\b(augers?|flight(ing)?s?|screw\s*(assembly|assy|sections?))\b/i,'Auger'],
-  [/\bshafts?\b/i,                                                   'Shaft']
+  [/\bshafts?\b/i,                                                   'Shaft'],
+  [/\buhmw\b/i,                                                      'UHMW']
 ];
 
 /** The part type for a description, or null when it isn't one the shop

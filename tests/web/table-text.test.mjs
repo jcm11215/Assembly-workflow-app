@@ -70,6 +70,7 @@ test('descriptions sort into the shop\'s part types', () => {
   assert.equal(categorize('12" SECTIONAL FLIGHT'), 'Auger');
   assert.equal(categorize('CPLG BOLT'), null, 'coupling bolts are not tracked');
   assert.equal(categorize('GASKET'), null);
+  assert.equal(categorize('UHMW WEAR STRIP'), 'UHMW');
   assert.equal(categorize('SHAFT, 2-7/16 C1045'), 'Shaft');
   assert.equal(categorize('WASTE PACK SEAL'), 'Seal');
   assert.equal(categorize('DRIVE END PLATE'), null);

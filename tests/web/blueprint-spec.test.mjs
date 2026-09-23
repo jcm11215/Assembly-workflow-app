@@ -35,10 +35,10 @@ t('drive/tail bearing swap detected', M.validateComponents(specSwap, swapped).co
 // component whitelist -- the shop's list, and nothing else
 const loc = item => ({ item, installation_location: 'unknown' });
 const kept = M.normalizeComponents(['Drive', 'Gear Motor', 'Reducer', 'Waste Pack Seal', 'Flange Bearing',
-  'Hanger Bearing', 'Coupling Shaft', 'Tail Shaft', 'Drive Shaft', 'Shaft', 'Auger'].map(loc));
-t('every listed part type is kept', kept.length === 11);
+  'Hanger Bearing', 'Coupling Shaft', 'Tail Shaft', 'Drive Shaft', 'Shaft', 'Auger', 'UHMW Liner'].map(loc));
+t('every listed part type is kept', kept.length === 12);
 const dropped = M.normalizeComponents(['Drive End Plate', 'Drive Guard', 'Trough', 'Cap Screw', 'Shroud', 'Coupling', 'Sprocket',
-  'Gasket', 'Coupling Bolts', 'UHMW Liner'].map(loc));
+  'Gasket', 'Coupling Bolts'].map(loc));
 t('unlisted parts are dropped', dropped.length === 0);
 const bare = M.normalizeComponents([{ item: 'Shaft', installation_location: 'tail_end' }, { item: 'Shaft', installation_location: 'unknown' }]);
 t('bare "Shaft" is named from its location, kept as a shaft when it has none', bare.length === 2 && bare[0].item === 'Tail Shaft' && bare[1].item === 'Shaft');

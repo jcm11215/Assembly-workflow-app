@@ -167,7 +167,7 @@ function rawComponentList(parsed){
 
 // The shop's component list -- the only part types a scan keeps: drive,
 // motor, reducer (motor/drive), bearings, hangers, augers, seals and
-// shafts of every kind. Everything else (gaskets, coupling bolts, UHMW,
+// shafts of every kind, and UHMW. Everything else (gaskets, coupling bolts,
 // (plates, weldments, sprockets, guards, other fasteners, troughs,
 // covers, shrouds, spouts) is dropped, matched against the item name.
 // A whitelist rather than a growing exclusion list: it stays correct as
@@ -187,7 +187,8 @@ const WANTED_COMPONENT_RE = new RegExp([
   String.raw`\bshafts?\b`,
   String.raw`\b(augers?|flight(ing)?s?|screw\s*(assembly|assy|section)s?)\b`,
   String.raw`\b(coupling|cplg)\s*shafts?\b`,
-  String.raw`\bflange\s*blocks?\b`
+  String.raw`\bflange\s*blocks?\b`,
+  String.raw`\buhmw\b`
 ].join('|'), 'i');
 
 // A bare "Shaft" doesn't say which one it is -- where it sits does, so
