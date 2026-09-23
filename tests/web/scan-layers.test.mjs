@@ -10,7 +10,7 @@
 import './stub.mjs';
 const layers = await import('../../web/scan/scanLayers.js');
 const { clearMemoryLayers, hashContent, layerKey } = await import('../../web/scan/scanStore.js');
-const { mergeParts, mergeSpec, mergeCallouts } = await import('../../web/scan/scanMerge.js');
+const { mergeParts, mergeLayout, mergeCallouts } = await import('../../web/scan/scanMerge.js');
 
 let pass = 0, fail = 0;
 const t = async (n, fn) => {
@@ -164,27 +164,11 @@ await t('callouts and unballooned both concatenate', () => {
   eq(m.callouts.join(), '1,3', 'callouts');
   eq(m.unballooned.join(), '2,4', 'unballooned');
 });
-await t('a dimension that was read beats one reported as absent', () => {
-  // The half that never saw the sheet has nothing to say about it, and
-  // its silence must not overwrite the half that did.
-  const found = { value: 20, unit: 'ft', status: 'ok' };
-  const absent = { value: null, confidence: 0, status: 'not_found' };
-  eq(mergeSpec({ overall: { overall_length: found } }, { overall: { overall_length: absent } })
-      .overall.overall_length.value, 20, 'found survives a later not_found');
-  eq(mergeSpec({ overall: { overall_length: absent } }, { overall: { overall_length: found } })
-      .overall.overall_length.value, 20, 'and is picked up from either side');
-});
-await t('two halves reading different values record a conflict rather than picking one', () => {
-  const m = mergeSpec(
-    { overall: { overall_length: { value: 20, unit: 'ft', status: 'ok' } } },
-    { overall: { overall_length: { value: 24, unit: 'ft', status: 'ok' } } });
-  if (!m.conflicts.length) throw new Error('silently picked a winner');
-  if (!/20 ft vs 24 ft/.test(m.conflicts[0].detail)) throw new Error('conflict does not say what disagreed');
-});
 await t('an orientation of "unknown" never overwrites a real one', () => {
-  const m = mergeSpec({ orientation: { drive_end_side: 'right' } },
-                      { orientation: { drive_end_side: 'unknown' } });
+  const m = mergeLayout({ orientation: { drive_end_side: 'right' } },
+                        { orientation: { drive_end_side: 'unknown' } });
   eq(m.orientation.drive_end_side, 'right', 'orientation');
+  eq(mergeLayout({}, {}).orientation.drive_end_side, 'unknown', 'no answer at all is unknown');
 });
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

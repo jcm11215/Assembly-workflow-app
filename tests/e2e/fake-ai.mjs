@@ -19,8 +19,7 @@ export const REPLIES = {
     { balloon: 7, source_page: 1, position: { x: 0.58, y: 0.50 }, confidence: 0.9 },
     { balloon: 11, source_page: 1, position: { x: 0.47, y: 0.46 }, confidence: 0.8 }
   ]}),
-  dimensions: JSON.stringify({ jobNumber: '2024-017H', customer: 'EARTHCARE LLC', conveyorType: 'screw',
-    orientation: { drive_end_side: 'right' }, overall: {}, trough: {}, screw: {}, hangers: {}, drive: {}, tail: {}, conflicts: [], notes: '' })
+  layout: JSON.stringify({ jobNumber: '2024-017H', customer: 'EARTHCARE LLC', orientation: { drive_end_side: 'right', detail: 'gearmotor at the right end' } })
 };
 export function startFakeAI(port){
   const seen = [];
@@ -40,7 +39,7 @@ export function startFakeAI(port){
     else if(/BALLOON CALLOUT is a small circle/i.test(system)) which = 'callouts';
     else if(/transcribe the parts table/i.test(system)) which = 'parts';
     else if(/STRUCTURED ACTIONS/.test(system)) which = 'actions';
-    else if(/engineering specification|specification JSON|dimension/i.test(system + user)) which = 'dimensions';
+    else if(/which side of the assembly view is the DRIVE END/i.test(system)) which = 'layout';
     else which = 'answer';
     seen.push(which);
     let text = REPLIES[which];

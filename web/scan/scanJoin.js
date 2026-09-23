@@ -71,6 +71,7 @@ function normCallout(c){
     label: typeof c.label === 'string' ? c.label.trim() : '',
     source_page: c.source_page != null ? Number(c.source_page) : null,
     position,
+    end: ['drive_end', 'tail_end', 'along_run'].includes(c.end) ? c.end : null,
     confidence: isFinite(Number(c.confidence)) ? Math.min(1, Math.max(0, Number(c.confidence))) : 0.5
   };
 }
@@ -125,6 +126,7 @@ function place(part, callout, instances){
     source_page: callout.source_page != null ? callout.source_page : part.source_page,
     source_callout: callout.label || part.source_callout || '',
     position: callout.position,
+    drawn_end: callout.end,
     // A row that says QTY 4 and balloons in four places is four things,
     // one per location -- so each instance counts as one. With a single
     // location the table's count is the only count there is, and stays.
@@ -241,7 +243,7 @@ function locationFromCategory(item){
 }
 
 /** Which axis the machine runs along, and which way round, from the
- *  dimensions pass's orientation answer. */
+ *  layout question's orientation answer. */
 const DRIVE_SIDE = {
   left:   { axis:'x', driveAtLow:true },
   right:  { axis:'x', driveAtLow:false },
@@ -250,26 +252,32 @@ const DRIVE_SIDE = {
 };
 
 /**
- * Fills in "unknown" locations, in that order of authority.
+ * Fills in "unknown" locations, in order of authority: the part's own
+ * category (a motor is always at the drive end), then which end the
+ * balloon search saw it at, then -- only when that was not answered --
+ * where its balloon sits on the page, near one end or the other.
  *
- * The end-thirds rule only fires for a part that actually got placed on
- * the drawing and only near an end: the middle of a conveyor is where
- * hangers live and where an unlabeled bearing is genuinely ambiguous, so
- * a part that lands there keeps its honest "unknown" rather than being
- * assigned to whichever end is closer.
+ * The end-thirds rule only fires near an end: the middle of a conveyor
+ * is where hangers live and where an unlabeled bearing is genuinely
+ * ambiguous, so a part there keeps its honest "unknown".
  *
- * @param orientation the dimensions pass's {drive_end_side}; ignored when
+ * @param orientation the layout answer's {drive_end_side}; ignored when
  *                    it is missing or "unknown".
  */
 export function resolveLocations(components, orientation){
   const side = DRIVE_SIDE[String(orientation && orientation.drive_end_side || '').toLowerCase()];
-  let byCategory = 0, byPosition = 0;
+  let byCategory = 0, byCallout = 0, byPosition = 0;
 
   const resolved = (components || []).map(c => {
     if(!c || (c.installation_location && c.installation_location !== 'unknown')) return c;
 
     let location = locationFromCategory(c.item);
     if(location) byCategory++;
+
+    if(!location && (c.drawn_end === 'drive_end' || c.drawn_end === 'tail_end')){
+      location = c.drawn_end;
+      byCallout++;
+    }
 
     if(!location && side && c.position){
       const along = c.position[side.axis];
@@ -286,5 +294,21 @@ export function resolveLocations(components, orientation){
     return { ...c, installation_location: location, stage: stageForLocation(location) };
   });
 
-  return { components: resolved, report: { locatedByCategory: byCategory, locatedByPosition: byPosition } };
+  return { components: resolved, report: { locatedByCategory: byCategory, locatedByCallout: byCallout, locatedByPosition: byPosition } };
+}
+
+/** The order the parts list shows its groups in (domain/parts.js):
+ *  drive end, tail end, augers, hanger bearings, then the rest. */
+const LOCATION_ORDER = ['drive_end', 'tail_end', 'screw', 'hanger', 'trough', 'other', 'unknown'];
+
+/**
+ * Sorts parts by where they go -- drive end, tail end, the run, then
+ * anything unplaced. Within a location, table order is kept.
+ */
+export function sortByLocation(components){
+  const rank = c => {
+    const i = LOCATION_ORDER.indexOf(c.installation_location || 'unknown');
+    return i < 0 ? LOCATION_ORDER.length : i;
+  };
+  return (components || []).map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(x => x.c);
 }

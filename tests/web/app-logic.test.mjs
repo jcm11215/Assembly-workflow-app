@@ -111,36 +111,53 @@ const REPLIES = {
     parts: [
       { balloon: 3, item: 'Motor', item_as_drawn: 'GEARMOTOR, 5HP', quantity: 1, installation_location: 'drive_end', source_page: 2, extraction_method: 'bom_table', confidence: 0.9 },
       { balloon: 7, item: 'Hanger Bearing', quantity: 2, installation_location: 'hanger', source_page: 2, extraction_method: 'bom_table', confidence: 0.9 },
+      { balloon: 5, item: 'Bearing', item_as_drawn: 'FLG BRG 2-7/16', quantity: 2, installation_location: 'unknown', source_page: 2, extraction_method: 'bom_table', confidence: 0.9 },
       { balloon: 4, item: 'Trough Section', quantity: 4, installation_location: 'trough', source_page: 2, extraction_method: 'bom_table', confidence: 0.9 }
     ]
   }),
   callouts: JSON.stringify({ callouts: [
     { balloon: 3, source_page: 1, position: { x: 0.86, y: 0.42 }, confidence: 0.9 },
-    { balloon: 7, source_page: 1, position: { x: 0.38, y: 0.5 }, confidence: 0.9 }
+    { balloon: 7, source_page: 1, position: { x: 0.38, y: 0.5 }, confidence: 0.9 },
+    { balloon: 5, source_page: 1, position: { x: 0.12, y: 0.5 }, end: 'tail_end', confidence: 0.9 },
+    { balloon: 5, source_page: 1, position: { x: 0.55, y: 0.5 }, end: 'drive_end', confidence: 0.9 }
   ]}),
   // Carries the bad escape that sank a real scan.
-  dimensions: '{"jobNumber":"2024-017H","description":"12\\" DIA X 20\\\' LG","orientation":{"drive_end_side":"right"}}'
+  layout: '{"jobNumber":"2024-017H","description":"12\\" DIA X 20\\\' LG","orientation":{"drive_end_side":"right"}}'
 };
 
 test('a two-sheet drawing reads into located parts and a title block', async () => {
   const seen = [];
+  let calloutPrompt = '';
   aiReplies((system) => {
     const which = /classify which kind of page/i.test(system) ? 'classify'
       : /BALLOON CALLOUT is a small circle/i.test(system) ? 'callouts'
-      : /transcribe the parts table/i.test(system) ? 'parts' : 'dimensions';
+      : /transcribe the parts table/i.test(system) ? 'parts' : 'layout';
+    if(which === 'callouts') calloutPrompt = system;
     seen.push(which);
     return REPLIES[which];
   });
   const img = n => [{ type: 'text', text: `PDF page ${n}:` }, { type: 'image', source: { media_type: 'image/jpeg', data: `PAGE${n}` } }];
   const result = await readDrawing([...img(1), ...img(2)], { includeJobFields: true });
 
-  assert.deepEqual(seen.sort(), ['callouts', 'classify', 'dimensions', 'parts']);
+  // Parts before balloons: the balloon search is asked for exactly the
+  // table's item numbers, knowing which side the drive is on.
+  assert.ok(seen.indexOf('callouts') > seen.indexOf('parts'), 'balloons are looked for after the table is read');
+  assert.deepEqual([...seen].sort(), ['callouts', 'classify', 'layout', 'parts']);
+  assert.match(calloutPrompt, /- 3: GEARMOTOR, 5HP/);
+  assert.match(calloutPrompt, /drive end of this conveyor is on the RIGHT/);
   assert.equal(result.titleBlock.jobNumber, '2024-017H');
   assert.equal(result.titleBlock.customer, 'EARTHCARE LLC');
   const motor = result.components.find(c => c.item === 'Motor');
   assert.deepEqual(motor.position, { x: 0.86, y: 0.42 });
   assert.equal(motor.source_page, 1);
   assert.ok(!result.components.some(c => /trough/i.test(c.item)), 'trough sections are not tracked parts');
+  // The balloon search's own call on each end beats page thirds (x 0.55
+  // is mid-page, but it said drive end) -- and parts come sorted the way
+  // the parts list groups them: drive end, tail end, then the run.
+  assert.deepEqual(result.components.map(c => [c.item, c.installation_location]), [
+    ['Motor', 'drive_end'], ['Bearing', 'drive_end'], ['Bearing', 'tail_end'], ['Hanger Bearing', 'hanger']
+  ]);
+  assert.ok(!result.components.some(c => 'drawn_end' in c), 'working fields are not saved');
   assert.match(scanSummary(result.components, result.diagnostics), /^Found \d+ parts/);
 });
 

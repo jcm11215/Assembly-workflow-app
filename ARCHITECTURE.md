@@ -38,7 +38,7 @@ it: SQLite is built into Node 22, and the browser libraries are vendored.
 | `web/` | The app. Preact + htm, vendored in `web/vendor/` with pdf.js and the Rubik and Mulish fonts (ISC's typefaces); plain ES modules, no build step. Dark by default, light per device in Settings (`theme-boot.js`, `lib/theme.js`). |
 | `web/lib/` | `api.js` (fetch), `store.js` (one state object + `useStore`), `actions.js` (every change, one function each), `live.js` (SSE), `router.js` (hash routes), `dashboard.js` (the Home dashboard's numbers: one set of filters shared by every chart). |
 | `web/screens/` | One file per screen. `web/jobs/` holds the pieces shared between job screens; `web/ui/` the shared building blocks, including the dashboard's charts (`charts.js`). |
-| `web/scan/` | Reading drawings: the four-reading pipeline (`pipeline.js`) and its tested building blocks (prompts, JSON repair, balloon joining, layout). |
+| `web/scan/` | Reading drawings (`pipeline.js`) in small steps: the parts table and which side the drive is on, then the balloons for exactly those item numbers and which end each is at, then a join and sort by location in code. Plus its tested building blocks (prompts, JSON repair, balloon joining, layout). |
 | `web/assistant/` | The assistant's tool list and its propose-then-confirm flow. |
 | `deploy/` | systemd unit, the install and update scripts, and the `assembly-workflow` admin command they install. |
 | `tests/` | `node:test` suites for the server, shared rules and app logic; an optional browser suite. |

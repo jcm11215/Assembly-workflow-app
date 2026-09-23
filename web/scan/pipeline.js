@@ -2,14 +2,16 @@
  * Reading a drawing: file in, parts (with where they sit on the sheet)
  * and title-block fields out. No saving -- the caller decides that.
  *
- * Four readings rather than one call, because one call doing three
- * unrelated jobs did all of them worse, and a truncated reply looked like
- * a drawing with no hardware on it:
+ * Small, simple questions in order rather than one big call, because one
+ * call doing several jobs did all of them worse and slower:
  *
- *   Layer 0  prepare    no AI -- render the sheets, hash each one
- *   Layer 1  classify   which kind of page each sheet is
- *   Layer 2  read       parts / callouts / dimensions, in parallel
- *   Layer 3  assemble   no AI -- whitelist, join, place, validate
+ *   0  prepare     no AI -- render the sheets, hash each one
+ *   1  classify    which kind of page each sheet is (multi-page only)
+ *   2  line items  the parts table, and in parallel a tiny layout
+ *                  question: which side is the drive end (+ title block)
+ *   3  balloons    find the balloons for exactly those item numbers,
+ *                  and say which end of the machine each one is at
+ *   4  assemble    no AI -- whitelist, join, place, sort by location
  *
  * Each reading is stored against the pages it covered (scanStore.js), so
  * a second attempt at the same drawing asks only for what is still
@@ -18,12 +20,12 @@
  */
 import { askAI } from '../lib/ai.js';
 import { MAX_PDF_PAGES, fileToImageBase64Resized, pdfFileToImages, shrinkBase64Image } from './pdf.js';
-import { PROMPT_VERSIONS, buildCalloutPrompt, buildPageClassificationPrompt, buildPartsListPrompt, buildSpecPrompt, pagesByRole } from './prompt.js';
+import { PROMPT_VERSIONS, buildCalloutPrompt, buildLayoutPrompt, buildPageClassificationPrompt, buildPartsListPrompt, pagesByRole } from './prompt.js';
 import { parseJsonLenient } from './jsonRepair.js';
 import { preparePages, readQuestion } from './scanLayers.js';
-import { mergeCallouts, mergeClassification, mergeParts, mergeSpec } from './scanMerge.js';
-import { evictOld, forgetPages } from './scanStore.js';
-import { joinPartsAndCallouts, resolveLocations } from './scanJoin.js';
+import { mergeCallouts, mergeClassification, mergeLayout, mergeParts } from './scanMerge.js';
+import { evictOld, forgetPages, hashContent } from './scanStore.js';
+import { joinPartsAndCallouts, resolveLocations, sortByLocation } from './scanJoin.js';
 import { normalizeComponentsDetailed } from './spec.js';
 
 /**
@@ -47,7 +49,7 @@ export function parseJsonReply(text, label){
 }
 
 /** Job number, customer and description from whichever reading got them;
- *  the dimensions reading looks at the title block most directly. */
+ *  the layout reading looks at the title block most directly. */
 export function mergeTitleBlock(dims, parts){
   const a = dims || {}, b = parts || {};
   const out = {};
@@ -102,10 +104,10 @@ export async function contentFor(file, pageNumbers, { withText = false } = {}){
 }
 
 /**
- * Runs the four readings over `blocks` and assembles the result.
- * `includeJobFields` asks the readings for the title block too (a new job).
- * Throws only when every reading failed -- a scan that never happened,
- * which the person needs to see as such.
+ * Reads `blocks` in the steps above and assembles the result.
+ * `includeJobFields` asks for the title block too (a new job).
+ * Throws only when nothing at all could be read -- a scan that never
+ * happened, which the person needs to see as such.
  */
 export async function readDrawing(blocks, { includeJobFields = false } = {}){
   evictOld();
@@ -130,9 +132,9 @@ export async function readDrawing(blocks, { includeJobFields = false } = {}){
     if(r.error) console.error(`${spec.question}: ${r.error.message}`);
     return r;
   };
+  const parsedOf = r => (r.parsed && typeof r.parsed === 'object') ? r.parsed : {};
 
-  // Layer 1: decides which sheets the readings below are shown. Pointless
-  // for a single page.
+  // 1: which sheets each question below is shown. Pointless for one page.
   let classification = null;
   if(allPages.length > 1){
     const c = await run(layer('classify', PROMPT_VERSIONS.classify, buildPageClassificationPrompt,
@@ -140,42 +142,51 @@ export async function readDrawing(blocks, { includeJobFields = false } = {}){
     classification = c.error ? null : c.parsed;
   }
   const roles = pagesByRole(classification, allPages);
+  const layoutPages = forPages([...new Set([...roles.assembly, ...roles.titles])].sort((a, b) => a - b));
 
-  // Layer 2: independent, so in parallel.
-  const [partsPass, calloutPass, dimsPass] = await Promise.all([
+  // 2: the line items, and the drive side alongside -- independent.
+  const [partsPass, layoutPass] = await Promise.all([
     run(layer('parts', PROMPT_VERSIONS.parts, () => buildPartsListPrompt(includeJobFields),
       'Transcribe the parts list from these pages.', mergeParts), forPages(roles.bom)),
-    run(layer('callouts', PROMPT_VERSIONS.callouts, buildCalloutPrompt,
-      'Report every balloon callout on these views and where its leader points.', mergeCallouts), forPages(roles.views)),
-    run(layer('dimensions', PROMPT_VERSIONS.dimensions, () => buildSpecPrompt(includeJobFields, classification),
-      'Read this complete drawing set and return the engineering specification JSON.', mergeSpec), pages)
+    run(layer('layout', PROMPT_VERSIONS.layout, () => buildLayoutPrompt(includeJobFields),
+      'Which side is the drive end?', mergeLayout), layoutPages)
   ]);
+  const partsParsed = parsedOf(partsPass), layoutParsed = parsedOf(layoutPass);
+  const { components: tableParts, report: filterReport } = normalizeComponentsDetailed(partsParsed);
+  const driveSide = (layoutParsed.orientation && layoutParsed.orientation.drive_end_side) || 'unknown';
 
-  const readings = [partsPass, calloutPass, dimsPass];
+  // 3: the balloons for exactly those items. The question depends on the
+  // answers above, so they are part of its cache key.
+  const items = tableParts.map(p => ({ balloon: p.balloon, item_as_drawn: p.item_as_drawn, item: p.item }));
+  const calloutVersion = `${PROMPT_VERSIONS.callouts}:${hashContent(JSON.stringify([items.map(i => [i.balloon, i.item_as_drawn]), driveSide]))}`;
+  const calloutPass = (tableParts.length || partsPass.error)
+    ? await run(layer('callouts', calloutVersion, () => buildCalloutPrompt(items, driveSide),
+        'Find these balloons on the drawn views.', mergeCallouts), forPages(roles.views))
+    : { parsed: { callouts: [], unballooned: [] } };
+
+  const readings = [partsPass, layoutPass, calloutPass];
   if(readings.every(r => r.error)){
     const err = readings[0].error;
     err.readingsAlreadySaved = readings.filter(r => r.reused).length;
     throw err;
   }
 
-  const parsedOf = r => (r.parsed && typeof r.parsed === 'object') ? r.parsed : {};
-  const partsParsed = parsedOf(partsPass), calloutParsed = parsedOf(calloutPass), dimsParsed = parsedOf(dimsPass);
-
-  // Layer 3: whitelist, then join balloons to table rows, then settle
-  // which end of the machine each part belongs to -- in code, where
-  // there is one right answer.
-  const { components: tableParts, report: filterReport } = normalizeComponentsDetailed(partsParsed);
-  const { components: placed, report: joinReport } = joinPartsAndCallouts(tableParts, calloutParsed);
-  const { components, report: locationReport } = resolveLocations(placed, dimsParsed.orientation);
+  // 4: join balloons to table rows, settle which end each part is at,
+  // and sort drive end -> run -> tail end -- in code, where there is one
+  // right answer.
+  const { components: placed, report: joinReport } = joinPartsAndCallouts(tableParts, parsedOf(calloutPass));
+  const { components: located, report: locationReport } = resolveLocations(placed, layoutParsed.orientation);
+  const components = sortByLocation(located).map(({ drawn_end, ...c }) => c);
 
   // Nothing left to recover: "Re-scan" should read the sheet again.
   if(!readings.some(r => r.error)) forgetPages(pages.map(p => p.hash));
 
   return {
     components,
-    titleBlock: mergeTitleBlock(dimsParsed, partsParsed),
+    titleBlock: mergeTitleBlock(layoutParsed, partsParsed),
     diagnostics: {
       ...filterReport, ...joinReport, ...locationReport,
+      driveEndSide: driveSide,
       pagesRead: { bom: roles.bom, views: roles.views, total: allPages.length },
       failedReadings: readings.filter(r => r.error).map(r => ({ pass: r.error.pass || r.question || 'reading', message: r.error.message })),
       incompleteReadings: readings.filter(r => r.partial).map(r => `${r.question || 'reading'}: ${r.partial.message}`),
