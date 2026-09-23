@@ -25,11 +25,18 @@ const RULES = [
   [/\buhmw\b/i,                                                      'UHMW']
 ];
 
+/** Words that mean the part merely carries a shaft: a foot, a saddle, an
+ *  auger's flights or pipe. "AUGER W/ END SHAFT" is an auger and "FOOT
+ *  W/ END SHAFT" isn't a shaft at all -- a drive or end shaft is a bare
+ *  shaft. */
+const NOT_A_SHAFT = /\b(foot|feet|saddles?|flight(ing)?s?|pipe|augers?|troughs?)\b/i;
+const SHAFT_TYPES = new Set(['Drive Shaft', 'Tail Shaft', 'Coupling Shaft', 'Shaft']);
+
 /** The part type for a description, or null when it isn't one the shop
  *  tracks (plates, guards, fasteners...). */
 export function categorize(description){
   const s = String(description || '');
-  const hit = RULES.find(([re]) => re.test(s));
+  const hit = RULES.find(([re, type]) => re.test(s) && !(SHAFT_TYPES.has(type) && NOT_A_SHAFT.test(s)));
   return hit ? hit[1] : null;
 }
 
@@ -41,3 +48,17 @@ export function categorize(description){
  * re-exports the same rule).
  */
 export { learnKey } from '../../shared/partNames.js';
+
+/**
+ * A part the AI called a shaft whose description says it only carries
+ * one gets the type its description does say (an auger), or is left out
+ * (a foot, a saddle). Anything else passes as it is.
+ */
+export function checkShaft(part){
+  const drawn = String((part && part.item_as_drawn) || '');
+  const called = String((part && part.item) || '');
+  const isShaft = SHAFT_TYPES.has(called) || /\bshafts?\b/i.test(called);
+  if(!isShaft || !NOT_A_SHAFT.test(drawn)) return part;
+  const type = categorize(drawn);
+  return type ? { ...part, item: type } : null;
+}

@@ -158,7 +158,7 @@ function PartNames({ names, reload }){
   };
   if(!names.length){
     return html`<div class="card"><${Empty} icon="scan">Nothing learned yet. When someone fixes a scanned part's type or where it goes
-      (Edit parts, on a job), the next scan reads that part the same way.<//></div>`;
+      or removes one that isn't a part (Edit parts, on a job), the next scan reads that part the same way.<//></div>`;
   }
   return html`
     <p class="hint">Fixes people made to scanned parts. Every scan applies these to a part with the same description.</p>
@@ -168,7 +168,7 @@ function PartNames({ names, reload }){
           <div class="doc-main">
             <div class="doc-title">${n.drawn}</div>
             <div class="doc-meta">
-              ${[n.item && `Type: ${n.item}`, n.location && `Goes: ${LOCATION_LABEL[n.location] || n.location}`].filter(Boolean).join(' · ')}
+              ${[n.item === 'Not a part' ? 'Left out of scans' : n.item && `Type: ${n.item}`, n.location && `Goes: ${LOCATION_LABEL[n.location] || n.location}`].filter(Boolean).join(' · ')}
               · used ${plural(n.usedCount, 'time')} · ${n.updatedByName || 'Someone'}, ${fmtWhen(n.updatedAt)}
             </div>
           </div>

@@ -12,7 +12,7 @@ import { toComponent } from '../records.mjs';
 import { pushJob } from './jobs.mjs';
 import { relativePathFor, writeFileAtomic, absolutePath, safeMimeType } from '../files.mjs';
 import * as v from '../validate.mjs';
-import { learnKey } from '../../shared/partNames.js';
+import { learnKey, NOT_A_PART } from '../../shared/partNames.js';
 
 export const COMPONENT_STAGES = ['trough', 'screw', 'drive', 'bearings', 'tail', 'other'];
 const LOCATIONS = ['drive_end', 'tail_end', 'trough', 'screw', 'hanger', 'other', 'unknown'];
@@ -240,6 +240,15 @@ export default function register(r){
   r.delete('/api/components/:id', ctx => {
     const existing = loadComponent(ctx.db, ctx.params.id);
     ctx.db.run('delete from components where id = ?', existing.id);
+    // A scanned part removed is remembered as not a part, so the next
+    // scan leaves that description out.
+    const key = learnKey(existing.item_as_drawn);
+    if(key && existing.extraction_method !== 'manual'){
+      ctx.db.run(`insert into part_names (key, drawn, item, location, updated_by, updated_at) values (?, ?, ?, null, ?, ?)
+                  on conflict(key) do update set drawn = excluded.drawn, item = excluded.item, location = null,
+                    updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+        key, existing.item_as_drawn, NOT_A_PART, ctx.user.id, now());
+    }
     ctx.log('Part removed', { text: `${existing.job_number}: ${existing.item}`, jobNumber: existing.job_number },
       { type: 'job', id: existing.job_id });
     return { job: pushJob(ctx.db, existing.job_id) };

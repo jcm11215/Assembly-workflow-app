@@ -5,6 +5,10 @@
  * words, upper case. "Flg. Brg 2-7/16" and "FLG BRG 2-7/16" are the same
  * part; a different size is a different key.
  */
+/** What a removed scanned part is remembered as: not a part the shop
+ *  tracks, so later scans leave that description out. */
+export const NOT_A_PART = 'Not a part';
+
 export function learnKey(description){
   return String(description || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
 }

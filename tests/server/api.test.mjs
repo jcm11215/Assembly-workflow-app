@@ -364,3 +364,13 @@ test('static files cannot be read outside the app folders', async () => {
   }
   assert.equal((await fetch(srv.url + '/shared/procedure.js')).status, 200);
 });
+
+test('removing a scanned part teaches later scans to leave it out', async () => {
+  const job = await newJob();
+  const saved = await admin.post(`/api/jobs/${job.id}/blueprints`, { components: [
+    { item: 'Shaft', item_as_drawn: 'FOOT W/ END SHAFT', extraction_method: 'bom_table' }] });
+  const id = saved.data.blueprint.components[0].id;
+  assert.equal((await admin.delete(`/api/components/${id}`)).status, 200);
+  const names = (await admin.get('/api/parts/learned')).data.names;
+  assert.equal(names.find(n => n.key === 'FOOT W END SHAFT').item, 'Not a part');
+});

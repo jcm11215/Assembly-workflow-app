@@ -34,7 +34,8 @@ import { mergeCallouts, mergeClassification, mergeLayout, mergeParts } from './s
 import { evictOld, forgetPages, hashContent } from './scanStore.js';
 import { combineSameRows, dedupeParts, joinPartsAndCallouts, resolveLocations, sortByLocation } from './scanJoin.js';
 import { normalizeComponentsDetailed } from './spec.js';
-import { categorize, learnKey } from './categories.js';
+import { categorize, checkShaft, learnKey } from './categories.js';
+import { NOT_A_PART } from '../../shared/partNames.js';
 
 /**
  * Which scanner read a drawing, saved with every scan so a list from an
@@ -220,9 +221,11 @@ export function applyLearned(parts, learned){
     if(!hit) return p;
     used++;
     keys.add(key);
+    // Someone removed this part from an earlier scan.
+    if(hit.item === NOT_A_PART) return null;
     return { ...p, ...(hit.item ? { item: hit.item } : {}), ...(hit.location ? { installation_location: hit.location } : {}), learned: true };
   });
-  return { parts: out, used, keys: [...keys] };
+  return { parts: out.filter(Boolean), used, keys: [...keys] };
 }
 
 /** "3 at (0.86, 0.41)" hints: where the table's item numbers appear on a
@@ -286,7 +289,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
         'Transcribe the parts list from this page.', mergeParts), askPages, tally, tableBlocks, onStatus, 'Reading the parts table')
     : { question: 'parts', parsed: { parts: [] }, error: null };
   const partsParsed = parsedOf(partsPass);
-  const { parts: withLearning, used: learnedUsed, keys: learnedKeys } = applyLearned([...fromText, ...(partsParsed.parts || [])], learned);
+  const { parts: withLearning, used: learnedUsed, keys: learnedKeys } = applyLearned([...fromText, ...(partsParsed.parts || [])].map(checkShaft).filter(Boolean), learned);
   const { components: normalized, report: filterReport } = normalizeComponentsDetailed({ parts: withLearning });
   // A set that repeats its table on every sheet lists every row again.
   const { parts: tableParts, removed: repeatedRows } = dedupeParts(normalized);

@@ -87,3 +87,21 @@ test('table rows become parts; corrections people made are applied', () => {
   assert.equal(used, 1);
   assert.equal(fixed[0].installation_location, 'tail_end');
 });
+
+test('a part that only carries a shaft is not a shaft', async () => {
+  const { checkShaft } = await import('../../web/scan/categories.js');
+  assert.equal(categorize('AUGER W/ END SHAFT'), 'Auger');
+  assert.equal(categorize('FOOT W/ END SHAFT'), null);
+  assert.equal(categorize('SADDLE, DRIVE SHAFT'), null);
+  assert.equal(categorize('DRIVE SHAFT 2-7/16 C1045'), 'Drive Shaft');
+  assert.equal(checkShaft({ item: 'Drive Shaft', item_as_drawn: '12" FLIGHTS ON 2-1/2 PIPE, END SHAFT' }).item, 'Auger');
+  assert.equal(checkShaft({ item: 'Drive Shaft', item_as_drawn: 'FEET W/ END SHAFT' }), null);
+  assert.equal(checkShaft({ item: 'Drive Shaft', item_as_drawn: 'DRIVE SHAFT 2-7/16' }).item, 'Drive Shaft');
+});
+
+test('a part someone removed is left out of later scans', () => {
+  const learned = new Map([[learnKey('FOOT ASSY'), { item: 'Not a part' }]]);
+  const { parts, used } = applyLearned([{ item: 'Shaft', item_as_drawn: 'Foot assy' }, { item: 'Motor', item_as_drawn: 'GEARMOTOR' }], learned);
+  assert.deepEqual(parts.map(p => p.item), ['Motor']);
+  assert.equal(used, 1);
+});

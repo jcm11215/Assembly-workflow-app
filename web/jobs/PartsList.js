@@ -72,7 +72,7 @@ export function PartsList({ job }){
         ${canEdit && html`<button class="btn btn-sm" onClick=${() => setEditing(!editing)}>${editing ? 'Done' : 'Edit parts'}</button>`}
       </div>
       ${editing && html`<p class="hint">The scanner doesn't always get it right -- fix, reorder, remove or add anything here.
-        A type or end you fix is remembered, and the next scan reads that part the same way.</p>`}
+        A type or end you fix is remembered, and the next scan reads that part the same way. A part you remove is left out of later scans.</p>`}
       ${repeats > 0 && !editing && html`
         <div class="note-bar parts-repeats">
           <span>This scan lists ${repeats} part${repeats === 1 ? '' : 's'} more than once: the scanner used to count a part again in every view that showed it. ${canEdit
