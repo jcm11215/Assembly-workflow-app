@@ -11,7 +11,7 @@
  */
 export const PROMPT_VERSIONS = {
   classify: 1,
-  parts: 4,   // reads one sheet, or its enlarged table
+  parts: 5,   // reads one sheet, or its enlarged table
   layout: 2,  // one sheet: the main view
   callouts: 4   // plus a hash of the item list and drive side it is asked with
 };
@@ -121,11 +121,13 @@ ONLY include these part types, nothing else. Use the name shown as the start of 
 - Drive Shaft
 - Shaft (any other shaft)
 - Auger (screw/flighting sections)
+- Gasket
+- Coupling Bolts
 - UHMW (liners, wear strips, or other UHMW parts)
 
-Do NOT include gaskets, coupling bolts, plates, weldments, sprockets, keys, guards, other fasteners, trough sections, covers, shrouds, or discharge spouts/chutes -- even if clearly listed. This is a fixed whitelist, not a completeness target. Check every page given to you: a set can carry its parts table across more than one sheet.
+Do NOT include plates, weldments, sprockets, keys, guards, other fasteners, trough sections, covers, shrouds, or discharge spouts/chutes -- even if clearly listed. This is a fixed whitelist, not a completeness target. Check every page given to you: a set can carry its parts table across more than one sheet.
 
-For "installation_location": the drive, motor and reducer are always "drive_end". Hanger bearings are "hanger". Augers and coupling shafts along the run are "screw". Where the table alone doesn't say which end a shaft or bearing belongs to, use "unknown" -- do not guess. A later pass sees the assembly view and can place it.
+For "installation_location": the drive, motor and reducer are always "drive_end". Hanger bearings are "hanger". Augers, coupling shafts and coupling bolts along the run are "screw". Where the table alone doesn't say which end a shaft or bearing belongs to, use "unknown" -- do not guess. A later pass sees the assembly view and can place it.
 
 Return an empty "parts" array if these pages carry no parts table at all. An honest empty answer is correct and useful; an invented row is a defect.`;
 }

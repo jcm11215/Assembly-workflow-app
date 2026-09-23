@@ -9,6 +9,8 @@
  */
 const RULES = [
   [/\b(hangers?|hngrs?)\b/i,                                         'Hanger Bearing'],
+  [/\b(coupling|cplg)\s*bolts?\b/i,                                   'Coupling Bolts'],
+  [/\bgaskets?\b/i,                                                  'Gasket'],
   [/\b(coupling|cplg)\s*shafts?\b/i,                                  'Coupling Shaft'],
   [/\btail\s*shafts?\b/i,                                            'Tail Shaft'],
   [/\bdrive\s*shafts?\b/i,                                           'Drive Shaft'],

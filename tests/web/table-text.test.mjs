@@ -68,8 +68,9 @@ test('descriptions sort into the shop\'s part types', () => {
   assert.equal(categorize('DRIVE SHAFT 2-7/16'), 'Drive Shaft');
   assert.equal(categorize('SHAFT MOUNT DRIVE'), 'Drive');
   assert.equal(categorize('12" SECTIONAL FLIGHT'), 'Auger');
-  assert.equal(categorize('CPLG BOLT'), null, 'coupling bolts are not tracked');
-  assert.equal(categorize('GASKET'), null);
+  assert.equal(categorize('CPLG BOLT'), 'Coupling Bolts');
+  assert.equal(categorize('GASKET'), 'Gasket');
+  assert.equal(categorize('HEX BOLT'), null, 'other fasteners are not tracked');
   assert.equal(categorize('UHMW WEAR STRIP'), 'UHMW');
   assert.equal(categorize('SHAFT, 2-7/16 C1045'), 'Shaft');
   assert.equal(categorize('WASTE PACK SEAL'), 'Seal');

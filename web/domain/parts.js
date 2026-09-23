@@ -19,7 +19,7 @@ export const PART_GROUPS = [
 
 /** The part types a scan keeps (scan/categories.js), for correcting one. */
 export const PART_TYPES = ['Drive', 'Motor', 'Reducer', 'Seal', 'Bearing', 'Hanger Bearing',
-  'Drive Shaft', 'Tail Shaft', 'Coupling Shaft', 'Shaft', 'Auger', 'UHMW'];
+  'Drive Shaft', 'Tail Shaft', 'Coupling Shaft', 'Shaft', 'Auger', 'Gasket', 'Coupling Bolts', 'UHMW'];
 
 const GROUP_BY_STAGE = { drive: 'drive', tail: 'tail', screw: 'auger', bearings: 'hanger' };
 
