@@ -1,12 +1,12 @@
 {
-  "name": "Assembly Workflow Tracker",
+  "name": "Assembly Workflow",
   "short_name": "Assembly",
   "description": "Shop-floor job tracking for screw conveyor assembly.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0f1215",
-  "theme_color": "#0b0c0d",
+  "background_color": "#f5f6f8",
+  "theme_color": "#ffffff",
   "icons": [
     {
       "src": "/assets/icon-192.png",

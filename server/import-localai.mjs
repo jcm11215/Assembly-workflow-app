@@ -4,7 +4,7 @@
  * needed when the embedding model is the same), its corrections, and its
  * model choices.
  *
- *   node server/cli.mjs import-localai /home/you/localai
+ *   sudo assembly-workflow import-localai /home/you/localai
  *
  * Its copies of tracker data (the "Job & production data" collection and
  * data/tracker/) are left behind: the assistant here reads the jobs live.
@@ -24,7 +24,7 @@ export async function importLocalAi(db, filesDir, folder, log = console.log){
   const dbFile = path.join(folder, 'data', 'memory.db');
   try { fs.accessSync(dbFile, fs.constants.R_OK); }
   catch (e) {
-    if(e.code === 'EACCES') throw new Error(`Not allowed to read ${dbFile}. Run this with plain sudo (not sudo -u assembly), then: sudo chown -R assembly: <DATA_DIR>`);
+    if(e.code === 'EACCES') throw new Error(`Not allowed to read ${dbFile}. Run it as: sudo assembly-workflow import-localai ${folder}`);
     throw new Error(`No ${dbFile} -- give the folder the Local AI was installed in.`);
   }
   let cfg = {};

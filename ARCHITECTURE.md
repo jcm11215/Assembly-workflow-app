@@ -34,13 +34,13 @@ it: SQLite is built into Node 22, and the browser libraries are vendored.
 | Folder | What's there |
 | --- | --- |
 | `shared/` | Pure rules both sides import: stages, the checklist and the stage-move rule (`procedure.js`), roles and permissions (`roles.js`), task recurrence, the error vocabulary and its rollups, calendar dates. |
-| `server/` | The server. `main.mjs` starts it; `app.mjs` builds the handler (tests run it on an in-memory database); `cli.mjs` is the admin tool; `import-supabase.mjs` is the one-time migration. |
+| `server/` | The server. `main.mjs` starts it; `app.mjs` builds the handler (tests run it on an in-memory database); `cli.mjs` is the admin tool; `models.mjs` picks and downloads the AI models; `import-supabase.mjs` and `import-localai.mjs` are one-time migrations. |
 | `web/` | The app. Preact + htm, vendored in `web/vendor/` with pdf.js and the Barlow fonts; plain ES modules, no build step. |
 | `web/lib/` | `api.js` (fetch), `store.js` (one state object + `useStore`), `actions.js` (every change, one function each), `live.js` (SSE), `router.js` (hash routes). |
 | `web/screens/` | One file per screen. `web/jobs/` holds the pieces shared between job screens. |
 | `web/scan/` | Reading drawings: the four-reading pipeline (`pipeline.js`) and its tested building blocks (prompts, JSON repair, balloon joining, layout). |
 | `web/assistant/` | The assistant's tool list and its propose-then-confirm flow. |
-| `deploy/` | systemd unit, install and update scripts. |
+| `deploy/` | systemd unit, the install and update scripts, and the `assembly-workflow` admin command they install. |
 | `tests/` | `node:test` suites for the server, shared rules and app logic; an optional browser suite. |
 
 ## How a change flows
@@ -101,7 +101,17 @@ start of the prompt. Requests are sized up front (tokens per image by
 model family), refused with "too large" when they can't fit -- the scan
 pipeline answers that by halving the pages -- and checked afterwards for
 an overflow that slipped through. Drawings go to the vision model with
-each page's PDF text layer beside it; questions go to the chat model.
+each page's PDF text layer beside it; questions go to the chat model (or
+the vision model, until a chat model is picked).
+
+**Setting it up.** The AI has three jobs -- answering questions, reading
+drawings, searching documents -- and `models.mjs` gives each a model. Any
+job without one gets an installed model that fits: the recommended one if
+it's there, else one of a sensible size. This happens when the server
+starts and whenever Settings is opened, so a model installed by hand is
+picked up too. **Set up the AI** in Settings downloads what's still
+missing, one model at a time, putting each to work as it lands; progress
+reaches admins over SSE (`ai-models`).
 
 **Knowledge base.** Admins add documents (Knowledge screen). Text comes
 from the file (text, Markdown, CSV, HTML, Word) or, for a PDF, from the

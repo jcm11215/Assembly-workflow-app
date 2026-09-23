@@ -1,6 +1,79 @@
 /** Small building blocks the screens share. */
-import { html, useState } from '../vendor/index.js';
+import { html, useEffect, useRef, useState } from '../vendor/index.js';
 import { toastError } from './overlays.js';
+import { Icon } from './icons.js';
+
+/** The top of every screen: its title, a line under it, and its main actions. */
+export function PageHeader({ title, sub, actions, crumbs }){
+  return html`
+    <header class="page-head">
+      <div>
+        ${crumbs && html`<div class="crumbs">${crumbs}</div>`}
+        <h1>${title}</h1>
+        ${sub && html`<div class="page-sub">${sub}</div>`}
+      </div>
+      ${actions && html`<div class="page-actions">${actions}</div>`}
+    </header>`;
+}
+
+/**
+ * A button that opens a short list of actions. `items` are
+ * { label, icon?, onSelect, danger? } or 'sep'; falsy entries are skipped.
+ */
+export function Menu({ label = 'More', icon = 'more', items, class: cls = 'btn' }){
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if(!open) return;
+    const away = e => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const key = e => { if(e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', key); };
+  }, [open]);
+  const shown = items.filter(Boolean);
+  if(!shown.length) return null;
+  return html`
+    <div class="menu-wrap" ref=${ref}>
+      <button type="button" class=${cls} aria-haspopup="menu" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+        ${icon && html`<${Icon} name=${icon} />`}${label}
+      </button>
+      ${open && html`
+        <div class="menu" role="menu">
+          ${shown.map((it, i) => it === 'sep' ? html`<div key=${i} class="menu-sep"></div>` : html`
+            <button key=${i} type="button" role="menuitem" class=${`menu-item${it.danger ? ' danger' : ''}`}
+                    onClick=${() => { setOpen(false); it.onSelect(); }}>
+              ${it.icon && html`<${Icon} name=${it.icon} />`}${it.label}
+            </button>`)}
+        </div>`}
+    </div>`;
+}
+
+/** Underlined tabs. `options` are { id, label, count? }. */
+export function Tabs({ options, value, onChange, label }){
+  return html`
+    <div class="tabs" role="tablist" aria-label=${label}>
+      ${options.map(o => html`
+        <button key=${o.id} type="button" role="tab" class=${`tab${o.id === value ? ' active' : ''}`}
+                aria-selected=${o.id === value} onClick=${() => onChange(o.id)}>
+          ${o.label}${o.count != null && html`<span class="count">${o.count}</span>`}
+        </button>`)}
+    </div>`;
+}
+
+/** Two or three mutually exclusive views, e.g. List | Board. */
+export function Segmented({ options, value, onChange, label }){
+  return html`
+    <div class="segmented" role="group" aria-label=${label}>
+      ${options.map(o => html`
+        <button key=${o.id} type="button" class=${o.id === value ? 'active' : ''} aria-pressed=${o.id === value} onClick=${() => onChange(o.id)}>
+          ${o.icon && html`<${Icon} name=${o.icon} />`}${o.label}
+        </button>`)}
+    </div>`;
+}
+
+/** Initials for an avatar: "Justin McKinney" -> "JM". */
+export const initials = name => String(name || '?').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
 
 export function Section({ title, count, actions, children }){
   return html`
@@ -13,8 +86,9 @@ export function Section({ title, count, actions, children }){
     </section>`;
 }
 
-export function Empty({ icon = '—', children }){
-  return html`<div class="empty"><div class="empty-icon">${icon}</div><div>${children}</div></div>`;
+/** Nothing to show. `icon` is an icon name (ui/icons.js). */
+export function Empty({ icon = 'inbox', children }){
+  return html`<div class="empty"><div class="empty-icon"><${Icon} name=${icon} /></div><div>${children}</div></div>`;
 }
 
 export function Chips({ options, value, onChange, label }){

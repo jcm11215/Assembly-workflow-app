@@ -42,7 +42,7 @@ function SignInForm({ onDone, onSignUp }){
     </form>
     <button type="button" class="btn btn-block" onClick=${onSignUp}>Create an account</button>
     <button type="button" class="link-btn" onClick=${() => setForgot(!forgot)}>Forgot your password?</button>
-    ${forgot && html`<p class="hint">Ask an admin to set a new one for you -- they can do it from the Admin screen, under Team.</p>`}`;
+    ${forgot && html`<p class="hint">Ask an admin to set a new one for you. They can do it on the Team screen.</p>`}`;
 }
 
 function SignUpForm({ onDone, onBack }){
@@ -74,14 +74,14 @@ function SetupForm({ onDone }){
   const submit = submitting(async v => {
     if(v.password !== v.confirm) throw new Error('The two passwords do not match.');
     await setUp({ setupCode: v.setupCode, fullName: v.fullName, login: v.login, password: v.password });
-    toast('Set up. Add your team from the Admin screen.', { ms: 6000, kind: 'ok' });
+    toast('You’re all set. Add your team on the Team screen.', { ms: 6000, kind: 'ok' });
     onDone();
   });
   return html`
     <h1>Set up this server</h1>
     <p class="hint">
-      No accounts exist yet. Create the first admin account. The setup code is printed in the
-      server's log (<code>journalctl -u assembly-workflow</code>).
+      No accounts exist yet, so create the first admin account. To get the setup code, run
+      <code>assembly-workflow setup-code</code> on the server.
     </p>
     <form onSubmit=${submit}>
       <${Field} label="Setup code"><input name="setupCode" required autocomplete="off" spellcheck="false" autocapitalize="characters" /><//>

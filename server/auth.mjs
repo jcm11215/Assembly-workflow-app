@@ -6,6 +6,7 @@
  * used to sign in as anyone. Passwords are scrypt-hashed.
  */
 import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
+import fs from 'node:fs';
 import { promisify } from 'node:util';
 import { now } from './db.mjs';
 
@@ -141,14 +142,25 @@ export function clearFailures(key){ failures.delete(key); }
 /**
  * Before anyone has an account, the first admin is created from the web
  * page with a one-time code printed in the server's log -- so being on
- * the tailnet first is not enough to claim the app.
+ * the tailnet first is not enough to claim the app. The code is also
+ * kept in a file only the server's account can read, for
+ * `assembly-workflow setup-code`, and removed once it has been used.
  */
 let setupCode = null;
+let setupCodeFile = null;
+
+export function keepSetupCodeIn(file){ setupCodeFile = file; }
 
 export function setupCodeIfNeeded(db){
   const { n } = db.get('select count(*) as n from users');
-  if(n > 0){ setupCode = null; return null; }
-  if(!setupCode) setupCode = randomBytes(4).toString('hex').toUpperCase();
+  if(n > 0){ clearSetupCode(); return null; }
+  if(!setupCode){
+    setupCode = randomBytes(4).toString('hex').toUpperCase();
+    if(setupCodeFile){
+      try { fs.writeFileSync(setupCodeFile, `${setupCode}\n`, { mode: 0o600 }); }
+      catch (e) { console.error(`Couldn't save the setup code to ${setupCodeFile}: ${e.message}`); }
+    }
+  }
   return setupCode;
 }
 
@@ -156,4 +168,7 @@ export function checkSetupCode(code){
   return !!setupCode && String(code || '').trim().toUpperCase() === setupCode;
 }
 
-export function clearSetupCode(){ setupCode = null; }
+export function clearSetupCode(){
+  setupCode = null;
+  if(setupCodeFile) fs.rmSync(setupCodeFile, { force: true });
+}

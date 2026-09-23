@@ -6,7 +6,8 @@ import { useCan } from '../lib/permissions.js';
 import { fmtDate } from '../lib/format.js';
 import { jobLink } from '../lib/router.js';
 import { todayISO } from '../../shared/dates.js';
-import { Empty, Field, Select, submitting } from '../ui/kit.js';
+import { Empty, Field, Select, PageHeader, submitting } from '../ui/kit.js';
+import { Icon } from '../ui/icons.js';
 import { openModal, Sheet, confirmAction, toast, toastError } from '../ui/overlays.js';
 
 const TYPE_LABEL = { Progress: 'Progress', Issue: 'Issue', NextSteps: 'Next steps' };
@@ -19,15 +20,16 @@ export function Notes(){
     ? notes.filter(n => [n.jobNumber, n.body, n.authorName].some(v => String(v || '').toLowerCase().includes(needle)))
     : notes;
   return html`
+    <${PageHeader} title="Notes" sub="Daily progress, issues and next steps"
+                   actions=${html`<button class="btn btn-primary" onClick=${() => openModal(NoteForm)}><${Icon} name="plus" />Add a note</button>`} />
     <div class="toolbar">
-      <input type="search" class="search" placeholder="Search notes by job #, text or name…" value=${q}
+      <input type="search" class="search" placeholder="Search notes by job number, text or name" value=${q}
              onInput=${e => setQ(e.currentTarget.value)} aria-label="Search notes" />
     </div>
     <div class="list">
       ${shown.length ? shown.map(n => html`<${NoteCard} key=${n.id} note=${n} showJob=${true} />`)
-                     : html`<${Empty} icon="📝">${notes.length ? 'No notes match.' : 'No notes yet.'}<//>`}
-    </div>
-    <div class="row-actions"><button class="btn btn-primary" onClick=${() => openModal(NoteForm)}>+ Add a note</button></div>`;
+                     : html`<div class="card"><${Empty} icon="note">${notes.length ? 'No notes match.' : 'No notes yet.'}<//></div>`}
+    </div>`;
 }
 
 export function NoteCard({ note: n, showJob }){
@@ -47,7 +49,7 @@ export function NoteCard({ note: n, showJob }){
       </div>
       <div class="note-body">${n.body}</div>
       <div class="note-foot">
-        ${n.authorName && html`<span>— ${n.authorName}</span>`}
+        <span>${n.authorName || ''}</span>
         ${canDelete && html`<button class="link-btn" onClick=${remove}>Delete</button>`}
       </div>
     </div>`;

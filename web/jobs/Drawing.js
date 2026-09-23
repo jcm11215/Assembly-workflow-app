@@ -19,7 +19,7 @@ export function DrawingPreview({ job }){
     return html`
       <a class="file-chip" href=${fileUrl(bp)} target="_blank" rel="noopener">
         ${bp.hasThumbnail && html`<img src=${`/api/blueprints/${bp.id}/thumbnail`} alt="" />`}
-        <span>📄 ${bp.fileName || 'drawing.pdf'}</span>
+        <span>${bp.fileName || 'drawing.pdf'}<br /><small class="hint">PDF drawing</small></span>
         <span class="btn btn-primary btn-sm">Open PDF</span>
       </a>`;
   }

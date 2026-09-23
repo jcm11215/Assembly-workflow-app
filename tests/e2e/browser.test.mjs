@@ -76,6 +76,7 @@ test('first-run setup creates the admin and opens the app', { skip }, async () =
   await admin.fill('input[name=confirm]', 'password123');
   await admin.click('button[type=submit]');
   await admin.locator('.nav').waitFor();
+  await admin.getByText('Good ', { exact: false }).first().waitFor();
 });
 
 test('a job is created, ticked, and seen live by a second person', { skip }, async () => {
@@ -85,17 +86,18 @@ test('a job is created, ticked, and seen live by a second person', { skip }, asy
   await dana.fill('input[name=login]', 'dana');
   await dana.fill('input[name=password]', 'password123');
   await dana.click('button[type=submit]');
-  await dana.locator('.nav').waitFor();
+  await dana.locator('.tabbar').waitFor();
+  await dana.click('.tabbar >> text=Jobs');
 
-  await admin.click('text=+ New job');
+  await admin.getByRole('button', { name: 'New job', exact: true }).click();
   await admin.fill('input[name=jobNumber]', '24-1050');
   await admin.fill('input[name=customer]', 'Acme Grain');
   await admin.click('button:has-text("Create job")');
-  await admin.locator('.job-page').waitFor();
+  await admin.locator('.job-head').waitFor();
 
-  // Dana's dashboard picks the new job up without a reload.
-  await dana.locator('.job-card', { hasText: '24-1050' }).waitFor({ timeout: 5000 });
-  await dana.locator('.job-card', { hasText: '24-1050' }).click();
+  // Dana's list of jobs picks the new job up without a reload.
+  await dana.locator('.job-tile', { hasText: '24-1050' }).waitFor({ timeout: 5000 });
+  await dana.locator('.job-tile', { hasText: '24-1050' }).click();
   await dana.locator('.check-item').first().click();
   await dana.locator('.check-item.done').first().waitFor();
 
@@ -107,13 +109,14 @@ test('a job is created, ticked, and seen live by a second person', { skip }, asy
 test('a new job is read off a drawing', { skip }, async () => {
   await api(admin, 'PUT', '/api/settings/ai', { url: `http://127.0.0.1:${PORT + 1}`, chatModel: 'fake-chat', visionModel: 'fake-vision' });
   await admin.goto(BASE + '/#/');
-  await admin.click('text=New job from a drawing');
+  await admin.click('button:has-text("From a drawing")');
   await admin.setInputFiles('input[type=file]', path.join(import.meta.dirname, 'drawing.pdf'));
   await admin.getByText('all will be scanned').waitFor();
   await admin.click('button:has-text("Read the drawing")');
   await admin.locator('input[name=jobNumber]').waitFor({ timeout: 30000 });
   assert.equal(await admin.inputValue('input[name=jobNumber]'), '2024-017H');
   await admin.click('button:has-text("Create job")');
+  await admin.getByRole('tab', { name: /Drawing/ }).click({ timeout: 15000 });
   await admin.locator('.cv-sheet').waitFor({ timeout: 15000 });
   assert.equal(await admin.locator('.part').count(), 4);
 
@@ -152,13 +155,29 @@ test('the assistant answers, and acts only after confirmation', { skip }, async 
   assert.deepEqual((await api(admin, 'GET', '/api/state')).blockers.map(b => b.issue), ['Gearmotor not delivered']);
 });
 
+test('settings shows the AI as ready once its models are installed', { skip }, async () => {
+  await admin.goto(`${BASE}/#/settings`);
+  await admin.getByRole('heading', { name: 'Your account' }).waitFor();
+  await admin.getByText('The AI is ready').waitFor();
+  assert.equal(await admin.locator('.ai-job').count(), 3);
+});
+
 test('every screen opens without an error', { skip }, async () => {
-  for(const tab of ['', 'board', 'blockers', 'errors', 'tasks', 'notes', 'assistant', 'knowledge', 'activity', 'admin']){
-    await admin.goto(`${BASE}/#/${tab}`);
-    await admin.locator('main').waitFor();
-    await admin.waitForTimeout(300);
+  const screens = ['', 'jobs', 'jobs?view=board', 'issues', 'issues?tab=errors', 'tasks', 'notes', 'assistant',
+    'knowledge', 'team', 'activity', 'settings', 'board', 'blockers', 'errors', 'admin'];
+  for(const s of screens){
+    await admin.goto(`${BASE}/#/${s}`);
+    await admin.locator('.page-head, .job-head').first().waitFor();
+    await admin.waitForTimeout(200);
   }
-  await admin.click('button[aria-label=Settings]');
-  await admin.getByText('Your account').waitFor();
+  const phone = await newPage(390, 844);
+  await phone.goto(BASE);
+  await phone.fill('input[name=login]', 'justin');
+  await phone.fill('input[name=password]', 'password123');
+  await phone.click('button[type=submit]');
+  await phone.click('.tabbar >> text=More');
+  await phone.click('.sheet >> text=Knowledge');
+  await phone.locator('.page-head', { hasText: 'Knowledge' }).waitFor();
+  await phone.close();
   assert.deepEqual(errors, []);
 });

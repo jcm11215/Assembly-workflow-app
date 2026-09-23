@@ -1,135 +1,128 @@
 /**
- * The frame around every screen: header, metric readouts, navigation, and
- * the screen the route names.
+ * The frame around every screen: a sidebar on wide screens; on a phone a
+ * top bar and five tabs along the bottom, with the rest under "More".
  */
 import { html, useEffect } from '../vendor/index.js';
-import { useStore, setState } from '../lib/store.js';
-import { useRoute, navigate } from '../lib/router.js';
-import { can as roleCan } from '../../shared/roles.js';
-import { metrics } from '../lib/jobs.js';
-import { reloadState } from '../lib/actions.js';
+import { useStore } from '../lib/store.js';
+import { useRoute } from '../lib/router.js';
+import { can } from '../../shared/roles.js';
+import { roleLabel } from '../../shared/roles.js';
 import { Icon } from '../ui/icons.js';
-import { openModal, toast, toastError } from '../ui/overlays.js';
+import { initials } from '../ui/kit.js';
+import { openModal, Sheet } from '../ui/overlays.js';
 import { lazy } from '../ui/lazy.js';
 
-import { Dashboard } from '../screens/Dashboard.js';
-import { Board } from '../screens/Board.js';
+import { Home } from '../screens/Home.js';
+import { Jobs } from '../screens/Jobs.js';
 import { JobPage } from '../screens/JobPage.js';
-import { Blockers } from '../screens/Blockers.js';
-import { Errors } from '../screens/Errors.js';
+import { Issues } from '../screens/Issues.js';
 import { Tasks } from '../screens/Tasks.js';
 import { Notes } from '../screens/Notes.js';
-import { Activity } from '../screens/Activity.js';
 import { Settings } from '../screens/Settings.js';
 
-// The assistant and the admin screens are the heavy, occasional ones:
-// fetched the first time they are opened.
+// The heavy, occasional screens are fetched the first time they open.
 const Assistant = lazy(() => import('../screens/Assistant.js'), 'Assistant');
-const Admin = lazy(() => import('../screens/Admin.js'), 'Admin');
 const Knowledge = lazy(() => import('../screens/Knowledge.js'), 'Knowledge');
+const Team = lazy(() => import('../screens/Admin.js'), 'Admin');
+const Activity = lazy(() => import('../screens/Activity.js'), 'Activity');
 
 const NAV = [
-  { group: 'Production' },
-  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { id: 'board', label: 'Board', icon: 'board' },
-  { id: 'blockers', label: 'Blockers', icon: 'blockers' },
-  { id: 'errors', label: 'Errors', icon: 'errors' },
-  { group: 'Shop' },
+  { id: 'home', label: 'Home', icon: 'home', href: '#/' },
+  { id: 'jobs', label: 'Jobs', icon: 'jobs' },
+  { id: 'issues', label: 'Issues', icon: 'issues' },
   { id: 'tasks', label: 'Tasks', icon: 'tasks' },
   { id: 'notes', label: 'Notes', icon: 'notes' },
-  { group: 'Tools' },
-  { id: 'assistant', label: 'Assistant', icon: 'assistant' },
-  { id: 'knowledge', label: 'Knowledge', icon: 'knowledge', perm: 'knowledge.manage' },
-  { id: 'activity', label: 'Activity', icon: 'activity' },
-  { id: 'admin', label: 'Admin', icon: 'admin', perm: 'team.manage' }
+  { id: 'assistant', label: 'Assistant', icon: 'sparkle' },
+  { group: 'Admin', perm: 'team.manage' },
+  { id: 'knowledge', label: 'Knowledge', icon: 'book', perm: 'knowledge.manage' },
+  { id: 'team', label: 'Team', icon: 'team', perm: 'team.manage' },
+  { id: 'activity', label: 'Activity', icon: 'activity', perm: 'activity.all' }
 ];
+const TABS = ['home', 'jobs', 'issues', 'tasks'];
 
-const SCREENS = { dashboard: Dashboard, board: Board, blockers: Blockers, errors: Errors, tasks: Tasks,
-                  notes: Notes, assistant: Assistant, knowledge: Knowledge, activity: Activity, admin: Admin };
+const SCREENS = { home: Home, jobs: Jobs, issues: Issues, tasks: Tasks, notes: Notes, assistant: Assistant,
+                  knowledge: Knowledge, team: Team, activity: Activity, settings: Settings };
+const TITLES = { home: 'Home', jobs: 'Jobs', job: 'Job', issues: 'Issues', tasks: 'Tasks', notes: 'Notes', assistant: 'Assistant',
+                 knowledge: 'Knowledge', team: 'Team', activity: 'Activity', settings: 'Settings' };
+
+const hrefOf = n => n.href || `#/${n.id}`;
 
 export function Shell(){
   const route = useRoute();
-  const role = useStore(s => s.me && s.me.role);
-  const connection = useStore(s => s.connection);
   const me = useStore(s => s.me);
+  const connection = useStore(s => s.connection);
   const hasBlocked = useStore(s => s.blockers.some(b => b.status !== 'Resolved'));
+  const allowed = NAV.filter(n => !n.perm || can(me.role, n.perm));
+  const current = route.name === 'job' ? 'jobs' : route.name;
 
-  useEffect(() => {
-    document.title = route.name === 'job' ? 'Job · Assembly Workflow' : 'Assembly Workflow Tracker';
-  }, [route.name]);
+  useEffect(() => { document.title = `${TITLES[route.name] || 'Home'} · Assembly Workflow`; }, [route.name]);
 
-  const Screen = route.name === 'job' ? null : SCREENS[route.name] || Dashboard;
-  const refresh = async () => {
-    try { await reloadState(); toast('Up to date.', { kind: 'ok', ms: 2000 }); }
-    catch (e) { toastError(e); }
-  };
+  const Screen = SCREENS[route.name] || Home;
+  const dot = n => n.id === 'issues' && hasBlocked && html`<span class="dot" aria-label="open blockers"></span>`;
 
   return html`
     <div class="app">
-      <header class="appbar">
+      <aside class="sidebar">
         <a class="brand" href="#/">
-          <img class="brand-mark" src="/assets/isc-mfg-logo.webp" alt="" width="38" height="38" />
-          <div class="brand-text">
-            <div class="brand-name">Assembly Workflow Tracker</div>
-            <div class="brand-sub">
-              <span class=${`conn conn-${connection}`} title=${connection === 'live' ? 'Live' : 'Reconnecting'}></span>
-              ${dateLine()}${me ? ` · ${me.fullName}` : ''}
-            </div>
-          </div>
+          <img class="logo" src="/assets/isc-mfg-logo.webp" alt="" width="32" height="32" />
+          <div><div class="brand-name">Assembly Workflow</div><div class="brand-sub">ISC Manufacturing</div></div>
         </a>
-        <div class="appbar-actions">
-          <span class="stamp">Industrial Screw Conveyors</span>
-          <button class="tool-btn" onClick=${refresh} title="Refresh" aria-label="Refresh"><${Icon} name="refresh" /></button>
-          <button class="tool-btn" onClick=${() => openModal(Settings)} title="Settings" aria-label="Settings"><${Icon} name="settings" /></button>
-        </div>
-        <div class="belt" aria-hidden="true"></div>
+        <nav class="nav" aria-label="Main">
+          ${allowed.map((n, i) => n.group
+            ? html`<div key=${`g${i}`} class="nav-group">${n.group}</div>`
+            : html`<a key=${n.id} href=${hrefOf(n)} class=${`nav-link${current === n.id ? ' active' : ''}`}
+                      aria-current=${current === n.id ? 'page' : undefined}>
+                     <${Icon} name=${n.icon} size=${20} /><span>${n.label}</span>${dot(n)}
+                   </a>`)}
+        </nav>
+        <a class="me" href="#/settings" title="Settings">
+          <span class="avatar">${initials(me.fullName)}</span>
+          <span class="me-text">
+            <span class="me-name">${me.fullName}</span>
+            <span class="me-role"><span class=${`conn conn-${connection}`} title=${connection === 'live' ? 'Connected' : 'Reconnecting…'}></span>${roleLabel(me.role)}</span>
+          </span>
+          <${Icon} name="settings" size=${18} />
+        </a>
+      </aside>
+
+      <header class="topbar">
+        <a href="#/" aria-label="Home"><img class="logo" src="/assets/isc-mfg-logo.webp" alt="" width="32" height="32" /></a>
+        <div class="topbar-title">${TITLES[route.name] || 'Home'}</div>
+        <span class=${`conn conn-${connection}`} title=${connection === 'live' ? 'Connected' : 'Reconnecting…'}></span>
+        <a class="avatar" href="#/settings" aria-label="Settings">${initials(me.fullName)}</a>
       </header>
 
-      ${route.name !== 'job' && html`<${Metrics} />`}
-
       <main id="main">
-        ${route.name === 'job' ? html`<${JobPage} id=${route.id} key=${route.id} />` : html`<${Screen} />`}
+        <div class="page">
+          ${route.name === 'job'
+            ? html`<${JobPage} id=${route.id} key=${route.id} />`
+            : html`<${Screen} query=${route.query} key=${`${route.name}?${new URLSearchParams(route.query)}`} />`}
+        </div>
       </main>
 
-      <nav class="nav" aria-label="Main">
-        ${NAV.filter(n => !n.perm || roleCan(role, n.perm)).map(n => n.group
-          ? html`<div class="nav-group" aria-hidden="true">${n.group}</div>`
-          : html`<a href=${`#/${n.id === 'dashboard' ? '' : n.id}`} class=${`nav-btn${route.name === n.id ? ' active' : ''}`}
-                    aria-current=${route.name === n.id ? 'page' : undefined}>
-                   <${Icon} name=${n.icon} />
-                   <span>${n.label}</span>
-                   ${n.id === 'blockers' && hasBlocked && html`<span class="dot" aria-label="open blockers"></span>`}
-                 </a>`)}
+      <nav class="tabbar" aria-label="Main">
+        ${TABS.map(id => allowed.find(n => n.id === id)).filter(Boolean).map(n => html`
+          <a key=${n.id} href=${hrefOf(n)} class=${`tab-btn${current === n.id ? ' active' : ''}`} aria-current=${current === n.id ? 'page' : undefined}>
+            <${Icon} name=${n.icon} size=${22} /><span>${n.label}</span>${dot(n)}
+          </a>`)}
+        <button type="button" class=${`tab-btn${!TABS.includes(current) && current !== 'home' ? ' active' : ''}`}
+                onClick=${() => openModal(MoreSheet, { items: allowed.filter(n => !n.group && !TABS.includes(n.id)) })}>
+          <${Icon} name="menu" size=${22} /><span>More</span>
+        </button>
       </nav>
     </div>`;
 }
 
-function dateLine(){
-  return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-}
-
-/** The readouts under the header. Tapping one opens the dashboard
- *  filtered to exactly those jobs. */
-function Metrics(){
-  const jobs = useStore(s => s.jobs);
-  const blockers = useStore(s => s.blockers);
-  const active = useStore(s => s.jobFilter);
-  const m = metrics(jobs, blockers);
-  const tiles = [
-    { id: 'inprogress', n: m.inProgress, label: 'In Progress', tone: 'blue' },
-    { id: 'ready', n: m.ready, label: 'Ready to Start', tone: 'yellow' },
-    { id: 'blocked', n: m.blocked, label: 'Blocked', tone: 'red' },
-    { id: 'week', n: m.dueThisWeek, label: 'Due This Week', tone: 'amber' },
-    { id: 'overdue', n: m.overdue, label: 'Overdue', tone: 'red' }
-  ];
-  const open = id => { setState({ jobFilter: active === id ? 'all' : id }); navigate(''); };
+/** Everything that isn't a bottom tab, on a phone. */
+function MoreSheet({ items, close }){
+  const go = () => close();
   return html`
-    <div class="metrics">
-      ${tiles.map(t => html`
-        <button key=${t.id} class=${`metric tone-${t.tone}${active === t.id ? ' active' : ''}${t.n === 0 ? ' zero' : ''}`}
-                onClick=${() => open(t.id)} aria-pressed=${active === t.id}>
-          <span class="metric-n">${t.n}</span>
-          <span class="metric-label">${t.label}</span>
-        </button>`)}
-    </div>`;
+    <${Sheet} title="More" close=${close} small>
+      <div class="stage-picker">
+        ${[...items, { id: 'settings', label: 'Settings', icon: 'settings' }].map(n => html`
+          <a key=${n.id} class="btn" href=${hrefOf(n)} onClick=${go} style=${{ justifyContent: 'flex-start' }}>
+            <${Icon} name=${n.icon} />${n.label}
+          </a>`)}
+      </div>
+    <//>`;
 }

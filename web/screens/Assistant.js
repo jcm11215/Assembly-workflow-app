@@ -14,7 +14,8 @@ import { answer, propose, execute } from '../assistant/plan.js';
 import { toast, openModal, Sheet } from '../ui/overlays.js';
 import { api } from '../lib/api.js';
 import { useCan } from '../lib/permissions.js';
-import { Field, submitting } from '../ui/kit.js';
+import { Field, PageHeader, submitting } from '../ui/kit.js';
+import { Icon } from '../ui/icons.js';
 
 const QUICK = [
   'What should the team focus on today?',
@@ -30,6 +31,7 @@ let nextId = 1;
 
 export function Assistant(){
   const ai = useStore(s => s.ai);
+  const isAdmin = useCan('settings.manage');
   const draft = useStore(s => s.assistantDraft);
   const [messages, setMessages] = useState(history);
   const [busy, setBusy] = useState(false);
@@ -91,21 +93,26 @@ export function Assistant(){
   }
 
   return html`
-    <h2 class="screen-title">Assistant</h2>
-    ${!ai.ready && html`<p class="error-text">The local AI isn't set up yet. An admin can set it up in Settings.</p>`}
-    <div class="quick">
-      ${QUICK.map(q => html`<button key=${q} class="chip" disabled=${busy} onClick=${() => ask(q)}>${q}</button>`)}
-    </div>
+    <${PageHeader} title="Assistant" sub="Ask about the shop, or tell it what to do -- nothing changes until you confirm." />
+    ${!ai.ready && html`<div class="status-card bad" style=${{ marginBottom: '16px' }}><${Icon} name="alert" />
+      <div class="status-card-text">
+        <div class="status-card-title">The AI isn't set up yet</div>
+        <div class="hint" style=${{ margin: '2px 0 0' }}>${isAdmin ? 'It takes one click in Settings.' : 'An admin can set it up in Settings, in one click.'}</div>
+      </div>
+      ${isAdmin && html`<a class="btn btn-primary" href="#/settings">Set it up</a>`}</div>`}
+    ${!messages.length && html`
+      <div class="quick">
+        ${QUICK.map(q => html`<button key=${q} class="chip" disabled=${busy} onClick=${() => ask(q)}>${q}</button>`)}
+      </div>`}
     <div class="chat" ref=${logRef}>
-      ${!messages.length && html`<p class="hint">Ask about jobs, blockers and priorities -- or describe something to do, like
-        "move 24-1050 to layout" or "report a blocker on 24-1050: gearbox not in", and tap Do it. You'll see exactly what
-        will change before anything does.</p>`}
+      ${!messages.length && html`<p class="hint">Try "move 24-1050 to layout" or "report a blocker on 24-1050: gearbox not in"
+        and choose Do it. You'll see exactly what will change before anything does.</p>`}
       ${messages.map(m => html`<${Message} key=${m.id} m=${m} onConfirm=${() => confirm(m)} onCancel=${() => patch(m.id, { state: 'cancelled' })} />`)}
     </div>
     <form class="chat-input" onSubmit=${e => { e.preventDefault(); ask(); }}>
-      <input ref=${inputRef} placeholder="Ask about jobs, blockers, priorities…" aria-label="Message" disabled=${busy} />
-      <button type="submit" class="btn" disabled=${busy}>Ask</button>
-      <button type="button" class="btn btn-primary" disabled=${busy} onClick=${doIt}>Do it</button>
+      <input ref=${inputRef} placeholder="Ask a question or describe what to do" aria-label="Message" disabled=${busy} />
+      <button type="button" class="btn" disabled=${busy} onClick=${doIt} title="Plan changes to the data, for you to confirm">Do it</button>
+      <button type="submit" class="btn btn-primary" disabled=${busy} aria-label="Ask"><${Icon} name="send" /></button>
     </form>`;
 }
 
@@ -158,7 +165,7 @@ function Sources({ sources }){
   return html`
     <div class="sources">
       ${sources.corrections.length > 0 && html`<span class="source source-fix" title=${sources.corrections.map(c => c.question).join('\n')}>
-        ✓ ${sources.corrections.length === 1 ? 'A staff correction' : `${sources.corrections.length} staff corrections`} applied</span>`}
+        ${sources.corrections.length === 1 ? 'A staff correction' : `${sources.corrections.length} staff corrections`} applied</span>`}
       ${sources.documents.map(d => html`
         <a key=${d.docId} class="source" href=${`/api/knowledge/documents/${d.docId}/file`} target="_blank" rel="noopener">${d.title}</a>`)}
     </div>`;

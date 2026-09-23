@@ -18,9 +18,11 @@ assistant answers from. Nothing is sent to an outside AI service.
 
 ## Running it
 
-- **On the shop server:** follow [docs/INSTALL.md](docs/INSTALL.md) -- install
-  Node.js and Tailscale, run `sudo deploy/install.sh`, open the `*.ts.net`
-  address it prints.
+- **On the shop server:** follow [docs/INSTALL.md](docs/INSTALL.md). With
+  Tailscale set up, it's one command, `sudo deploy/install.sh`. It offers to
+  install Node.js, Ollama and the AI models, then prints the `*.ts.net`
+  address to open. After that, `assembly-workflow help` lists everything
+  for looking after it.
 - **Moving from the old Supabase version:** [docs/MIGRATING.md](docs/MIGRATING.md).
 - **Backups, updates, restoring, troubleshooting:** [docs/OPERATIONS.md](docs/OPERATIONS.md).
 - **How it's put together:** [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -32,7 +34,8 @@ npm start            # http://127.0.0.1:8080, data in ./data
 ```
 
 The first page asks for a setup code, which the server prints when it
-starts. That creates the first admin.
+starts (and keeps in `data/setup-code` until it's used). That creates the
+first admin.
 
 ## Tests
 

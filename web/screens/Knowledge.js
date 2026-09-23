@@ -7,7 +7,8 @@ import { html, useEffect, useRef, useState } from '../vendor/index.js';
 import { api } from '../lib/api.js';
 import { fmtWhen, fmtBytes, plural } from '../lib/format.js';
 import { ensurePdfJs, textLayerFromItems } from '../scan/pdf.js';
-import { Chips, Select, AsyncButton, Empty, Field } from '../ui/kit.js';
+import { Tabs, Chips, Select, AsyncButton, Empty, PageHeader } from '../ui/kit.js';
+import { Icon } from '../ui/icons.js';
 import { confirmAction, toast, toastError } from '../ui/overlays.js';
 
 const SECTIONS = [
@@ -24,10 +25,7 @@ export function Knowledge(){
   useEffect(() => { load(); }, []);
 
   return html`
-    <h2 class="screen-title">Knowledge</h2>
-    <p class="hint">The assistant already sees every job, blocker, note and parts list. Add what it can't see -- procedures,
-      spec sheets, vendor manuals -- and it searches them when answering. Correct a wrong answer from the Assistant and it's
-      used from the next question on.</p>
+    <${PageHeader} title="Knowledge" sub="Documents the assistant searches, and corrections staff have made to its answers" />
     ${data && data.staleVectors > 0 && html`
       <div class="inset">
         <p>${plural(data.staleVectors, 'passage')} were indexed with a different embedding model than the one set now
@@ -38,8 +36,8 @@ export function Knowledge(){
           load();
         }}>Re-index everything<//>
       </div>`}
-    <div class="toolbar"><${Chips} label="Section" value=${section} onChange=${setSection}
-      options=${SECTIONS.map(s => ({ ...s, count: data ? data[s.id].length : null }))} /></div>
+    <${Tabs} label="Section" value=${section} onChange=${setSection}
+      options=${SECTIONS.map(s => ({ ...s, count: data ? data[s.id].length : null }))} />
     ${!data ? html`<p class="hint">Loading…</p>`
       : section === 'documents' ? html`<${Documents} data=${data} reload=${load} />`
       : html`<${Corrections} data=${data} reload=${load} />`}`;
@@ -71,6 +69,7 @@ function Documents({ data, reload }){
   const [collection, setCollection] = useState('procedures');
   const [busy, setBusy] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [over, setOver] = useState(false);
   const collections = data.collections.map(c => ({ value: c.id, label: c.label }));
   const labelOf = id => (data.collections.find(c => c.id === id) || {}).label || id;
 
@@ -103,21 +102,26 @@ function Documents({ data, reload }){
 
   const shown = data.documents.filter(d => filter === 'all' || d.collection === filter);
   return html`
-    <div class="inset">
-      <${Field} label="Add to">
-        <${Select} name="collection" value=${collection} options=${collections} onChange=${e => setCollection(e.currentTarget.value)} />
-      <//>
+    <div class=${`dropzone${over ? ' over' : ''}`} style=${{ marginBottom: '18px' }}
+         onDragOver=${e => { e.preventDefault(); setOver(true); }} onDragLeave=${() => setOver(false)}
+         onDrop=${e => { e.preventDefault(); setOver(false); if(!busy) upload(e.dataTransfer.files); }}>
+      <${Icon} name="upload" size=${26} />
+      <div><b>Drop files here</b> or</div>
       <input ref=${fileRef} type="file" multiple accept=${ACCEPT} hidden onChange=${e => upload(e.currentTarget.files)} />
-      <button class="btn btn-primary" disabled=${!!busy} onClick=${() => fileRef.current.click()}>+ Add documents</button>
-      <p class="hint">${busy || 'PDF, Word (.docx), text, Markdown, CSV or HTML. PDFs need selectable text; a scanned page has none.'}</p>
+      <div class="row-actions" style=${{ marginTop: 0, justifyContent: 'center', alignItems: 'center' }}>
+        <${Select} name="collection" value=${collection} options=${collections} onChange=${e => setCollection(e.currentTarget.value)}
+                   aria-label="Add to" style=${{ width: 'auto' }} />
+        <button class="btn btn-primary" disabled=${!!busy} onClick=${() => fileRef.current.click()}>Choose files</button>
+      </div>
+      <div class="hint">${busy || 'PDF, Word, text, Markdown, CSV or HTML. PDFs need selectable text; a scanned page has none.'}</div>
     </div>
 
     <div class="toolbar"><${Chips} label="Collection" value=${filter} onChange=${setFilter}
       options=${[{ id: 'all', label: 'All', count: data.documents.length },
                  ...data.collections.map(c => ({ id: c.id, label: c.label, count: data.documents.filter(d => d.collection === c.id).length }))]} /></div>
 
-    ${!shown.length ? html`<${Empty} icon="📚">Nothing here yet.<//>` : html`
-      <div class="list">
+    ${!shown.length ? html`<div class="card"><${Empty} icon="book">No documents here yet.<//></div>` : html`
+      <div class="card">
         ${shown.map(d => html`
           <div key=${d.id} class="doc-row">
             <div class="doc-main">
@@ -131,7 +135,7 @@ function Documents({ data, reload }){
             <${Select} aria-label="Collection" value=${d.collection} options=${collections}
               onChange=${e => api.patch(`/api/knowledge/documents/${d.id}`, { collection: e.currentTarget.value }).then(reload, toastError)} />
             ${d.status !== 'indexed' && html`<${AsyncButton} class="btn btn-sm" busyLabel="…" onClick=${() => reindex(d)}>Retry<//>`}
-            <button class="btn btn-sm" onClick=${() => remove(d)} aria-label=${`Remove ${d.title}`}>✕</button>
+            <button class="icon-btn danger" onClick=${() => remove(d)} aria-label=${`Remove ${d.title}`} title="Remove"><${Icon} name="trash" size=${18} /></button>
           </div>`)}
       </div>`}`;
 }
@@ -147,10 +151,10 @@ function Corrections({ data, reload }){
     reload();
   };
   if(!data.corrections.length){
-    return html`<${Empty} icon="✓">No corrections yet. Under any answer in the Assistant, “Correct this” teaches it the right one.<//>`;
+    return html`<div class="card"><${Empty} icon="checkCircle">No corrections yet. Under any answer in the Assistant, “Correct this” teaches it the right one.<//></div>`;
   }
   return html`
-    <div class="list">
+    <div class="card">
       ${data.corrections.map(c => html`
         <div key=${c.id} class=${`correction${c.active ? '' : ' off'}`}>
           <div class="correction-q">${c.question}</div>

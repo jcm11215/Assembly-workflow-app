@@ -14,9 +14,11 @@ export function fakeEmbedding(text){
   return v;
 }
 
-/** `chat(body, req)` returns the answer text, or { status, error }. */
+/** `chat(body, req)` returns the answer text, or { status, error }.
+ *  A pulled model is added to `models`, as Ollama names it. */
 export function startFakeOllama({ chat = () => 'OK', models = ['fake-chat', 'fake-vision', 'nomic-embed-text'] } = {}){
   const calls = [];
+  models = [...models];
   const server = http.createServer(async (req, res) => {
     let raw = '';
     for await (const c of req) raw += c;
@@ -27,6 +29,16 @@ export function startFakeOllama({ chat = () => 'OK', models = ['fake-chat', 'fak
     if(req.url === '/api/ps') return send(200, { models: [] });
     if(req.url === '/api/version') return send(200, { version: '0.0-test' });
     if(req.url === '/api/embed') return send(200, { embeddings: body.input.map(fakeEmbedding) });
+    if(req.url === '/api/pull'){
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+      if(/missing/.test(body.model)){ res.end(JSON.stringify({ error: 'pull model manifest: file does not exist' }) + '\n'); return; }
+      for(const line of [{ status: 'pulling manifest' }, { status: 'pulling abc', digest: 'sha256:abc', total: 100, completed: 40 },
+        { status: 'pulling abc', digest: 'sha256:abc', total: 100, completed: 100 }, { status: 'verifying sha256 digest' }, { status: 'success' }]){
+        res.write(JSON.stringify(line) + '\n');
+      }
+      models.push(body.model.includes(':') ? body.model : `${body.model}:latest`);
+      return res.end();
+    }
     if(req.url === '/api/chat'){
       const out = await chat(body, req);
       if(out && typeof out === 'object') return send(out.status, { error: out.error });
@@ -35,5 +47,5 @@ export function startFakeOllama({ chat = () => 'OK', models = ['fake-chat', 'fak
     send(404, { error: 'not found' });
   });
   return new Promise(resolve => server.listen(0, '127.0.0.1', () =>
-    resolve({ url: `http://127.0.0.1:${server.address().port}`, calls, close: () => server.close() })));
+    resolve({ url: `http://127.0.0.1:${server.address().port}`, calls, models, close: () => server.close() })));
 }

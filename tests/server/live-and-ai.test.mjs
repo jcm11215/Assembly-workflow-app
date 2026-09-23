@@ -164,6 +164,53 @@ test('the local model list and a download, through Ollama', async () => {
   fake.close();
 });
 
+test('installed models are put on the jobs nobody picked a model for', async () => {
+  const fake = await startFakeOllama({ models: ['llama3.2:3b', 'minicpm-v:latest', 'nomic-embed-text:latest'] });
+  await admin.put('/api/settings/ai', { url: fake.url, chatModel: '', visionModel: '' });
+  const st = await admin.get('/api/ai/local');
+  assert.equal(st.data.settings.chatModel, 'llama3.2:3b');
+  assert.equal(st.data.settings.visionModel, 'minicpm-v:latest');
+  assert.deepEqual(st.data.jobs.map(j => j.installed), [true, true, true]);
+  assert.equal(st.data.ready, true);
+  assert.equal((await assembler.get('/api/state')).data.ai.ready, true);
+  fake.close();
+});
+
+test('one-click setup downloads what is missing and puts it to work', async () => {
+  const fake = await startFakeOllama({ models: ['fake-chat'] });
+  await admin.put('/api/settings/ai', { url: fake.url, chatModel: 'fake-chat', visionModel: '', embedModel: '' });
+  const res = await admin.post('/api/ai/local/setup');
+  assert.equal(res.status, 202);
+  assert.deepEqual(res.data.queued, ['nomic-embed-text', 'minicpm-v']);
+  let st;
+  for(let i = 0; i < 50; i++){
+    st = (await admin.get('/api/ai/local')).data;
+    if(!st.downloads.current && !st.downloads.queue.length) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  assert.equal(st.downloads.error, null);
+  assert.equal(st.settings.chatModel, 'fake-chat');
+  assert.equal(st.settings.visionModel, 'minicpm-v:latest');
+  assert.equal(st.ready, true);
+  assert.deepEqual(fake.calls.filter(c => c.url === '/api/pull').map(c => c.body.model), ['nomic-embed-text', 'minicpm-v']);
+  // Nothing left to download: a second click queues nothing.
+  assert.deepEqual((await admin.post('/api/ai/local/setup')).data.queued, []);
+  // A download Ollama refuses is reported, not retried.
+  await admin.post('/api/ai/local/pull', { model: 'missing-model' });
+  for(let i = 0; i < 50 && (st = (await admin.get('/api/ai/local')).data).downloads.current; i++) await new Promise(r => setTimeout(r, 50));
+  assert.match(st.downloads.error.message, /does not exist/);
+  assert.equal((await assembler.post('/api/ai/local/setup')).status, 403);
+  fake.close();
+});
+
+test('a vision model answers questions until a chat model is picked', async () => {
+  const fake = await startFakeOllama({ chat: body => `from ${body.model}` });
+  await admin.put('/api/settings/ai', { url: fake.url, chatModel: '', visionModel: 'fake-vision' });
+  const res = await assembler.post('/api/ai/chat', { system: 's', content: 'hi' });
+  assert.equal(res.data.text, 'from fake-vision');
+  fake.close();
+});
+
 test('asking with no model picked is a 409 the app can explain', async () => {
   await admin.put('/api/settings/ai', { chatModel: '', visionModel: '' });
   const res = await assembler.post('/api/ai/chat', { system: 's', content: 'hi' });

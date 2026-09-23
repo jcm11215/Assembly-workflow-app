@@ -14,7 +14,7 @@ export function dueStatus(job, today = todayISO()){
   return 'ok';
 }
 
-export const DUE_LABEL = { overdue: 'Overdue', soon: 'Due Soon', ok: 'On Schedule', complete: 'Complete' };
+export const DUE_LABEL = { overdue: 'Overdue', soon: 'Due soon', ok: 'On schedule', complete: 'Complete' };
 
 /** Job ids with an unresolved blocker. */
 export function blockedJobIds(blockers){
@@ -24,23 +24,25 @@ export function blockedJobIds(blockers){
 const open = j => j.stage !== 'complete';
 const dueWithin = (j, days, today) => open(j) && j.dueDate && daysUntil(j.dueDate, today) >= 0 && daysUntil(j.dueDate, today) <= days;
 
-/** The dashboard's filter chips. A metric tile opens the matching one. */
+/** The Jobs screen's filters. The Home screen's tiles open the matching one. */
 export function jobFilters(blockers, today = todayISO()){
   const blocked = blockedJobIds(blockers);
   return [
-    { id: 'all',        label: 'All',           test: () => true },
+    { id: 'open',       label: 'Open',          test: open },
     { id: 'overdue',    label: 'Overdue',       test: j => dueStatus(j, today) === 'overdue' },
-    { id: 'soon',       label: 'Due Soon',      test: j => dueStatus(j, today) === 'soon' },
-    { id: 'week',       label: 'Due This Week', test: j => dueWithin(j, 7, today) },
+    { id: 'soon',       label: 'Due soon',      test: j => dueStatus(j, today) === 'soon' },
+    { id: 'week',       label: 'Due this week', test: j => dueWithin(j, 7, today) },
     { id: 'blocked',    label: 'Blocked',       test: j => blocked.has(j.id) },
-    { id: 'ready',      label: 'Ready',         test: j => j.stage === 'ready' },
-    { id: 'inprogress', label: 'In Progress',   test: j => j.stage !== 'ready' && open(j) },
-    { id: 'complete',   label: 'Complete',      test: j => j.stage === 'complete' }
+    { id: 'ready',      label: 'Not started',   test: j => j.stage === 'ready' },
+    { id: 'inprogress', label: 'In progress',   test: j => j.stage !== 'ready' && open(j) },
+    { id: 'complete',   label: 'Complete',      test: j => j.stage === 'complete' },
+    { id: 'all',        label: 'All',           test: () => true }
   ];
 }
 
 export function metrics(jobs, blockers, today = todayISO()){
   return {
+    open: jobs.filter(open).length,
     inProgress: jobs.filter(j => j.stage !== 'ready' && open(j)).length,
     ready: jobs.filter(j => j.stage === 'ready').length,
     blocked: blockedJobIds(blockers).size,

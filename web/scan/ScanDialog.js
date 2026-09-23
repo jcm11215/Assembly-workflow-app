@@ -8,10 +8,11 @@
  *                      job's newest scan.
  */
 import { html, useEffect, useState } from '../vendor/index.js';
-import { useStore, getState } from '../lib/store.js';
+import { useStore } from '../lib/store.js';
 import { saveScan, logActivity } from '../lib/actions.js';
 import { explainAiError } from '../lib/ai.js';
 import { Field } from '../ui/kit.js';
+import { Icon } from '../ui/icons.js';
 import { openModal, Sheet, toast } from '../ui/overlays.js';
 import { JobForm } from '../jobs/JobForm.js';
 import { MAX_PDF_PAGES, parsePageSelection, pdfPageCount } from './pdf.js';
@@ -70,7 +71,7 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
   const pagesHint = !isPdf ? null
     : pageCount === null ? 'Counting pages…'
     : pageCount === 0 ? 'Could not count the pages -- every page will be scanned.'
-    : selection.error ? `⚠ ${selection.error}`
+    : selection.error ? selection.error
     : pages.trim() ? `Scanning ${selection.pages.length} of ${pageCount} pages.`
     : pageCount > MAX_PDF_PAGES ? `${pageCount} pages -- the first ${MAX_PDF_PAGES} will be scanned. Enter pages like 1-3, 7 to choose.`
     : `${pageCount} page${pageCount === 1 ? '' : 's'} -- all will be scanned. Enter pages like 1-3, 7 to scan fewer.`;
@@ -79,7 +80,7 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
     setBusy(true);
     setError(null);
     try {
-      const { blocks, thumbnail } = await contentFor(file, selection.pages, { withText: getState().ai.provider === 'local' });
+      const { blocks, thumbnail } = await contentFor(file, selection.pages, { withText: true });
       const result = await readDrawing(blocks, { includeJobFields });
       if(diagnosticsWorthLogging(result.components, result.diagnostics)){
         logActivity('Blueprint scan diagnostics', { text: `${jobNumber || 'New job'}: ${scanSummary(result.components, result.diagnostics)}`,
@@ -100,11 +101,14 @@ function ScanForm({ title, intro, button, includeJobFields = false, onRead, clos
   return html`
     <${Sheet} title=${title} close=${busy ? () => {} : close} locked=${busy}>
       <p class="hint">${intro}</p>
-      ${!ai.ready && html`<p class="error-text">The AI (${ai.label}) isn't set up yet, so scanning won't work. An admin can set it up in Settings.</p>`}
-      <${Field} label="Drawing">
-        <input type="file" accept="image/*,application/pdf" disabled=${busy}
+      ${!ai.ready && html`<div class="note-bar">The AI isn't set up yet, so reading drawings won't work. An admin can set it up in Settings, in one click.</div>`}
+      <label class=${`file-pick${file ? ' chosen' : ''}${busy ? ' disabled' : ''}`}>
+        <input type="file" class="visually-hidden" accept="image/*,application/pdf" disabled=${busy}
                onChange=${e => { setFile(e.currentTarget.files[0] || null); setPages(''); setError(null); }} />
-      <//>
+        <${Icon} name=${file ? 'drawing' : 'upload'} size=${26} />
+        <b>${file ? file.name : 'Take a photo or choose a file'}</b>
+        <span class="hint">${file ? 'Tap to pick a different one' : 'A photo of the drawing, an image, or a PDF'}</span>
+      </label>
       ${isPdf && html`
         <${Field} label="Pages to scan" hint=${pagesHint}>
           <input value=${pages} placeholder="All pages" autocomplete="off" disabled=${busy}

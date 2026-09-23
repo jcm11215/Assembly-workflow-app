@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# The Assembly Workflow admin command. deploy/install.sh fills in
+# __APP_DIR__ and __NODE__ and installs this as /usr/local/bin/assembly-workflow.
+#
+#   assembly-workflow help
+set -euo pipefail
+
+APP_DIR="__APP_DIR__"
+NODE="__NODE__"
+SERVICE=assembly-workflow
+DATA_DIR=/var/lib/assembly-workflow
+UNIT="/etc/systemd/system/${SERVICE}.service"
+
+usage(){
+  cat <<'EOF'
+Assembly Workflow: look after the app on this server.
+
+  assembly-workflow status                 Is it running, and where to open it
+  assembly-workflow update                 Get the latest version and restart (backs up first)
+  assembly-workflow restart                Restart the app
+  assembly-workflow logs                   Follow the app's log (Ctrl+C to stop)
+
+  assembly-workflow setup-code             The code for creating the first admin
+  assembly-workflow create-admin           Make an admin login
+  assembly-workflow reset-password LOGIN   Set someone's password (signs them out everywhere)
+  assembly-workflow users                  List every login
+
+  assembly-workflow backup                 Back up the database now
+  assembly-workflow import-localai FOLDER  Bring in the old Local AI's documents and corrections
+EOF
+}
+
+case "${1:-help}" in help|-h|--help) usage; exit 0 ;; esac
+
+# Everything below needs root; ask for it once rather than failing.
+if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
+
+cd "$APP_DIR"
+
+# The server's own tasks, run as the account the app runs as, so every
+# file they write stays the app's.
+cli(){ runuser -u assembly -- env DATA_DIR="$DATA_DIR" "$NODE" --disable-warning=ExperimentalWarning server/cli.mjs "$@"; }
+
+port(){ sed -n 's/^Environment=PORT=\([0-9]*\)$/\1/p' "$UNIT" 2>/dev/null; }
+
+# The https address `tailscale serve` publishes the app on, if any.
+tailnet_url(){
+  command -v tailscale >/dev/null 2>&1 || return 0
+  tailscale serve status 2>/dev/null | awk -v re="(127\\.0\\.0\\.1|localhost):$1([^0-9]|$)" \
+    '/^https?:\/\//{ url = $1 } $0 ~ re && /proxy/ { print url; exit }'
+}
+
+status(){
+  local p url models
+  p="$(port)"
+  if systemctl is-active --quiet "$SERVICE"; then
+    echo "App        running"
+  else
+    echo "App        NOT running -- see: assembly-workflow logs"
+  fi
+  url="$(tailnet_url "$p")"
+  [[ -n "$url" ]] && echo "Open       $url"
+  [[ -n "$p" ]] && echo "Local      http://127.0.0.1:$p"
+  echo "Version    $(git -c safe.directory="$APP_DIR" -C "$APP_DIR" log -1 --format='%h from %cd' --date=format:'%b %-d, %Y' 2>/dev/null || echo unknown)"
+  echo "Data       $DATA_DIR ($(du -sh "$DATA_DIR" 2>/dev/null | cut -f1))"
+  local last
+  last="$(ls -1t "$DATA_DIR/backups" 2>/dev/null | head -1 || true)"
+  echo "Backup     ${last:-none yet}"
+  if command -v curl >/dev/null 2>&1 && curl -fsS --max-time 3 http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+    models="$(curl -fsS --max-time 5 http://127.0.0.1:11434/api/tags | grep -o '"name":' | wc -l)"
+    echo "AI engine  Ollama running, $models model(s) installed"
+  elif command -v ollama >/dev/null 2>&1; then
+    echo "AI engine  Ollama installed but not running -- sudo systemctl start ollama"
+  else
+    echo "AI engine  not installed -- curl -fsSL https://ollama.com/install.sh | sh"
+  fi
+  if [[ -s "$DATA_DIR/setup-code" ]]; then
+    echo "Setup code $(cat "$DATA_DIR/setup-code")  (create the first admin in the browser)"
+  fi
+}
+
+cmd="$1"; shift
+case "$cmd" in
+  status)          status ;;
+  update)          exec "$APP_DIR/deploy/update.sh" ;;
+  restart)         systemctl restart "$SERVICE"; sleep 2; status ;;
+  logs)            exec journalctl -u "$SERVICE" -n 100 -f ;;
+  setup-code)      cli setup-code ;;
+  create-admin)    cli create-admin ;;
+  reset-password)  cli set-password "$@" ;;
+  users)           cli users ;;
+  backup)          cli backup ;;
+  import-localai)
+    # Read as root (the old app lives in someone's home folder), then hand
+    # everything written back to the app's account.
+    [[ -n "${1:-}" ]] || { echo "Give the folder the Local AI was installed in, e.g. /home/you/localai" >&2; exit 1; }
+    env DATA_DIR="$DATA_DIR" "$NODE" --disable-warning=ExperimentalWarning server/cli.mjs import-localai "$1"
+    chown -R assembly:assembly "$DATA_DIR"
+    ;;
+  *) echo "Unknown command: $cmd" >&2; echo >&2; usage >&2; exit 1 ;;
+esac

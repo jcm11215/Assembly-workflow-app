@@ -43,7 +43,7 @@ const handlers = {
   })),
   activity: a => setState(s => (s.activity ? { activity: [a, ...s.activity.filter(x => x.id !== a.id)].slice(0, 500) } : null)),
   ai: summary => setState({ ai: summary }),
-  'ai-pull': progress => setState({ aiPull: progress.done ? { ...progress } : progress })
+  'ai-models': downloads => setState({ aiDownloads: downloads })
 };
 
 export function startLive(){

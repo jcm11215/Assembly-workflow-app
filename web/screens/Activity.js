@@ -7,7 +7,7 @@ import { useStore, setState, getState } from '../lib/store.js';
 import { loadActivity } from '../lib/actions.js';
 import { useCan } from '../lib/permissions.js';
 import { fmtWhen } from '../lib/format.js';
-import { Empty } from '../ui/kit.js';
+import { Empty, PageHeader } from '../ui/kit.js';
 import { toastError } from '../ui/overlays.js';
 
 const PAGE = 100;
@@ -32,8 +32,7 @@ export function Activity(){
 
   if(!entries) return html`<${Empty}>Loading…<//>`;
   return html`
-    <h2 class="screen-title">${seesAll ? "The shop's activity" : 'Your activity'}</h2>
-    ${!seesAll && html`<p class="hint">You see what you've done. Admins see the whole shop's log.</p>`}
+    <${PageHeader} title="Activity" sub=${seesAll ? 'Everything done in the app, newest first' : "What you've done, newest first"} />
     <div class="activity">
       ${entries.length ? entries.map(a => html`
         <div key=${a.id} class="activity-row">
@@ -42,7 +41,7 @@ export function Activity(){
             <b>${a.actorName}</b> <span class="activity-action">${a.action.toLowerCase()}</span>
             ${a.detail && a.detail.text && html`<div class="activity-detail">${a.detail.text}</div>`}
           </div>
-        </div>`) : html`<${Empty} icon="📈">Nothing yet.<//>`}
+        </div>`) : html`<${Empty} icon="activity">Nothing yet.<//>`}
     </div>
     ${more && html`<button class="btn btn-block" disabled=${loading} onClick=${() => load(entries[entries.length - 1].id)}>
       ${loading ? 'Loading…' : 'Load older'}</button>`}`;

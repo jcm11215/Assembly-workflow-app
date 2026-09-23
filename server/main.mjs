@@ -11,7 +11,8 @@ import fs from 'node:fs';
 import { config, paths } from './config.mjs';
 import { openDb } from './db.mjs';
 import { createApp } from './app.mjs';
-import { pruneSessions, setupCodeIfNeeded } from './auth.mjs';
+import { pruneSessions, setupCodeIfNeeded, keepSetupCodeIn } from './auth.mjs';
+import { autoPick } from './models.mjs';
 import { scheduleBackups } from './backup.mjs';
 import { closeAll } from './live.mjs';
 
@@ -23,6 +24,7 @@ if(major < 22 || (major === 22 && minor < 13)){
 
 fs.mkdirSync(paths.files, { recursive: true });
 const db = openDb(paths.db);
+keepSetupCodeIn(paths.setupCode);
 const handler = createApp({ db, filesDir: paths.files });
 const server = http.createServer(handler);
 
@@ -33,9 +35,12 @@ server.listen(config.port, config.host, () => {
     console.log('');
     console.log('  No accounts yet. Open the app and create the first admin with this setup code:');
     console.log(`      ${code}`);
-    console.log('  (or run: node server/cli.mjs create-admin)');
+    console.log('  (or run: assembly-workflow create-admin)');
     console.log('');
   }
+  // Models installed since the last start go to work without anyone
+  // having to open Settings.
+  autoPick(db);
 });
 
 const timers = [

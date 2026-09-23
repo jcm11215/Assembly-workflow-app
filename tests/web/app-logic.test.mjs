@@ -29,7 +29,8 @@ test('metrics and filters agree; blocked counts jobs, not blockers', () => {
   const jobs = [job({ id: 'a', dueDate: '2026-09-20' }), job({ id: 'b', stage: 'layout', dueDate: '2026-09-25' }), job({ id: 'c', stage: 'complete' })];
   const blockers = [{ jobId: 'a', status: 'Open' }, { jobId: 'a', status: 'In Progress' }, { jobId: 'b', status: 'Resolved' }];
   const m = metrics(jobs, blockers, TODAY);
-  assert.deepEqual(m, { inProgress: 1, ready: 1, blocked: 1, dueThisWeek: 1, overdue: 1 });
+  assert.deepEqual(m, { open: 2, inProgress: 1, ready: 1, blocked: 1, dueThisWeek: 1, overdue: 1 });
+  assert.deepEqual(Object.fromEntries(jobFilters(blockers, TODAY).map(x => [x.id, jobs.filter(x.test).length])).open, 2);
   const f = Object.fromEntries(jobFilters(blockers, TODAY).map(x => [x.id, jobs.filter(x.test).map(j => j.id)]));
   assert.deepEqual(f.blocked, ['a']);
   assert.deepEqual(f.overdue, ['a']);

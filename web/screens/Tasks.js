@@ -9,7 +9,8 @@ import { useCan } from '../lib/permissions.js';
 import { fmtDate } from '../lib/format.js';
 import { todayISO } from '../../shared/dates.js';
 import { RECURRENCE, WEEKDAYS, isDueOn, isOverdue, isRecurring, occurrenceKey, recurrenceLabel, taskProblem } from '../../shared/tasks.js';
-import { Chips, Empty, Field, Select, AsyncButton, submitting } from '../ui/kit.js';
+import { Chips, Empty, Field, Select, AsyncButton, PageHeader, submitting } from '../ui/kit.js';
+import { Icon } from '../ui/icons.js';
 import { openModal, Sheet, confirmAction, toast, toastError } from '../ui/overlays.js';
 
 const FILTERS = [
@@ -46,37 +47,35 @@ export function Tasks(){
     if(filter === 'mine') owed = owed.filter(o => o.task.assignedTo === me.id);
     body = owed.length
       ? owed.map(o => html`<${Occurrence} key=${o.task.id + o.on} task=${o.task} on=${o.on} done=${done.get(occurrenceKey(o.task.id, o.on))} today=${today} />`)
-      : html`<${Empty} icon="✅">${filter === 'mine' ? 'Nothing assigned to you today.' : 'Nothing due today.'}<//>`;
+      : html`<div class="card"><${Empty} icon="checkCircle">${filter === 'mine' ? 'Nothing assigned to you today.' : 'Nothing due today.'}<//></div>`;
   } else {
     const list = tasks.filter(t => (filter === 'stopped' ? !t.active : t.active));
     body = list.length
       ? list.map(t => html`<${Definition} key=${t.id} task=${t} canManage=${canManage} />`)
-      : html`<${Empty} icon="📋">${filter === 'stopped' ? 'No stopped tasks.' : 'No tasks set up yet.'}<//>`;
+      : html`<div class="card"><${Empty} icon="tasks">${filter === 'stopped' ? 'No stopped tasks.' : 'No tasks set up yet.'}<//></div>`;
   }
 
   return html`
+    <${PageHeader} title="Tasks" sub="One-off and recurring shop tasks"
+                   actions=${canManage && html`<button class="btn btn-primary" onClick=${() => openModal(TaskForm)}><${Icon} name="plus" />Add task</button>`} />
     <div class="toolbar"><${Chips} label="Show" options=${FILTERS} value=${filter} onChange=${setFilter} /></div>
-    <div class="list">${body}</div>
-    ${canManage && html`<div class="row-actions"><button class="btn btn-primary" onClick=${() => openModal(TaskForm)}>+ Add task</button></div>`}`;
+    <div class="list">${body}</div>`;
 }
 
-/** Today's tasks, above the job list on the dashboard. Hidden when there
- *  is nothing owed, except for the button to add one. */
+/** What's owed today, for the Home screen's card. */
 export function TodayTasks(){
   const tasks = useStore(s => s.tasks);
   const canManage = useCan('task.manage');
   const done = useDoneKeys();
   const today = todayISO();
   const owed = owedToday(tasks, done, today);
-  const left = owed.filter(o => !done.has(occurrenceKey(o.task.id, o.on))).length;
   if(!owed.length){
-    return canManage ? html`<div class="row-actions"><button class="btn btn-sm" onClick=${() => openModal(TaskForm)}>+ Add task</button></div>` : null;
+    return html`
+      <div class="calm"><${Icon} name="checkCircle" size=${22} />
+        <span>Nothing due today.${canManage && html` <button class="link-btn" onClick=${() => openModal(TaskForm)}>Add a task</button>`}</span>
+      </div>`;
   }
-  return html`
-    <section class="today-tasks">
-      <div class="today-tasks-head"><span>Today's tasks</span><span class="count">${left} left</span></div>
-      ${owed.map(o => html`<${Occurrence} key=${o.task.id + o.on} task=${o.task} on=${o.on} done=${done.get(occurrenceKey(o.task.id, o.on))} today=${today} compact />`)}
-    </section>`;
+  return html`${owed.map(o => html`<${Occurrence} key=${o.task.id + o.on} task=${o.task} on=${o.on} done=${done.get(occurrenceKey(o.task.id, o.on))} today=${today} compact />`)}`;
 }
 
 function metaLine(t){
@@ -95,7 +94,7 @@ function Occurrence({ task, on, done, today, compact }){
   };
   return html`
     <div class=${`task${done ? ' done' : ''}${late ? ' late' : ''}${compact ? ' compact' : ''}`}>
-      <button class="tick" onClick=${toggle} disabled=${busy} aria-pressed=${!!done} title=${done ? 'Undo' : 'Mark done'}>${done ? '✓' : ''}</button>
+      <button class="tick" onClick=${toggle} disabled=${busy} aria-pressed=${!!done} title=${done ? 'Undo' : 'Mark done'}>${done && html`<${Icon} name="check" size=${14} />`}</button>
       <div class="task-body">
         <div class="task-title">${task.title}</div>
         ${!compact && task.details && html`<div class="task-details">${task.details}</div>`}

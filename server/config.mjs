@@ -26,5 +26,6 @@ export const config = {
 export const paths = {
   db: path.join(config.dataDir, 'assembly.db'),
   files: path.join(config.dataDir, 'files'),
-  backups: path.join(config.dataDir, 'backups')
+  backups: path.join(config.dataDir, 'backups'),
+  setupCode: path.join(config.dataDir, 'setup-code')
 };

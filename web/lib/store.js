@@ -21,8 +21,8 @@ const initial = {
   completions: [],
   ai: { label: 'Local AI', ready: false },
   activity: null,             // loaded when the Activity screen first opens
-  jobFilter: 'all',           // the dashboard filter; the metric tiles set it too
-  aiPull: null,               // a local model downloading (admins only): { model, status, total, completed, done? }
+  jobFilter: 'open',          // the Jobs screen's filter; Home's tiles set it too
+  aiDownloads: null,          // local model downloads (admins only): { current, queue, error }
   assistantDraft: '',         // a question another screen hands to the assistant
   connection: 'connecting',   // connecting | live | reconnecting
   loadedAt: null

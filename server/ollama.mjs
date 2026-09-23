@@ -85,7 +85,7 @@ async function call(url, pathname, { body, timeoutMs = 30000, method = body ? 'P
 
 /** Ollama's own wording, with the fix where one is known. */
 function explainFailure(status, msg){
-  if(/not found/i.test(msg) && /model/i.test(msg)) return `${msg} -- pull it under Settings → AI first.`;
+  if(/not found/i.test(msg) && /model/i.test(msg)) return `${msg}. An admin can download it in Settings → AI.`;
   if(/out of memory|cudaMalloc|requires more system memory/i.test(msg)) return `${msg} -- the model is too big for this machine's memory; pick a smaller one.`;
   if(status === 413) return `Request too large: ${msg}`;
   return msg;
@@ -220,7 +220,7 @@ export function fitProblem(messages, model, numCtx, numPredict){
   const need = estimateTokens(messages, model) + Math.min(numPredict || 0, OUTPUT_RESERVE_TOKENS);
   if(need > numCtx){
     return `Too large for the local model's context: about ${need} tokens with room for the answer, and it holds ${numCtx}. ` +
-      'Send fewer pages at once, or raise the image context size in Settings → AI.';
+      'Send fewer pages at once, or raise the drawing context size in Settings → AI → Advanced.';
   }
   return null;
 }
@@ -238,11 +238,13 @@ export const overflowed = (obj, numCtx) =>
 export async function chat(local, system, content, { timeoutMs = 10 * 60000 } = {}){
   const user = toUserMessage(content);
   const hasImages = !!user.images?.length;
-  const model = hasImages ? local.visionModel : local.chatModel;
+  // A vision model answers plain questions too, so it stands in until a
+  // chat model is picked; a chat model can't read drawings.
+  const model = hasImages ? local.visionModel : local.chatModel || local.visionModel;
   if(!model){
     throw new OllamaError(hasImages
-      ? 'This needs a vision model to read drawings, and none is set. Pick one under Settings → AI (minicpm-v works well).'
-      : 'No chat model is set for the local AI. Pick one under Settings → AI.', { status: 400 });
+      ? 'Reading drawings needs a vision model, and none is set up. An admin can set one up in Settings → AI.'
+      : 'The local AI has no model to answer with yet. An admin can set one up in Settings → AI.', { status: 400 });
   }
   const messages = [{ role: 'system', content: `${AUTH_NOTE}\n\n${system}` }, user];
   const numCtx = hasImages ? local.visionContextTokens : local.contextTokens;

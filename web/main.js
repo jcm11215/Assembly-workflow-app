@@ -51,7 +51,7 @@ function Root(){
         <button class="btn btn-primary btn-block" onClick=${() => { setState({ phase: 'starting' }); start(); }}>Try again</button>
       </div></div>`;
   } else {
-    body = html`<div class="splash">Loading shop data…</div>`;
+    body = html`<div class="splash">Loading…</div>`;
   }
   return html`${body}<${Overlays} />`;
 }

@@ -9,11 +9,12 @@ import { useStore } from '../lib/store.js';
 import { loadActivity } from '../lib/actions.js';
 import { fmtWhen, fmtBytes, plural } from '../lib/format.js';
 import { ROLES, ROLE_INFO, roleLabel } from '../../shared/roles.js';
-import { Chips, Field, Select, AsyncButton, submitting } from '../ui/kit.js';
+import { Tabs, Field, Select, AsyncButton, PageHeader, submitting } from '../ui/kit.js';
+import { Icon } from '../ui/icons.js';
 import { openModal, Sheet, confirmAction, toast, toastError } from '../ui/overlays.js';
 
 const SECTIONS = [
-  { id: 'team', label: 'Team' },
+  { id: 'team', label: 'People' },
   { id: 'codes', label: 'Access codes' },
   { id: 'audit', label: 'Audit log' },
   { id: 'health', label: 'Health' }
@@ -22,8 +23,8 @@ const SECTIONS = [
 export function Admin(){
   const [section, setSection] = useState('team');
   return html`
-    <h2 class="screen-title">Admin</h2>
-    <div class="toolbar"><${Chips} label="Section" options=${SECTIONS} value=${section} onChange=${setSection} /></div>
+    <${PageHeader} title="Team" sub="Logins, roles, access codes and the server's health" />
+    <${Tabs} label="Section" options=${SECTIONS} value=${section} onChange=${setSection} />
     ${section === 'team' && html`<${Team} />`}
     ${section === 'codes' && html`<${Codes} />`}
     ${section === 'audit' && html`<${Audit} />`}
@@ -54,12 +55,15 @@ function Team(){
       ${ROLES.map(r => html`<div class="stat" key=${r}><b>${active.filter(u => u.role === r).length}</b><span>${roleLabel(r)}</span></div>`)}
       <div class="stat"><b>${users.length - active.length}</b><span>Switched off</span></div>
     </div>
-    <div class="row-actions"><button class="btn btn-primary" onClick=${() => openModal(AddPerson, { onDone: load })}>+ Add a person</button></div>
+    <div class="section-head">
+      <h2 class="section-title">People <span class="count">${users.length}</span></h2>
+      <button class="btn btn-primary" onClick=${() => openModal(AddPerson, { onDone: load })}><${Icon} name="plus" />Add a person</button>
+    </div>
     <div class="list">
       ${users.map(u => html`
         <div key=${u.id} class=${`person${u.active ? '' : ' inactive'}`}>
           <div class="person-main">
-            <b>${u.fullName}</b>${u.id === me.id && html` <span class="tag">you</span>`}
+            <b>${u.fullName}</b>${u.id === me.id && html` <span class="tag">You</span>`}
             <div class="hint">${u.login} · joined ${fmtWhen(u.createdAt)}${u.hasPassword ? '' : ' · no password yet'}</div>
           </div>
           <select aria-label=${`Role for ${u.fullName}`} onChange=${e => change(u, { role: e.currentTarget.value }, `${u.fullName} is now ${roleLabel(e.currentTarget.value)}.`).catch(err => { toastError(err); load(); })}>
@@ -130,7 +134,7 @@ function Codes(){
   return html`
     <p class="hint">Someone with a live code can create their own account from the sign-in screen. They start as ${roleLabel('trainee')}.
       Switch a code off once it has been handed out too widely.</p>
-    <div class="row-actions"><${AsyncButton} class="btn btn-primary" onClick=${make}>+ New access code<//></div>
+    <div class="row-actions" style=${{ marginBottom: '14px' }}><${AsyncButton} class="btn btn-primary" onClick=${make}><${Icon} name="plus" />New access code<//></div>
     <div class="list">
       ${codes.length ? codes.map(c => html`
         <div key=${c.code} class=${`person${c.active ? '' : ' inactive'}`}>

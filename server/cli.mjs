@@ -1,6 +1,9 @@
 /**
- * Admin tasks from the server's own terminal:
+ * Admin tasks from the server's own terminal. The installed
+ * `assembly-workflow` command (deploy/assembly-workflow) runs these as
+ * the right user; directly, they are:
  *
+ *   node server/cli.mjs setup-code              the code for creating the first admin in the browser
  *   node server/cli.mjs create-admin            make an admin login (asks for the details)
  *   node server/cli.mjs set-password <login>    set anyone's password
  *   node server/cli.mjs users                   list every login
@@ -47,6 +50,16 @@ async function askPassword(){
 }
 
 const commands = {
+  'setup-code'(){
+    const { n } = db.get('select count(*) as n from users');
+    if(n > 0){ console.log(`Already set up (${n} login${n === 1 ? '' : 's'}). Sign in, or make another admin with create-admin.`); return; }
+    let code = '';
+    try { code = fs.readFileSync(paths.setupCode, 'utf8').trim(); } catch { /* not started yet */ }
+    if(!code) throw new Error('No setup code yet: the app makes one when it starts. Start it, then try again.');
+    console.log(`Setup code: ${code}`);
+    console.log('Open the app in a browser and create the first admin with it.');
+  },
+
   async 'create-admin'(){
     const fullName = await ask('Name: ');
     const login = normalizeLogin(await ask('Username (or email): '));
@@ -69,7 +82,7 @@ const commands = {
 
   users(){
     const rows = db.all('select login, full_name, role, active, password_hash is not null as has_pw from users order by full_name');
-    if(!rows.length){ console.log('No logins yet. Run: node server/cli.mjs create-admin'); return; }
+    if(!rows.length){ console.log('No logins yet. Run: assembly-workflow create-admin'); return; }
     for(const r of rows){
       console.log(`${r.login.padEnd(28)} ${r.full_name.padEnd(24)} ${r.role.padEnd(10)} ${r.active ? 'active' : 'switched off'}${r.has_pw ? '' : ' (no password yet)'}`);
     }
@@ -99,7 +112,7 @@ const commands = {
 
 try {
   if(!commands[command]){
-    console.log('Usage: node server/cli.mjs <create-admin | set-password [login] | users | backup | legacy-auth [off] | import-localai <folder>>');
+    console.log('Usage: node server/cli.mjs <setup-code | create-admin | set-password [login] | users | backup | legacy-auth [off] | import-localai <folder>>');
     process.exitCode = command ? 1 : 0;
   } else {
     await commands[command]();

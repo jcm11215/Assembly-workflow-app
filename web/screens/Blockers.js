@@ -12,13 +12,14 @@ import { Chips, Empty, Field, Select, AsyncButton, submitting } from '../ui/kit.
 import { openModal, Sheet, confirmAction, toast, toastError } from '../ui/overlays.js';
 
 const STATUSES = ['Open', 'In Progress', 'Resolved'];
+const NEXT_LABEL = { 'In Progress': 'Start working on it', Resolved: 'Mark resolved', Open: 'Reopen' };
 const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 const DEPARTMENTS = ['Purchasing', 'Engineering', 'QC', 'Maintenance', 'Shipping', 'Production'];
 
 const FILTERS = [
   { id: 'active', label: 'Active', test: b => b.status !== 'Resolved' },
   { id: 'Open', label: 'Open', test: b => b.status === 'Open' },
-  { id: 'In Progress', label: 'In Progress', test: b => b.status === 'In Progress' },
+  { id: 'In Progress', label: 'In progress', test: b => b.status === 'In Progress' },
   { id: 'Resolved', label: 'Resolved', test: b => b.status === 'Resolved' },
   { id: 'all', label: 'All', test: () => true }
 ];
@@ -35,9 +36,8 @@ export function Blockers(){
     </div>
     <div class="list">
       ${shown.length ? shown.map(b => html`<${BlockerCard} key=${b.id} blocker=${b} showJob=${true} />`)
-                     : html`<${Empty} icon="✅">No blockers here.<//>`}
-    </div>
-    <div class="row-actions"><button class="btn btn-primary" onClick=${() => openModal(BlockerForm)}>+ Report a blocker</button></div>`;
+                     : html`<div class="card"><${Empty} icon="checkCircle">${filter === 'active' ? 'Nothing is blocked right now.' : 'No blockers here.'}<//></div>`}
+    </div>`;
 }
 
 export function BlockerCard({ blocker: b, showJob }){
@@ -62,7 +62,7 @@ export function BlockerCard({ blocker: b, showJob }){
         <span class=${`pill pill-${b.status.replace(' ', '').toLowerCase()}`}>${b.status}</span>
         ${b.status === 'Resolved' && b.resolvedByName && html`<span class="hint">by ${b.resolvedByName}</span>`}
         ${canManage && html`
-          <${AsyncButton} class="btn btn-sm" onClick=${() => setBlockerStatus(b, next)}>Mark ${next}<//>
+          <${AsyncButton} class="btn btn-sm" onClick=${() => setBlockerStatus(b, next)}>${NEXT_LABEL[next]}<//>
           <button class="btn btn-sm btn-danger-outline" onClick=${remove}>Delete</button>`}
       </div>
     </div>`;

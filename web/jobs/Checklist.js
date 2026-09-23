@@ -10,6 +10,7 @@ import { fmtWhen } from '../lib/format.js';
 import { toastError } from '../ui/overlays.js';
 import { tipsForStep } from '../domain/parts.js';
 import { TipChips } from './Tips.js';
+import { Icon } from '../ui/icons.js';
 
 export function StageChecklist({ job, showTips = false }){
   const steps = STAGE_STEPS[job.stage] || [];
@@ -44,7 +45,7 @@ function Step({ job, step, showTips }){
         return html`
           <button key=${key} type="button" class=${`check-item${tick ? ' done' : ''}${pending[key] ? ' pending' : ''}`}
                   onClick=${() => toggle(key)} aria-pressed=${!!tick} disabled=${!canWork}>
-            <span class="check-box">${tick ? '✓' : ''}</span>
+            <span class="check-box">${tick && html`<${Icon} name="check" size=${15} />`}</span>
             <span class="check-text">
               ${text}
               ${tick && tick.by && html`<span class="check-by">${tick.by} · ${fmtWhen(tick.at)}</span>`}

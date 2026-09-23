@@ -23,7 +23,6 @@ const STATUS_FILTERS = [
 
 export function Errors(){
   const errors = useStore(s => s.errors);
-  const canLog = useCan('error.log');
   const [dept, setDept] = useState('all');
   const [status, setStatus] = useState('all');
   const [breakdown, setBreakdown] = useState(false);
@@ -49,14 +48,13 @@ export function Errors(){
     </div>
 
     ${list.length >= 3 && html`
-      <button class="btn btn-sm btn-block" onClick=${() => setBreakdown(!breakdown)}>${breakdown ? 'Hide the breakdown ▴' : 'Show the breakdown ▾'}</button>
+      <div style=${{ marginBottom: '12px' }}><button class="btn btn-sm" onClick=${() => setBreakdown(!breakdown)}>${breakdown ? 'Hide the breakdown' : 'Show the breakdown'}</button></div>
       ${breakdown && html`<${Breakdown} list=${list} />`}`}
 
     <div class="list">
       ${list.length ? list.map(e => html`<${ErrorCard} key=${e.id} error=${e} showJob=${true} />`)
-                    : html`<${Empty} icon="🚩">${errors.length ? 'No errors match.' : 'No errors logged yet.'}<//>`}
-    </div>
-    ${canLog && html`<div class="row-actions"><button class="btn btn-primary" onClick=${() => openModal(ErrorForm)}>+ Log an error</button></div>`}`;
+                    : html`<div class="card"><${Empty} icon="flag">${errors.length ? 'No errors match.' : 'No errors logged yet.'}<//></div>`}
+    </div>`;
 }
 
 function Bars({ rows }){

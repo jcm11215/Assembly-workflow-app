@@ -23,7 +23,7 @@ export function TipChips({ tips }){
       <div class="tip-chips">
         ${tips.map(t => html`
           <button key=${t.id} type="button" class=${`tip-chip${open === t.id ? ' active' : ''}`}
-                  aria-expanded=${open === t.id} onClick=${() => setOpen(open === t.id ? null : t.id)}>ⓘ ${t.name}</button>`)}
+                  aria-expanded=${open === t.id} onClick=${() => setOpen(open === t.id ? null : t.id)}>${t.name}</button>`)}
       </div>
       <${TipCard} tip=${TIP_BY_ID[open]} />
     </div>`;
@@ -36,7 +36,7 @@ export function PartLookup(){
   return html`
     <div class="tips">
       <select class="tip-lookup" value=${open} onChange=${e => setOpen(e.currentTarget.value)} aria-label="Look up a part">
-        <option value="">ⓘ Look up a part…</option>
+        <option value="">Look up a part…</option>
         ${sorted.map(t => html`<option key=${t.id} value=${t.id}>${t.name}${t.aka ? ` (${t.aka})` : ''}</option>`)}
       </select>
       <${TipCard} tip=${TIP_BY_ID[open]} />

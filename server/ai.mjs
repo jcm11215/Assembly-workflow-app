@@ -70,7 +70,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
  */
 export async function callAI(raw, system, content){
   const s = aiSettings(raw);
-  if(!isReady(s)) throw new AiError('No model is picked for the local AI yet. An admin can pick one in Settings.', { notConfigured: true });
+  if(!isReady(s)) throw new AiError('The AI isn\'t set up yet. An admin can set it up in one click under Settings → AI.', { notConfigured: true });
   for(let attempt = 1; ; attempt++){
     try {
       return { text: (await ollama.chat(s, system, content)).text };
@@ -82,14 +82,22 @@ export async function callAI(raw, system, content){
   }
 }
 
-/** The models Ollama has installed. */
+const EMBEDDING = /embed|bge|minilm|nomic|snowflake-arctic/i;
+const VISION = /minicpm-v|llava|vision|qwen2\.5vl|qwen2-vl|[-_.]vl\b|gemma3|moondream|mistral-small3/i;
+
+/** The models Ollama has installed, and which can read images or only
+ *  embed text. */
 export async function listModels(raw){
   try {
-    return (await ollama.listModels(aiSettings(raw).url)).map(m => ({
-      id: m.name, name: m.name, sizeGb: Math.round((m.size || 0) / 1e8) / 10,
-      family: m.details?.family || '', params: m.details?.parameter_size || '',
-      embedding: /embed|bge|minilm/i.test(m.name) || /bert/i.test(m.details?.family || '')
-    })).sort((a, b) => a.id.localeCompare(b.id));
+    return (await ollama.listModels(aiSettings(raw).url)).map(m => {
+      const families = [m.details?.family, ...(m.details?.families || [])].filter(Boolean).join(' ');
+      const embedding = EMBEDDING.test(m.name) || /bert/i.test(families);
+      return {
+        id: m.name, name: m.name, sizeGb: Math.round((m.size || 0) / 1e8) / 10,
+        family: m.details?.family || '', params: m.details?.parameter_size || '',
+        embedding, vision: !embedding && (VISION.test(m.name) || /clip|mllama/i.test(families))
+      };
+    }).sort((a, b) => a.id.localeCompare(b.id));
   } catch (e) {
     throw new AiError(e.message, { unreachable: e.unreachable });
   }

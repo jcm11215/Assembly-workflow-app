@@ -58,7 +58,7 @@ was never finished uploading in the old app.
   the old project down), turn that off:
   `sudo -u assembly env DATA_DIR=/var/lib/assembly-workflow node server/cli.mjs legacy-auth off`.
   Anyone who hasn't signed in by then gets a password from an admin
-  (Admin → Team → Set password).
+  (Team → Set password).
 - **Roles.** Admins and leads become **Admin**; Assembler A and the old
   single Assembler role become **Assembler A**; Assembler B stays **Assembler B**.
   Every assembler can now work every job -- assignment is who leads a job,
@@ -72,27 +72,29 @@ was never finished uploading in the old app.
 If the shop ran the separate Local AI Assistant (the Python app, service
 `localai`), its job is now part of this app: scans and the assistant use
 Ollama directly, and its documents and corrections move into the
-**Knowledge** screen. Bring them across -- files, passages and
-corrections, plus its model choices -- with:
+**Knowledge** screen.
+
+The install script does this for you: when it finds `/home/*/localai`, it
+offers to bring in the documents, passages and corrections, plus the old
+model choices, and then to switch off the `localai` service. If the old
+Local AI had the machine's main Tailscale address, the app takes that
+address over once the old service is off. So after `git pull`, running
+this once is enough:
 
 ```bash
-cd /opt/assembly-workflow
-sudo env DATA_DIR=/var/lib/assembly-workflow node server/cli.mjs import-localai /home/<you>/localai
-sudo chown -R assembly: /var/lib/assembly-workflow
+sudo /opt/assembly-workflow/deploy/install.sh
 ```
 
-(Plain `sudo`, because the app's own account can't read your home folder;
-the `chown` hands the imported files back to it.)
-Its copies of tracker jobs are left behind -- the assistant reads the jobs
-live now. Running it twice is safe.
-
-Then stop the old service; that also frees the port it held (8080):
+To do it by hand instead:
 
 ```bash
+assembly-workflow import-localai /home/<you>/localai
 sudo systemctl disable --now localai
 ```
 
-Ollama itself stays: it's what runs the models.
+Its copies of tracker jobs are left behind, since the assistant reads the
+jobs live now. Running the import twice is safe. Ollama itself stays: it's
+what runs the models.
 
 ## Afterwards
 

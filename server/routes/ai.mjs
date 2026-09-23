@@ -1,19 +1,14 @@
 /**
  * AI settings (admin), the one endpoint the app uses to talk to the AI
- * (POST /api/ai/chat), and managing the local models Ollama runs.
+ * (POST /api/ai/chat), and setting up the local models Ollama runs.
  */
-import { HttpError, badRequest, conflict, MB } from '../http.mjs';
+import { HttpError, badRequest, MB } from '../http.mjs';
 import { getSetting, putSetting } from '../db.mjs';
 import { callAI, listModels, aiSettings, applyEdit, aiSummary, AiError } from '../ai.mjs';
 import * as ollama from '../ollama.mjs';
 import * as kb from '../knowledge.mjs';
+import * as models from '../models.mjs';
 import { broadcast } from '../live.mjs';
-import { can } from '../../shared/roles.js';
-
-/** The model download in progress, if any. One at a time: two big
- *  downloads at once only make both slower. */
-let pulling = null;
-const toAdmins = u => can(u.role, 'settings.manage');
 
 /** Turns an AI failure into a response the app can show. Ollama's own
  *  message is kept: "model not found" is exactly what the admin needs. */
@@ -73,42 +68,51 @@ export default function register(r){
 
   /* ---------------- local models ---------------- */
 
-  /** Is Ollama up, what is installed and loaded, and any download running. */
+  /**
+   * Everything the Settings screen shows about the local AI: is Ollama
+   * up, what is installed, which model does each job, and downloads.
+   * Installed models are put on any job without one as a side effect,
+   * so a model installed by hand is picked up by opening Settings.
+   */
   r.get('/api/ai/local', async ctx => {
-    const local = aiSettings(getSetting(ctx.db, 'ai', {}));
+    let settings = aiSettings(getSetting(ctx.db, 'ai', {}));
+    const base = { url: settings.url, downloads: models.downloadState() };
+    let installed, loaded, version;
     try {
-      const [models, loaded, version] = await Promise.all([
+      [installed, loaded, version] = await Promise.all([
         listModels(getSetting(ctx.db, 'ai', {})),
-        ollama.loadedModels(local.url).catch(() => []),
-        ollama.version(local.url)
+        ollama.loadedModels(settings.url).catch(() => []),
+        ollama.version(settings.url)
       ]);
-      return { up: true, url: local.url, version, models, loaded: loaded.map(m => m.name), pulling };
     } catch (err) {
-      return { up: false, url: local.url, error: err.message, models: [], loaded: [], pulling };
+      return { ...base, up: false, error: err.message, settings, models: [], loaded: [],
+        jobs: models.jobsStatus(settings, []), ready: false };
+    }
+    settings = models.fillGaps(ctx.db, installed, ctx.log).settings;
+    const jobs = models.jobsStatus(settings, installed);
+    return { ...base, up: true, version, settings, models: installed, loaded: loaded.map(m => m.name),
+      jobs, ready: jobs.every(j => j.installed) };
+  }, { perm: 'settings.manage' });
+
+  /** One click: downloads whatever the jobs are missing. Progress
+   *  arrives as 'ai-models' events. */
+  r.post('/api/ai/local/setup', async ctx => {
+    try {
+      const out = await models.setup(ctx.db, ctx.log);
+      ctx.status = 202;
+      return out;
+    } catch (err) {
+      throw aiFailure(err);
     }
   }, { perm: 'settings.manage' });
 
-  /** Starts downloading a model; progress arrives as 'ai-pull' events. */
+  /** Downloads one model by name. */
   r.post('/api/ai/local/pull', async ctx => {
     const { model } = await ctx.json();
     const name = String(model || '').trim();
     if(!/^[A-Za-z0-9._\-\/:]{1,120}$/.test(name)) throw badRequest('Give a model name like minicpm-v or qwen2.5:7b.');
-    if(pulling) throw conflict(`Already downloading ${pulling.model}. Wait for it to finish.`, 'busy');
-    const local = aiSettings(getSetting(ctx.db, 'ai', {}));
-    pulling = { model: name, status: 'starting', total: 0, completed: 0 };
-    broadcast('ai-pull', pulling, toAdmins);
-    ctx.log('AI model download', { text: name });
-    let last = 0;
-    ollama.pull(local.url, name, p => {
-      pulling = { model: name, status: p.status || '', total: p.total || pulling.total, completed: p.completed || 0 };
-      if(Date.now() - last > 500){ last = Date.now(); broadcast('ai-pull', pulling, toAdmins); }
-    }).then(() => {
-      broadcast('ai-pull', { model: name, status: 'done', done: true }, toAdmins);
-    }).catch(err => {
-      broadcast('ai-pull', { model: name, status: 'failed', error: err.message, done: true }, toAdmins);
-    }).finally(() => { pulling = null; });
     ctx.status = 202;
-    return { pulling };
+    return { downloads: models.enqueue(ctx.db, [name], ctx.log) };
   }, { perm: 'settings.manage' });
 
   /** A tiny real request, for the Settings "Test" button: proves Ollama

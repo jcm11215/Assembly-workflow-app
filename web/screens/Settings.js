@@ -1,7 +1,7 @@
 /**
- * Settings: your account, and -- for admins -- which AI reads drawings
- * and answers the assistant. AI keys are kept on the server, so they are
- * set once here rather than on every tablet.
+ * Settings: your account, and -- for admins -- the shop's AI. Setting up
+ * the AI is one button: it downloads whatever models are missing and
+ * puts each to work as it lands. The details are under Advanced.
  */
 import { html, useEffect, useRef, useState } from '../vendor/index.js';
 import { useStore, setState } from '../lib/store.js';
@@ -9,44 +9,59 @@ import { api } from '../lib/api.js';
 import { signOut, changePassword } from '../lib/actions.js';
 import { useCan } from '../lib/permissions.js';
 import { roleLabel, ROLE_INFO } from '../../shared/roles.js';
-import { Field, Select, AsyncButton, submitting } from '../ui/kit.js';
-import { Sheet, toast, toastError } from '../ui/overlays.js';
+import { Field, Select, AsyncButton, PageHeader, initials, submitting } from '../ui/kit.js';
+import { Icon } from '../ui/icons.js';
+import { toast, toastError } from '../ui/overlays.js';
 
-export function Settings({ close }){
+export function Settings(){
   const me = useStore(s => s.me);
-  const ai = useStore(s => s.ai);
   const isAdmin = useCan('settings.manage');
-  const [changing, setChanging] = useState(false);
+  return html`
+    <${PageHeader} title="Settings" sub=${isAdmin ? 'Your account and the shop’s AI' : 'Your account'} />
+    <div class="settings-grid">
+      <${Account} me=${me} />
+      <section class="card">
+        <div class="card-head"><h2>AI</h2></div>
+        <div class="card-pad">${isAdmin ? html`<${AiSetup} />` : html`<${AiStatus} />`}</div>
+      </section>
+    </div>`;
+}
 
+/* ---------------- account ---------------- */
+
+function Account({ me }){
+  const [changing, setChanging] = useState(false);
   const out = async () => {
     try { await signOut(); } catch (e) { console.error(e); }
     location.hash = '';
     location.reload();
   };
-
   return html`
-    <${Sheet} title="Settings" close=${close}>
-      <h3 class="section-title">Your account</h3>
-      <p>Signed in as <b>${me.fullName}</b> (${me.login}) · ${roleLabel(me.role)}</p>
-      <p class="hint">${ROLE_INFO[me.role] && ROLE_INFO[me.role].blurb}</p>
-      <div class="row-actions">
-        <button class="btn" onClick=${() => setChanging(!changing)}>Change password</button>
-        <button class="btn" onClick=${out}>Sign out</button>
+    <section class="card">
+      <div class="card-head"><h2>Your account</h2></div>
+      <div class="card-pad">
+        <div class="account">
+          <span class="avatar avatar-lg" aria-hidden="true">${initials(me.fullName)}</span>
+          <div style=${{ minWidth: 0 }}>
+            <div class="account-name">${me.fullName}</div>
+            <div class="hint">${me.login} · ${roleLabel(me.role)}</div>
+          </div>
+        </div>
+        ${ROLE_INFO[me.role] && html`<p class="hint">${ROLE_INFO[me.role].blurb}</p>`}
+        <div class="row-actions">
+          <button class="btn" aria-expanded=${changing} onClick=${() => setChanging(!changing)}>Change password</button>
+          <button class="btn" onClick=${out}><${Icon} name="logout" />Sign out</button>
+        </div>
+        ${changing && html`<${PasswordForm} onDone=${() => setChanging(false)} />`}
       </div>
-      ${changing && html`<${PasswordForm} onDone=${() => setChanging(false)} />`}
-
-      <h3 class="section-title">AI</h3>
-      ${isAdmin
-        ? html`<${AiSettings} />`
-        : html`<p class="hint">Drawings and the assistant use the shop's local AI${ai.ready ? '.' : ', which an admin has not set up yet.'}</p>`}
-    <//>`;
+    </section>`;
 }
 
 function PasswordForm({ onDone }){
   const submit = submitting(async f => {
     if(f.next !== f.confirm) throw new Error('The two new passwords do not match.');
     await changePassword(f.current, f.next);
-    toast('Password changed. Other devices have been signed out.', { kind: 'ok', ms: 5000 });
+    toast('Password changed. Your other devices have been signed out.', { kind: 'ok', ms: 5000 });
     onDone();
   });
   return html`
@@ -54,135 +69,202 @@ function PasswordForm({ onDone }){
       <${Field} label="Current password"><input name="current" type="password" required autocomplete="current-password" /><//>
       <${Field} label="New password" hint="At least 8 characters."><input name="next" type="password" required minlength="8" autocomplete="new-password" /><//>
       <${Field} label="Confirm new password"><input name="confirm" type="password" required autocomplete="new-password" /><//>
-      <button type="submit" class="btn btn-primary">Save new password</button>
-    </form>`;
-}
-
-function AiSettings(){
-  const [s, setS] = useState(null);
-  const [test, setTest] = useState(null);
-
-  useEffect(() => { api.get('/api/settings/ai').then(setS).catch(toastError); }, []);
-  if(!s) return html`<p class="hint">Loading…</p>`;
-
-  const save = submitting(async f => {
-    setS(await api.put('/api/settings/ai', {
-      url: f.url, chatModel: f.chatModel, visionModel: f.visionModel, embedModel: f.embedModel,
-      contextTokens: f.contextTokens, visionContextTokens: f.visionContextTokens, temperature: f.temperature
-    }));
-    setTest(null);
-    toast('AI settings saved.', { kind: 'ok' });
-  });
-
-  return html`
-    <p class="hint">The shop's own AI, run by Ollama on the server. It reads drawings and answers the assistant for everyone;
-      nothing leaves the shop's hardware.</p>
-    <form onSubmit=${save}>
-      <${LocalAi} cfg=${s} />
       <div class="row-actions">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <${AsyncButton} class="btn" busyLabel="Testing…" onClick=${async () => setTest(await api.post('/api/ai/test'))}>Test the saved settings<//>
+        <button type="submit" class="btn btn-primary">Save new password</button>
+        <button type="button" class="btn btn-ghost" onClick=${onDone}>Cancel</button>
       </div>
-      ${test && html`<p class=${test.ok ? 'ok-text' : 'error-text'}>
-        ${test.ok ? `Working: the local AI answered in ${(test.ms / 1000).toFixed(1)} s.` : `Not working: ${test.error}`}</p>`}
     </form>`;
 }
 
-/* ---------------- local AI ---------------- */
+/* ---------------- AI ---------------- */
 
-/** Models people use for each job, offered for download. */
-const SUGGESTED = [
-  { model: 'minicpm-v', why: 'reads drawings (vision), ~5 GB' },
-  { model: 'qwen2.5vl:7b', why: 'reads drawings (vision), ~6 GB' },
-  { model: 'qwen2.5:7b', why: 'answers questions, ~5 GB; qwen2.5:14b with 12 GB+ of GPU memory' },
-  { model: 'nomic-embed-text', why: 'searches the knowledge base -- needed for it, ~270 MB' }
-];
+/** What everyone else sees: whether the AI is ready. */
+function AiStatus(){
+  const ai = useStore(s => s.ai);
+  return html`
+    <${StatusCard} tone=${ai.ready ? 'good' : 'bad'} title=${ai.ready ? 'The AI is ready' : 'The AI isn’t set up yet'}>
+      ${ai.ready ? 'The assistant and drawing scans run on the shop’s own server. Nothing leaves the shop.'
+                 : 'An admin can set it up here, in one click.'}
+    <//>`;
+}
+
+const TONE_ICON = { good: 'checkCircle', bad: 'alert', busy: 'clock' };
+
+function StatusCard({ tone = 'bad', title, children, action }){
+  return html`
+    <div class=${`status-card ${tone}`}>
+      <${Icon} name=${TONE_ICON[tone]} />
+      <div class="status-card-text">
+        <div class="status-card-title">${title}</div>
+        <div class="hint" style=${{ margin: '2px 0 0' }}>${children}</div>
+      </div>
+      ${action}
+    </div>`;
+}
+
+const pct = d => (d && d.total ? Math.round((d.completed / d.total) * 100) : null);
+const same = (a, b) => !!a && !!b && (a.includes(':') ? a : `${a}:latest`) === (b.includes(':') ? b : `${b}:latest`);
 
 /**
- * Ollama runs the models; the app talks to it directly. Model pickers list
- * what Ollama has installed, and a model it doesn't have can be downloaded
- * from here.
+ * The admin's view: a status line, the three jobs the AI does and the
+ * model doing each, and one button that downloads whatever is missing.
  */
-function LocalAi({ cfg }){
-  const [status, setStatus] = useState(null);
-  const pull = useStore(s => s.aiPull);
-  const pullRef = useRef(null);
-  const load = () => api.get('/api/ai/local').then(setStatus).catch(toastError);
+function AiSetup(){
+  const [st, setSt] = useState(null);
+  const [test, setTest] = useState(null);
+  const live = useStore(s => s.aiDownloads);
+  const load = () => api.get('/api/ai/local').then(r => { setSt(r); setState({ aiDownloads: r.downloads }); }).catch(toastError);
   useEffect(() => { load(); }, []);
-  // A download finishing changes what can be picked.
+
+  // Each time a download finishes, show what is installed now.
+  const currentModel = live && live.current ? live.current.model : null;
+  const prev = useRef(currentModel);
   useEffect(() => {
-    if(!pull || !pull.done) return;
-    if(pull.error) toast(`Download of ${pull.model} failed: ${pull.error}`, { kind: 'error', ms: 8000 });
-    else toast(`${pull.model} is ready.`, { kind: 'ok' });
-    setState({ aiPull: null });
-    load();
-  }, [pull]);
+    if(prev.current && prev.current !== currentModel) load();
+    prev.current = currentModel;
+  }, [currentModel]);
+  if(!st) return html`<p class="hint">Checking the AI…</p>`;
 
-  const startPull = async name => {
-    name = String(name || '').trim();
-    if(!name) return;
-    const r = await api.post('/api/ai/local/pull', { model: name });
-    setState({ aiPull: r.pulling });
-    if(pullRef.current) pullRef.current.value = '';
+  const dl = live || st.downloads;
+  const busy = !!(dl && (dl.current || dl.queue.length));
+  const missing = st.jobs.filter(j => !j.installed);
+  const gb = missing.reduce((n, j) => n + (j.model && !same(j.model, j.recommended) ? 0 : j.sizeGb), 0);
+
+  const setup = async () => {
+    const r = await api.post('/api/ai/local/setup');
+    setState({ aiDownloads: r.downloads });
+    setTest(null);
   };
 
-  const models = status ? status.models : [];
-  const options = (current, filter) => {
-    const list = models.filter(filter).map(m => ({ value: m.id, label: `${m.id}${m.params ? ` · ${m.params}` : ''}${m.sizeGb ? ` · ${m.sizeGb} GB` : ''}` }));
-    if(current && !list.some(o => o.value === current)) list.unshift({ value: current, label: `${current} (not installed)` });
-    return [{ value: '', label: '-- none --' }, ...list];
-  };
-  const chatLike = m => !m.embedding;
-  const pct = pull && pull.total ? Math.round((pull.completed / pull.total) * 100) : null;
+  let status;
+  if(!st.up){
+    status = html`
+      <${StatusCard} title="The AI engine isn’t running"
+        action=${html`<${AsyncButton} class="btn" busyLabel="Checking…" onClick=${load}>Check again<//>`}>
+        The AI runs in Ollama on this server. Install it there with
+        <code>curl -fsSL https://ollama.com/install.sh | sh</code> and check again.
+      <//>`;
+  } else if(busy){
+    status = html`
+      <${StatusCard} tone="busy" title="Setting up the AI…">
+        Downloading models to this server. It can take a while; it keeps going if you leave this page.
+      <//>`;
+  } else if(st.ready){
+    status = html`
+      <${StatusCard} tone="good" title="The AI is ready"
+        action=${html`<${AsyncButton} class="btn" busyLabel="Testing…" onClick=${async () => setTest(await api.post('/api/ai/test'))}>Test it<//>`}>
+        Everything runs on this server. Nothing leaves the shop.
+      <//>`;
+  } else {
+    status = html`
+      <${StatusCard} title=${`The AI needs ${missing.length === 1 ? 'one more model' : `${missing.length} more models`}`}
+        action=${html`<${AsyncButton} class="btn btn-primary" busyLabel="Starting…" onClick=${setup}><${Icon} name="sparkle" />Set up the AI<//>`}>
+        They’re free and download to this server${gb ? ` (about ${Math.round(gb * 10) / 10} GB)` : ''}. Nothing leaves the shop.
+      <//>`;
+  }
 
   return html`
-    <${Field} label="Ollama address" hint="Where Ollama runs, as this server reaches it. Same machine: http://127.0.0.1:11434">
-      <input name="url" defaultValue=${cfg.url} spellcheck="false" placeholder="http://127.0.0.1:11434" />
-    <//>
-    <p class=${status ? (status.up ? 'ok-text' : 'error-text') : 'hint'}>
-      ${!status ? 'Checking Ollama…' : status.up
-        ? `Ollama ${status.version || ''} is running with ${models.length} model${models.length === 1 ? '' : 's'} installed${status.loaded.length ? ` (${status.loaded.join(', ')} loaded)` : ''}.`
-        : `${status.error} Install it from https://ollama.com, or save the right address.`}
-      ${' '}<button type="button" class="link-btn" onClick=${load}>Check again</button>
-    </p>
+    ${status}
+    ${dl && dl.error && !busy && html`<p class="error-text">Couldn’t download ${dl.error.model}: ${dl.error.message}</p>`}
+    ${test && html`<p class=${test.ok ? 'ok-text' : 'error-text'}>
+      ${test.ok ? `Working: it answered in ${(test.ms / 1000).toFixed(1)} seconds.` : `Not working: ${test.error}`}</p>`}
 
-    <${Field} label="Chat model" hint="Answers the assistant.">
-      <${Select} name="chatModel" value=${cfg.chatModel} options=${options(cfg.chatModel, chatLike)} />
-    <//>
-    <${Field} label="Vision model" hint="Reads drawings when scanning. minicpm-v works well.">
-      <${Select} name="visionModel" value=${cfg.visionModel} options=${options(cfg.visionModel, chatLike)} />
-    <//>
-    <${Field} label="Embedding model" hint="Searches the knowledge base. Changing it means re-indexing (Knowledge screen).">
-      <${Select} name="embedModel" value=${cfg.embedModel} options=${options(cfg.embedModel, () => true).slice(1)} />
-    <//>
+    ${st.up && html`
+      <div class="ai-jobs">
+        ${st.jobs.map(j => html`<${JobRow} key=${j.key} job=${j} downloads=${dl} />`)}
+      </div>`}
 
-    <details class="inset">
-      <summary>Download a model</summary>
-      ${pull ? html`
-        <p>${pull.model}: ${pull.status}${pct != null ? ` -- ${pct}%` : ''}</p>
-        ${pct != null && html`<div class="gauge"><div class="gauge-track"><div class="gauge-fill" style=${{ width: `${pct}%` }}></div></div></div>`}`
-      : html`
-        <div class="list">
-          ${SUGGESTED.map(m => html`
-            <div key=${m.model} class="model-row">
-              <span><b>${m.model}</b> -- ${m.why}</span>
-              ${models.some(x => x.id === m.model || x.id === `${m.model}:latest`)
-                ? html`<span class="ok-text">Installed</span>`
-                : html`<${AsyncButton} class="btn btn-sm" busyLabel="…" disabled=${!status || !status.up} onClick=${() => startPull(m.model)}>Download<//>`}
-            </div>`)}
-        </div>
-        <${Field} label="Or any model by name" hint="From ollama.com/library, e.g. llama3.2-vision or qwen2.5:14b">
-          <input ref=${pullRef} spellcheck="false" placeholder="model name" />
-        <//>
-        <${AsyncButton} class="btn btn-sm" busyLabel="Starting…" disabled=${!status || !status.up}
-          onClick=${() => startPull(pullRef.current && pullRef.current.value)}>Download<//>`}
-    </details>
-
-    <details class="inset">
+    <details class="advanced">
       <summary>Advanced</summary>
-      <${Field} label="Context size for questions (tokens)"><input name="contextTokens" type="number" min="2048" max="131072" step="1024" defaultValue=${cfg.contextTokens} /><//>
-      <${Field} label="Context size for drawings (tokens)" hint="Bigger fits more pages per request, and needs more memory. Scans split pages that don't fit.">
-        <input name="visionContextTokens" type="number" min="2048" max="131072" step="1024" defaultValue=${cfg.visionContextTokens} /><//>
-      <${Field} label="Temperature" hint="Lower is more literal. 0.3 suits reading drawings."><input name="temperature" type="number" min="0" max="2" step="0.1" defaultValue=${cfg.temperature} /><//>
+      <${Advanced} st=${st} reload=${load} />
     </details>`;
+}
+
+/** One job the AI does, the model doing it, and where that model is. */
+function JobRow({ job, downloads }){
+  const target = job.model || job.recommended;
+  const current = downloads && downloads.current && same(downloads.current.model, target) ? downloads.current : null;
+  const waiting = !current && downloads && downloads.queue.some(q => same(q, target));
+  const p = pct(current);
+  return html`
+    <div class="ai-job">
+      <div class="ai-job-main">
+        <div class="ai-job-label">${job.label}</div>
+        <div class="hint">${job.model || 'No model yet'}</div>
+        ${current && html`
+          <div class="gauge"><div class="gauge-track"><div class="gauge-fill" style=${{ width: `${p || 0}%` }}></div></div></div>`}
+      </div>
+      <div class="ai-job-state">
+        ${current ? html`<span class="hint">${current.status}${p != null ? ` · ${p}%` : ''}</span>`
+          : waiting ? html`<span class="hint">Waiting to download</span>`
+          : job.installed ? html`<span class="ok-text ai-ready"><${Icon} name="check" size=${16} />Ready</span>`
+          : html`<span class="hint">Not installed</span>`}
+      </div>
+    </div>`;
+}
+
+/**
+ * Where Ollama is, which model does each job, downloading any model by
+ * name, and the model options. Most shops never need this.
+ */
+function Advanced({ st, reload }){
+  const cfg = st.settings;
+  const models = st.models;
+
+  const save = submitting(async f => {
+    await api.put('/api/settings/ai', {
+      url: f.url, chatModel: f.chatModel, visionModel: f.visionModel, embedModel: f.embedModel,
+      contextTokens: f.contextTokens, visionContextTokens: f.visionContextTokens, temperature: f.temperature
+    });
+    toast('AI settings saved.', { kind: 'ok' });
+    reload();
+  });
+
+  const download = submitting(async (f, form) => {
+    const r = await api.post('/api/ai/local/pull', { model: f.model.trim() });
+    setState({ aiDownloads: r.downloads });
+    form.reset();
+  });
+
+  const options = (current, fits) => {
+    const list = models.filter(fits).map(m => ({ value: m.id, label: `${m.id}${m.params ? ` · ${m.params}` : ''}${m.sizeGb ? ` · ${m.sizeGb} GB` : ''}` }));
+    const at = list.find(o => same(o.value, current));
+    if(current && !at) list.unshift({ value: current, label: `${current} (not installed)` });
+    return { value: at ? at.value : current, options: [{ value: '', label: 'None' }, ...list] };
+  };
+  const chat = options(cfg.chatModel, m => !m.embedding);
+  const vision = options(cfg.visionModel, m => !m.embedding);
+  const embed = options(cfg.embedModel, () => true);
+
+  return html`
+    <form onSubmit=${save} class="advanced-body">
+      <${Field} label="Ollama address" hint="Where Ollama runs, as this server reaches it. On the same machine: http://127.0.0.1:11434">
+        <input name="url" defaultValue=${cfg.url} spellcheck="false" placeholder="http://127.0.0.1:11434" />
+      <//>
+      ${st.up && html`<p class="hint">Ollama ${st.version || ''} · ${models.length} model${models.length === 1 ? '' : 's'} installed${st.loaded.length ? ` · ${st.loaded.join(', ')} loaded` : ''}</p>`}
+
+      <div class="field-grid">
+        <${Field} label="Answers questions"><${Select} name="chatModel" value=${chat.value} options=${chat.options} /><//>
+        <${Field} label="Reads drawings"><${Select} name="visionModel" value=${vision.value} options=${vision.options} /><//>
+        <${Field} label="Searches documents" hint="Changing it means re-indexing on the Knowledge screen.">
+          <${Select} name="embedModel" value=${embed.value} options=${embed.options.slice(1)} /><//>
+      </div>
+
+      <div class="field-grid">
+        <${Field} label="Context for questions" hint="Tokens."><input name="contextTokens" type="number" min="2048" max="131072" step="1024" defaultValue=${cfg.contextTokens} /><//>
+        <${Field} label="Context for drawings" hint="Tokens. More fits more pages, and needs more memory.">
+          <input name="visionContextTokens" type="number" min="2048" max="131072" step="1024" defaultValue=${cfg.visionContextTokens} /><//>
+        <${Field} label="Temperature" hint="Lower is more literal."><input name="temperature" type="number" min="0" max="2" step="0.1" defaultValue=${cfg.temperature} /><//>
+      </div>
+      <div class="row-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+    </form>
+
+    <form onSubmit=${download} class="advanced-body">
+      <${Field} label="Download another model" hint="Any name from ollama.com/library, e.g. qwen2.5:14b or llama3.2-vision.">
+        <div class="inline-input">
+          <input name="model" required spellcheck="false" autocomplete="off" placeholder="Model name" />
+          <button type="submit" class="btn" disabled=${!st.up}>Download</button>
+        </div>
+      <//>
+    </form>`;
 }
