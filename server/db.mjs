@@ -234,6 +234,19 @@ const MIGRATIONS = [
     created_by  text references users(id) on delete set null,
     created_at  text not null
   );
+  `,
+
+  // 3: when a job was finished, for the dashboard's completed-per-week
+  // chart. Jobs already complete take the time of their last move into
+  // Complete, or their last change when that wasn't logged.
+  `
+  alter table jobs add column completed_at text;
+  update jobs set completed_at = coalesce(
+    (select max(a.at) from activity a
+      where a.entity_type = 'job' and a.entity_id = jobs.id and a.action = 'Stage moved'
+        and json_extract(a.detail, '$.to') = 'complete'),
+    updated_at)
+  where stage = 'complete';
   `
 ];
 

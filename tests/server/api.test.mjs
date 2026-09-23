@@ -135,6 +135,17 @@ test('trainees cannot sign a job into QC; assemblers can', async () => {
   assert.equal(ok.status, 200);
 });
 
+test('a job records when it was completed, and forgets it when reopened', async () => {
+  const job = await newJob();
+  srv.db.run("update jobs set stage = 'qc' where id = ?", job.id);
+  const done = await assembler.post(`/api/jobs/${job.id}/stage`, { from: 'qc', to: 'complete' });
+  assert.equal(done.status, 200);
+  assert.ok(Date.parse(done.data.job.completedAt) > Date.now() - 60000);
+  const reopened = await assembler.post(`/api/jobs/${job.id}/stage`, { from: 'complete', to: 'qc' });
+  assert.equal(reopened.status, 200);
+  assert.equal(reopened.data.job.completedAt, '');
+});
+
 test('deleting a job removes its blockers and notes, admin only', async () => {
   const job = await newJob();
   await assembler.post('/api/blockers', { jobId: job.id, issue: 'Missing bearing' });

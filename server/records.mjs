@@ -116,6 +116,9 @@ function toJob(r, checklist, blueprint){
     rev: r.rev,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    // Imported jobs that were already complete have no completion time;
+    // their last change is the best guess.
+    completedAt: r.stage === 'complete' ? r.completed_at || r.updated_at : '',
     checklist: checklist || {},
     blueprint: blueprint || null
   };

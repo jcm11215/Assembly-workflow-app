@@ -133,8 +133,9 @@ export default function register(r){
     if(!verdict.ok) throw badRequest(verdict.reason, verdict.code);
 
     const pct = STAGE_DEFAULT_PERCENT[body.to];
-    ctx.db.run(`update jobs set stage = ?, percent_complete = ?, last_moved_by = ?, version = version + 1, updated_at = ?
-                where id = ?`, body.to, pct, ctx.user.id, now(), job.id);
+    const at = now();
+    ctx.db.run(`update jobs set stage = ?, percent_complete = ?, last_moved_by = ?, version = version + 1, updated_at = ?,
+                completed_at = ? where id = ?`, body.to, pct, ctx.user.id, at, body.to === 'complete' ? at : null, job.id);
     ctx.log('Stage moved', {
       text: `${job.jobNumber}: ${stageLabel(job.stage)} → ${stageLabel(body.to)}`,
       jobNumber: job.jobNumber, from: job.stage, to: body.to
