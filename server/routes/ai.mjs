@@ -106,11 +106,24 @@ export default function register(r){
     }
   }, { perm: 'settings.manage' });
 
+  /** Switches a job to another model, downloading it first if needed. */
+  r.post('/api/ai/local/use', async ctx => {
+    const { key, model } = await ctx.json();
+    const name = String(model || '').trim();
+    if(!/^[A-Za-z0-9._\-\/:]{1,120}$/.test(name)) throw badRequest('Give a model name like qwen2.5vl:7b.');
+    try {
+      return await models.useModel(ctx.db, String(key || ''), name, ctx.log);
+    } catch (err) {
+      if(err instanceof AiError) throw aiFailure(err);
+      throw badRequest(err.message);
+    }
+  }, { perm: 'settings.manage' });
+
   /** Downloads one model by name. */
   r.post('/api/ai/local/pull', async ctx => {
     const { model } = await ctx.json();
     const name = String(model || '').trim();
-    if(!/^[A-Za-z0-9._\-\/:]{1,120}$/.test(name)) throw badRequest('Give a model name like minicpm-v or qwen2.5:7b.');
+    if(!/^[A-Za-z0-9._\-\/:]{1,120}$/.test(name)) throw badRequest('Give a model name like qwen2.5vl:7b or qwen2.5:7b.');
     ctx.status = 202;
     return { downloads: models.enqueue(ctx.db, [name], ctx.log) };
   }, { perm: 'settings.manage' });

@@ -21,7 +21,7 @@ UPDATE=0
 [[ "${1:-}" == "--update" ]] && UPDATE=1
 
 # The models the app's one-click AI setup would download (server/models.mjs).
-AI_MODELS=(nomic-embed-text qwen2.5:7b minicpm-v)
+AI_MODELS=(nomic-embed-text qwen2.5:7b qwen2.5vl:7b)
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run this with sudo: sudo $0" >&2
@@ -78,7 +78,7 @@ if [[ $UPDATE == 0 ]]; then
       curl -fsS http://127.0.0.1:11434/api/tags | grep -q "\"name\":\"$name\"" || missing+=("$m")
     done
     if (( ${#missing[@]} )); then
-      say "The AI needs ${#missing[@]} model(s): ${missing[*]} (about 10 GB in all, free)."
+      say "The AI needs ${#missing[@]} model(s): ${missing[*]} (about 11 GB in all, free)."
       if ask "Download them now? It can take a while."; then
         for m in "${missing[@]}"; do ollama pull "$m"; done
       else

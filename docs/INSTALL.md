@@ -39,8 +39,8 @@ defaults to yes:
 
 - **Node.js 22**, if this machine doesn't have 22.13 or newer.
 - **Ollama**, which runs the AI.
-- **The AI models**: `minicpm-v` reads drawings, `qwen2.5:7b` answers
-  questions and `nomic-embed-text` searches documents. They are about 10 GB
+- **The AI models**: `qwen2.5vl:7b` reads drawings, `qwen2.5:7b` answers
+  questions and `nomic-embed-text` searches documents. They are about 11 GB
   in all. Say no to download them later from the app instead.
 - **An old Local AI install**, if it finds one in `/home/*/localai`. It
   brings in the old documents and corrections, and switches off the old

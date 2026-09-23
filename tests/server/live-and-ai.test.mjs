@@ -181,7 +181,7 @@ test('one-click setup downloads what is missing and puts it to work', async () =
   await admin.put('/api/settings/ai', { url: fake.url, chatModel: 'fake-chat', visionModel: '', embedModel: '' });
   const res = await admin.post('/api/ai/local/setup');
   assert.equal(res.status, 202);
-  assert.deepEqual(res.data.queued, ['nomic-embed-text', 'minicpm-v']);
+  assert.deepEqual(res.data.queued, ['nomic-embed-text', 'qwen2.5vl:7b']);
   let st;
   for(let i = 0; i < 50; i++){
     st = (await admin.get('/api/ai/local')).data;
@@ -190,9 +190,9 @@ test('one-click setup downloads what is missing and puts it to work', async () =
   }
   assert.equal(st.downloads.error, null);
   assert.equal(st.settings.chatModel, 'fake-chat');
-  assert.equal(st.settings.visionModel, 'minicpm-v:latest');
+  assert.equal(st.settings.visionModel, 'qwen2.5vl:7b');
   assert.equal(st.ready, true);
-  assert.deepEqual(fake.calls.filter(c => c.url === '/api/pull').map(c => c.body.model), ['nomic-embed-text', 'minicpm-v']);
+  assert.deepEqual(fake.calls.filter(c => c.url === '/api/pull').map(c => c.body.model), ['nomic-embed-text', 'qwen2.5vl:7b']);
   // Nothing left to download: a second click queues nothing.
   assert.deepEqual((await admin.post('/api/ai/local/setup')).data.queued, []);
   // A download Ollama refuses is reported, not retried.
@@ -200,6 +200,25 @@ test('one-click setup downloads what is missing and puts it to work', async () =
   for(let i = 0; i < 50 && (st = (await admin.get('/api/ai/local')).data).downloads.current; i++) await new Promise(r => setTimeout(r, 50));
   assert.match(st.downloads.error.message, /does not exist/);
   assert.equal((await assembler.post('/api/ai/local/setup')).status, 403);
+  fake.close();
+});
+
+test('switching drawings to another model keeps the old one until the new one lands', async () => {
+  const fake = await startFakeOllama({ models: ['fake-chat', 'minicpm-v:latest', 'nomic-embed-text:latest'] });
+  await admin.put('/api/settings/ai', { url: fake.url, chatModel: 'fake-chat', visionModel: 'minicpm-v:latest' });
+  const res = await admin.post('/api/ai/local/use', { key: 'visionModel', model: 'qwen2.5vl:7b' });
+  assert.equal(res.data.switched, false);
+  let st;
+  for(let i = 0; i < 50; i++){
+    st = (await admin.get('/api/ai/local')).data;
+    if(!st.downloads.current && !st.downloads.queue.length) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  assert.equal(st.settings.visionModel, 'qwen2.5vl:7b');
+  // Already installed: switched at once.
+  assert.equal((await admin.post('/api/ai/local/use', { key: 'visionModel', model: 'minicpm-v' })).data.switched, true);
+  assert.equal((await admin.get('/api/settings/ai')).data.visionModel, 'minicpm-v:latest');
+  assert.equal((await admin.post('/api/ai/local/use', { key: 'embedModel', model: 'bge-m3' })).status, 400);
   fake.close();
 });
 

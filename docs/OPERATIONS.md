@@ -88,7 +88,7 @@ DATA_DIR=/var/lib/assembly-workflow node server/cli.mjs legacy-auth off`.
   `assembly-workflow status` and `systemctl status ollama`. "Too large for the local model's context" is
   handled by splitting pages; if a scan still fails, raise the drawing
   context size under Advanced, or pick a vision model that uses fewer
-  tokens per page (minicpm-v).
+  tokens per page (minicpm-v uses about a third of qwen2.5vl's).
 - **The assistant ignores a document.** Knowledge → check it says
   "N passages" (a scanned PDF has no text layer and can't be searched). If
   the screen warns about a different embedding model, press Re-index.

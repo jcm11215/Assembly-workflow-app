@@ -145,6 +145,16 @@ function AiSetup(){
   const missing = st.jobs.filter(j => !j.installed);
   const gb = missing.reduce((n, j) => n + (j.model && !same(j.model, j.recommended) ? 0 : j.sizeGb), 0);
 
+  /** Switches a job to its recommended model; it keeps using the old
+   *  one until the new one has downloaded. */
+  const useRecommended = async job => {
+    const r = await api.post('/api/ai/local/use', { key: job.key, model: job.recommended });
+    setState({ aiDownloads: r.downloads });
+    toast(r.switched ? `Now using ${job.recommended}.`
+      : `Downloading ${job.recommended}. The current model keeps working until it's ready.`, { kind: 'ok', ms: 5000 });
+    if(r.switched) load();
+  };
+
   const setup = async () => {
     const r = await api.post('/api/ai/local/setup');
     setState({ aiDownloads: r.downloads });
@@ -186,7 +196,7 @@ function AiSetup(){
 
     ${st.up && html`
       <div class="ai-jobs">
-        ${st.jobs.map(j => html`<${JobRow} key=${j.key} job=${j} downloads=${dl} />`)}
+        ${st.jobs.map(j => html`<${JobRow} key=${j.key} job=${j} downloads=${dl} onUse=${useRecommended} />`)}
       </div>`}
 
     <details class="advanced">
@@ -196,16 +206,25 @@ function AiSetup(){
 }
 
 /** One job the AI does, the model doing it, and where that model is. */
-function JobRow({ job, downloads }){
+function JobRow({ job, downloads, onUse }){
   const target = job.model || job.recommended;
-  const current = downloads && downloads.current && same(downloads.current.model, target) ? downloads.current : null;
-  const waiting = !current && downloads && downloads.queue.some(q => same(q, target));
+  const busyWith = name => (downloads && downloads.current && same(downloads.current.model, name) ? downloads.current : null);
+  const queued = name => !!(downloads && downloads.queue.some(q => same(q, name)));
+  // The recommended model is on its way to replace the current one.
+  const upgrading = job.model && !same(job.model, job.recommended) && (busyWith(job.recommended) || queued(job.recommended));
+  const current = busyWith(target) || (upgrading ? busyWith(job.recommended) : null);
+  const waiting = !current && (queued(target) || (upgrading && queued(job.recommended)));
   const p = pct(current);
+  // Drawings used to default to minicpm-v; qwen2.5vl reads them better.
+  // Offered, never forced -- and not to anyone who picked something else.
+  const offer = job.key === 'visionModel' && /minicpm-v/i.test(job.model || '') && job.installed && !upgrading;
   return html`
     <div class="ai-job">
       <div class="ai-job-main">
         <div class="ai-job-label">${job.label}</div>
-        <div class="hint">${job.model || 'No model yet'}</div>
+        <div class="hint">${job.model || 'No model yet'}${upgrading ? html` → ${job.recommended}` : ''}</div>
+        ${offer && html`<${AsyncButton} class="link-btn" busyLabel="Starting…" onClick=${() => onUse(job)}>
+          Use ${job.recommended} instead${job.sizeGb ? ` (${job.sizeGb} GB download)` : ''}<//>`}
         ${current && html`
           <div class="gauge"><div class="gauge-track"><div class="gauge-fill" style=${{ width: `${p || 0}%` }}></div></div></div>`}
       </div>

@@ -16,7 +16,9 @@ import { can } from '../shared/roles.js';
 /** The jobs, and the model recommended for each. */
 export const JOBS = [
   { key: 'chatModel', label: 'Answers questions', model: 'qwen2.5:7b', sizeGb: 4.7 },
-  { key: 'visionModel', label: 'Reads drawings', model: 'minicpm-v', sizeGb: 5.5 },
+  // Qwen2.5-VL reads documents and points at things on them better than
+  // MiniCPM-V, which installs that already have it can keep using.
+  { key: 'visionModel', label: 'Reads drawings', model: 'qwen2.5vl:7b', sizeGb: 6.0 },
   { key: 'embedModel', label: 'Searches documents', model: 'nomic-embed-text', sizeGb: 0.3 }
 ];
 
@@ -81,6 +83,8 @@ export function jobsStatus(settings, models){
 /** Waiting downloads, the one running, and the last failure. One at a
  *  time: two big downloads at once only make both slower. */
 const downloads = { queue: [], current: null, error: null };
+/** model name -> the job to put it on as soon as it has downloaded. */
+const assignOnLand = new Map();
 const toAdmins = u => can(u.role, 'settings.manage');
 const snapshot = () => ({ current: downloads.current, queue: [...downloads.queue], error: downloads.error });
 const announce = () => broadcast('ai-models', snapshot(), toAdmins);
@@ -121,7 +125,14 @@ async function run(db, log){
         downloads.current = { model, status: statusText(p.status), total, completed };
         if(Date.now() - last > 500){ last = Date.now(); announce(); }
       });
-      fillGaps(db, await listModels(getSetting(db, 'ai', {})), log);
+      const installed = await listModels(getSetting(db, 'ai', {}));
+      const key = [...assignOnLand].find(([name]) => sameModel(name, model));
+      if(key){
+        assignOnLand.delete(key[0]);
+        const found = findModel(installed, model);
+        if(found) assign(db, key[1], found.id, log);
+      }
+      fillGaps(db, installed, log);
     } catch (err) {
       // The rest of the queue would fail the same way if Ollama is gone.
       downloads.error = { model, message: err.message };
@@ -139,6 +150,29 @@ function statusText(s){
   if(s.startsWith('verifying')) return 'Checking';
   if(s.startsWith('writing') || s === 'success') return 'Finishing';
   return s ? s[0].toUpperCase() + s.slice(1) : 'Downloading';
+}
+
+/** Puts a model on a job and tells everyone the AI's state. */
+function assign(db, key, id, log){
+  const next = aiSettings({ ...aiSettings(getSetting(db, 'ai', {})), [key]: id });
+  putSetting(db, 'ai', next);
+  broadcast('ai', aiSummary(next));
+  log?.('AI model switched', { text: `${JOBS.find(j => j.key === key).label}: ${id}` });
+}
+
+/**
+ * Switches a job to a model: straight away when it is installed,
+ * otherwise once it has downloaded, so the old model keeps working in
+ * the meantime. The embedding model isn't offered: changing it means
+ * re-indexing the knowledge base, a deliberate step on its own.
+ */
+export async function useModel(db, key, model, log = null){
+  if(!['chatModel', 'visionModel'].includes(key)) throw new Error('Only the question and drawing models can be switched here.');
+  const installed = await listModels(getSetting(db, 'ai', {}));
+  const found = findModel(installed, model);
+  if(found){ assign(db, key, found.id, log); return { switched: true, downloads: snapshot() }; }
+  assignOnLand.set(model, key);
+  return { switched: false, downloads: enqueue(db, [model], log) };
 }
 
 /**
