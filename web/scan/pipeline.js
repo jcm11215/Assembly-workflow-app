@@ -208,6 +208,30 @@ export function partsFromTable(rows, page){
 }
 
 /**
+ * A set's parts lists read together. The longest is the main list (the
+ * assembly sheet's); the others are detail sheets for one assembly each
+ * -- the hanger's own sheet lists its bearing and coupling shaft -- and
+ * add only the types of part the main list doesn't have, since the
+ * assembly row already stands for everything in it.
+ */
+export function mainListFirst(lists){
+  const sorted = (lists || []).filter(l => l && l.length).sort((a, b) => b.length - a.length);
+  if(!sorted.length) return [];
+  const [main, ...details] = sorted;
+  const have = new Set(main.map(p => p.item));
+  const added = [];
+  for(const list of details){
+    for(const p of list){
+      if(have.has(p.item) || !categorize(p.item_as_drawn)) continue;
+      // Its item number is that sheet's, not the assembly view's.
+      added.push({ ...p, balloon: null });
+    }
+  }
+  for(const p of added) have.add(p.item);
+  return [...main, ...added];
+}
+
+/**
  * Corrections people made to earlier scans: a description someone
  * re-typed or moved to another end is read that way from now on.
  * `learned` maps learnKey(description) -> {item?, location?}.
@@ -283,7 +307,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
   // read from that text -- no AI; any other table sheet is asked about
   // one at a time, from its enlarged crop when there is one.
   const textTables = forPages(bomPages).filter(p => indexOf(p) && indexOf(p).table);
-  const fromText = textTables.flatMap(p => partsFromTable(indexOf(p).table, p.page));
+  const fromText = mainListFirst(textTables.map(p => partsFromTable(indexOf(p).table, p.page)));
   const askPages = forPages(bomPages).filter(p => !textTables.includes(p));
   const partsPass = askPages.length
     ? await perSheet(layer('parts', PROMPT_VERSIONS.parts, () => buildPartsListPrompt(includeJobFields),

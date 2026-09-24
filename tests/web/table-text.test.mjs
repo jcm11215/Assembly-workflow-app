@@ -105,3 +105,22 @@ test('a part someone removed is left out of later scans', () => {
   assert.deepEqual(parts.map(p => p.item), ['Motor']);
   assert.equal(used, 1);
 });
+
+test('a real assembly sheet: sub-items, a long table and its detail sheet (2501-010)', async () => {
+  const fs = await import('node:fs');
+  const { mainListFirst } = await import('../../web/scan/pipeline.js');
+  const { checkShaft } = await import('../../web/scan/categories.js');
+  const read = f => readTable(findTable(JSON.parse(fs.readFileSync(new URL(`./fixtures/2501-010-${f}-runs.json`, import.meta.url)))));
+  const main = read('p1'), hanger = read('p10');
+  assert.equal(main.length, 27, 'every numbered row, past the sub-items');
+  assert.deepEqual(main.slice(0, 4).map(r => [r.balloon, r.quantity]), [[1, 2], [2, 1], [3, 2], [4, 1]]);
+  assert.match(main[3].description, /^STD 2-7\/16", 2-BOLT END SHAFT$/, 'sub-item 3.3 kept out of item 4');
+  assert.ok(tableIsClean(main) && tableIsClean(hanger));
+  assert.deepEqual(hanger.map(r => r.quantity), [1, 1, 1, 1, 1], 'quantities are not item numbers');
+
+  const parts = mainListFirst([partsFromTable(main, 1), partsFromTable(hanger, 10)]).map(checkShaft).filter(Boolean)
+    .filter(p => categorize(p.item_as_drawn));
+  assert.deepEqual(parts.map(p => [p.balloon, p.item]), [
+    [3, 'Auger'], [4, 'Shaft'], [6, 'Hanger Bearing'], [13, 'Seal'], [14, 'Bearing'], [15, 'Drive'], [null, 'Coupling Shaft']
+  ]);
+});

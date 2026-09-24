@@ -8,16 +8,17 @@
  * bearing, and "DRIVE SHAFT" is a shaft, not a drive.
  */
 const RULES = [
-  [/\b(hangers?|hngrs?)\b/i,                                         'Hanger Bearing'],
+  [/\b(hangers?|hngrs?)\b(?!\s*(arms?|bars?|brackets?|brkts?|clamps?)\b)/i, 'Hanger Bearing'],
   [/\b(coupling|cplg)\s*bolts?\b/i,                                   'Coupling Bolts'],
   [/\bgaskets?\b/i,                                                  'Gasket'],
   [/\b(coupling|cplg)\s*shafts?\b/i,                                  'Coupling Shaft'],
   [/\btail\s*shafts?\b/i,                                            'Tail Shaft'],
   [/\bdrive\s*shafts?\b/i,                                           'Drive Shaft'],
   [/\bend\s*shafts?\b/i,                                             'Shaft'],
+  // A drive unit that comes with its motor is the drive.
+  [/\bdrives?\b(?!\s*(end|plate|guard|base|shaft))/i,                'Drive'],
   [/\b(gear\s*)?motors?\b/i,                                         'Motor'],
   [/\b(reducers?|gear\s*box(es)?|gear\s*reducers?)\b/i,              'Reducer'],
-  [/\bdrives?\b(?!\s*(end|plate|guard|base|shaft))/i,                'Drive'],
   [/\b(seals?|waste\s*packs?|glands?)\b/i,                           'Seal'],
   [/\b(bearings?|brgs?|pillow\s*blocks?|flange\s*blocks?)\b/i,       'Bearing'],
   [/\b(augers?|flight(ing)?s?|screw\s*(assembly|assy|sections?))\b/i,'Auger'],

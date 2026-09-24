@@ -61,6 +61,9 @@ export function phrases(runs){
 }
 
 const isNumber = s => /^\d{1,3}$/.test(String(s).trim());
+/** A row's item number: "7", or a sub-item of an assembly, "7.1". */
+const isItem = s => /^\d{1,3}(\.\d{1,2})?$/.test(String(s).trim());
+const isSubItem = s => String(s).includes('.');
 
 /**
  * Finds the parts table: its header row (an item column and at least one
@@ -89,7 +92,14 @@ export function findTable(runs){
   const itemHead = header.find(h => h.kind === 'item').p;
   const colX = centreX(itemHead), tol = Math.max(0.02, itemHead.w);
   const headY = centreY(itemHead);
-  const numbers = ph.filter(p => isNumber(p.str) && Math.abs(centreX(p) - colX) <= tol && Math.abs(centreY(p) - headY) < 0.7);
+  // Sub-items (1.1, 1.2 under assembly 1) are rows too: without them,
+  // their lines would be read into the row above, and the gap they leave
+  // between whole numbers would look like the end of the table.
+  // ...and only numbers nearer the item header than any other: a narrow
+  // table's quantity column can sit within reach of the item column.
+  const nearestHead = p => header.slice().sort((a, b) => Math.abs(centreX(a.p) - centreX(p)) - Math.abs(centreX(b.p) - centreX(p)))[0];
+  const numbers = ph.filter(p => isItem(p.str) && Math.abs(centreX(p) - colX) <= tol && Math.abs(centreY(p) - headY) < 0.7
+    && nearestHead(p).kind === 'item');
 
   const walk = sign => {
     const side = numbers.filter(n => (centreY(n) - headY) * sign > 0)
@@ -141,7 +151,9 @@ function columnFor(cell, header){
 /**
  * The table's rows: {balloon, quantity, description, part_number,
  * specification}. A line with no item number belongs to the nearest
- * numbered row -- a description wrapped onto a second line.
+ * numbered row -- a description wrapped onto a second line. Sub-items
+ * (7.1, 7.2) keep their own lines but are left out: they are the pieces
+ * of assembly 7, which its own row already stands for.
  */
 export function readTable(table){
   if(!table) return [];
@@ -157,7 +169,7 @@ export function readTable(table){
     (row.cells[col.kind] = row.cells[col.kind] || []).push(p);
   }
   const text = list => (list || []).sort((a, b) => a.y - b.y || a.x - b.x).map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
-  return rows.map(r => {
+  return rows.filter(r => !isSubItem(r.anchor.str)).map(r => {
     const qty = text(r.cells.qty);
     return {
       balloon: Number(r.anchor.str),
