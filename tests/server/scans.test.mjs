@@ -67,7 +67,7 @@ test('a re-scan runs on the server and saves itself to the job, file and all', a
   const bp = state.jobs.find(j => j.id === job.id).blueprint;
   assert.equal(bp.components.length, 3);
   assert.equal(bp.hasFile, true);
-  assert.equal(bp.scanner, 2);
+  assert.equal(bp.scanner, 3);
   assert.equal(fs.readFileSync(`${srv.filesDir}/BG-1/GA.pdf`, 'utf8'), '%PDF-1.4 pretend');
   const listed = state.scans.find(s => s.id === started.data.scan.id);
   assert.equal(listed.status, 'saved');

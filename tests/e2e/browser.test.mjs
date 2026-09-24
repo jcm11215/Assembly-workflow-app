@@ -136,7 +136,7 @@ test('a new job is read off a drawing', { skip }, async () => {
   const bp = state.jobs.find(j => j.jobNumber === '2024-017H').blueprint;
   assert.equal(bp.hasFile, true);
   assert.equal(bp.mimeType, 'application/pdf');
-  assert.equal(bp.scanner, 2, 'saved with the scanner that read it');
+  assert.equal(bp.scanner, 3, 'saved with the scanner that read it');
   assert.equal(await admin.locator('.scan-bar').count(), 0, 'the banner is gone once the job has its scan');
 });
 

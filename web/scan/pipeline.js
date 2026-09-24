@@ -40,9 +40,10 @@ import { NOT_A_PART } from '../../shared/partNames.js';
 /**
  * Which scanner read a drawing, saved with every scan so a list from an
  * older one can be told apart. 1 (saved as nothing) counted a part again
- * in every view that showed it; 2 lists each table row once per end.
+ * in every view that showed it; 2 lists each table row once per end;
+ * 3 reads sub-items, side-by-side tables and sheet 1's list only.
  */
-export const SCANNER = 2;
+export const SCANNER = 3;
 
 /**
  * Parses a reading's reply, repairing what can be repaired -- a drawing is
