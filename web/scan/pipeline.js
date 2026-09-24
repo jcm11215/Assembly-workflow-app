@@ -34,7 +34,7 @@ import { mergeCallouts, mergeClassification, mergeLayout, mergeParts } from './s
 import { evictOld, forgetPages, hashContent } from './scanStore.js';
 import { combineSameRows, dedupeParts, joinPartsAndCallouts, resolveLocations, sortByLocation } from './scanJoin.js';
 import { normalizeComponentsDetailed } from './spec.js';
-import { categorize, checkShaft, learnKey } from './categories.js';
+import { categorize, checkShaft, checkType, learnKey } from './categories.js';
 import { NOT_A_PART } from '../../shared/partNames.js';
 
 /**
@@ -319,7 +319,8 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
   const partsParsed = parsedOf(partsPass);
   const readRows = [...fromText, ...(partsParsed.parts || [])];
   const notShafts = readRows.filter(p => !checkShaft(p)).map(p => p.item_as_drawn || p.item);
-  const { parts: withLearning, used: learnedUsed, keys: learnedKeys, leftOut: leftOutByLearning } = applyLearned(readRows.map(checkShaft).filter(Boolean), learned);
+  const notTracked = readRows.filter(p => checkShaft(p) && !checkType(p)).map(p => p.item_as_drawn || p.item);
+  const { parts: withLearning, used: learnedUsed, keys: learnedKeys, leftOut: leftOutByLearning } = applyLearned(readRows.map(checkShaft).filter(Boolean).map(checkType).filter(Boolean), learned);
   const { components: normalized, report: filterReport } = normalizeComponentsDetailed({ parts: withLearning });
   // A set that repeats its table on every sheet lists every row again.
   const { parts: tableParts, removed: repeatedRows } = dedupeParts(normalized);
@@ -402,6 +403,7 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
       rowsRead: readRows.length,
       leftOutByLearning: leftOutByLearning.slice(0, 12),
       notShafts: notShafts.slice(0, 12),
+      notTracked: notTracked.slice(0, 12),
       learnedKeys,
       failedReadings: readings.filter(r => r.error).map(r => ({ pass: r.error.pass || r.question || 'reading', message: r.error.message })),
       incompleteReadings: readings.filter(r => r.partial).map(r => `${r.question || 'reading'}: ${r.partial.message}`),
@@ -431,7 +433,8 @@ export function scanSummary(components, d){
 function leftOutNote(d){
   const why = [];
   const list = a => a.slice(0, 4).join(', ') + (a.length > 4 ? '…' : '');
-  if((d.droppedNames || []).length) why.push(`not a tracked type: ${list(d.droppedNames)}`);
+  const untracked = [...(d.notTracked || []), ...(d.droppedNames || [])];
+  if(untracked.length) why.push(`not a tracked type: ${list(untracked)}`);
   if((d.leftOutByLearning || []).length) why.push(`removed from an earlier scan (Knowledge → Part names): ${list(d.leftOutByLearning)}`);
   if((d.notShafts || []).length) why.push(`only carries a shaft: ${list(d.notShafts)}`);
   if(d.repeatedRowsRemoved) why.push(`${d.repeatedRowsRemoved} repeated row${d.repeatedRowsRemoved === 1 ? '' : 's'}`);

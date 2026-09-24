@@ -124,3 +124,16 @@ test('a real assembly sheet: sub-items, a long table and its detail sheet (2501-
     [3, 'Auger'], [4, 'Shaft'], [6, 'Hanger Bearing'], [13, 'Seal'], [14, 'Bearing'], [15, 'Drive'], [null, 'Coupling Shaft']
   ]);
 });
+
+test('bolts, nuts, washers and plates never get on the list, whatever the AI called them', async () => {
+  const { checkType } = await import('../../web/scan/categories.js');
+  const ai = (item, drawn, balloon = 1) => ({ item, item_as_drawn: drawn, balloon });
+  const kept = [
+    ai('Bearing', '1/2" UNC13 HEX BOLT, 1 1/2" LG GRADE 5'), ai('Bearing', '5/8" LOCK WASHER'), ai('Seal', '1/2" UNC13 HEX NUT'),
+    ai('Seal', '3" WASTEPACK FRONT PLATE'), ai('Seal', '3" RADIAL SHAFT LIP SEAL', '1.4'),
+    ai('Motor', '15 HP @ 35 RPM ASSEMBLED CLASS II SCREW CONVEYOR DRIVE WITH CAST IRON DRIVE'),
+    ai('Seal', 'STD 3" DIA WASTE PACK/LIP SEAL'), ai('Bearing', 'STD 3" BORE DIA, 4-BOLT FLANGED BALL BEARING'),
+    ai('Coupling Bolts', '3/4" COUPLING BOLT W/ LOCK NUT')
+  ].map(checkType).filter(Boolean);
+  assert.deepEqual(kept.map(p => p.item), ['Drive', 'Seal', 'Bearing', 'Coupling Bolts']);
+});

@@ -26,6 +26,12 @@ const RULES = [
   [/\buhmw\b/i,                                                      'UHMW']
 ];
 
+/** Hardware and the pieces of an assembly are never parts the shop
+ *  tracks, whatever else the description says: a "WASTEPACK SEAL PLATE"
+ *  is a plate, a "HEX BOLT" is a fastener. (A "4-BOLT BEARING" and
+ *  coupling bolts are still parts.) */
+const NOT_A_PART = /\b(plates?|brackets?|brkts?|guards?|washers?|nuts?|studs?|shims?|gussets?)\b|\b(hex|socket|cap|carriage|countersunk|set|machine|lag|u)[\s-]*(head\s*)?(bolts?|screws?)\b/i;
+
 /** Words that mean the part merely carries a shaft: a foot, a saddle, an
  *  auger's flights or pipe. "AUGER W/ END SHAFT" is an auger and "FOOT
  *  W/ END SHAFT" isn't a shaft at all -- a drive or end shaft is a bare
@@ -37,6 +43,9 @@ const SHAFT_TYPES = new Set(['Drive Shaft', 'Tail Shaft', 'Coupling Shaft', 'Sha
  *  tracks (plates, guards, fasteners...). */
 export function categorize(description){
   const s = String(description || '');
+  // Coupling bolts are tracked, lock nut and all.
+  if(/\b(coupling|cplg)\s*bolts?\b/i.test(s)) return 'Coupling Bolts';
+  if(NOT_A_PART.test(s)) return null;
   const hit = RULES.find(([re, type]) => re.test(s) && !(SHAFT_TYPES.has(type) && NOT_A_SHAFT.test(s)));
   return hit ? hit[1] : null;
 }
@@ -55,6 +64,17 @@ export { learnKey } from '../../shared/partNames.js';
  * one gets the type its description does say (an auger), or is left out
  * (a foot, a saddle). Anything else passes as it is.
  */
+export function checkType(part){
+  const drawn = String((part && part.item_as_drawn) || '').trim();
+  if(!drawn) return part;
+  // The type comes from the drawing's own wording, not from what the AI
+  // called it: a model that calls a hex bolt a bearing must not get it
+  // onto the list. A sub-item (1.1) is a piece of its assembly.
+  if(/^\d+\.\d+$/.test(String(part.balloon ?? '').trim())) return null;
+  const type = categorize(drawn);
+  return type ? { ...part, item: type } : null;
+}
+
 export function checkShaft(part){
   const drawn = String((part && part.item_as_drawn) || '');
   const called = String((part && part.item) || '');
