@@ -186,7 +186,8 @@ test('a set that repeats its table and its balloons on every sheet comes out wit
   assert.deepEqual(result.components.map(c => [c.balloon, c.installation_location, c.quantity]), [
     ['3', 'drive_end', 1], ['5', 'drive_end', 1], ['5', 'tail_end', 1], ['7', 'hanger', 2]
   ]);
-  assert.equal(result.diagnostics.repeatedRowsRemoved, 5, 'the second sheet\'s table and the repeated row');
+  assert.equal(result.diagnostics.repeatedRowsRemoved, 1, 'the repeated row; the second sheet\'s table isn\'t read at all');
+  assert.deepEqual(result.diagnostics.pagesRead.bom, [2], 'only the first sheet with a parts list');
   assert.deepEqual(result.diagnostics.pagesRead.views, [1, 4], 'both views were searched');
 });
 

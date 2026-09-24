@@ -301,7 +301,10 @@ export async function readDrawing(blocks, { includeJobFields = false, learned = 
     classifiedBy = classification ? 'ai' : 'none';
   } else if(tablePages.length) classifiedBy = 'text';
   const roles = pagesByRole(classification, allPages);
-  const bomPages = tablePages.length ? tablePages : roles.bom;
+  // Only the first sheet with a parts list is read: on an assembly set
+  // that is sheet 1's list, which covers the whole machine. The detail
+  // sheets' own lists repeat its pieces.
+  const bomPages = (tablePages.length ? tablePages : roles.bom).slice(0, 1);
 
   // 2: the line items. A table the PDF's text spelled out cleanly is
   // read from that text -- no AI; any other table sheet is asked about
