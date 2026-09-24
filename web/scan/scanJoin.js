@@ -319,6 +319,10 @@ const sizesOf = s => (String(s || '').match(/\d+/g) || []).join(' ');
  * Rows with no item number have to match word for word.
  */
 function sameRow(a, b){
+  // The same part number and wording under two item numbers is one row
+  // read twice (a model repeating itself), not two parts.
+  const pn = squash(a.part_number);
+  if(pn && pn === squash(b.part_number) && squash(a.item_as_drawn || a.item) === squash(b.item_as_drawn || b.item)) return true;
   const key = balloonKey(a.balloon);
   if(key !== balloonKey(b.balloon)) return false;
   const pa = squash(a.part_number), pb = squash(b.part_number);
@@ -452,7 +456,18 @@ export function resolveLocations(components, orientation){
     return { ...c, installation_location: location, stage: stageForLocation(location) };
   });
 
-  return { components: resolved, report: { locatedByCategory: byCategory, locatedByCallout: byCallout, locatedByPosition: byPosition } };
+  // The drive unit carries the drive-end bearing and comes with its drive
+  // shaft, so an end bearing or end shaft listed on its own, not placed
+  // by anything above, goes at the tail end.
+  const hasDrive = resolved.some(c => c && /^(drive|motor|reducer)$/i.test(String(c.item || '').trim()));
+  let byDrive = 0;
+  const placed = hasDrive ? resolved.map(c => {
+    if(!c || !['Bearing', 'Shaft'].includes(String(c.item || '').trim()) || (c.installation_location && c.installation_location !== 'unknown')) return c;
+    byDrive++;
+    return { ...c, installation_location: 'tail_end', stage: stageForLocation('tail_end') };
+  }) : resolved;
+
+  return { components: placed, report: { locatedByCategory: byCategory, locatedByCallout: byCallout, locatedByPosition: byPosition, locatedByDrive: byDrive } };
 }
 
 /** The order the parts list shows its groups in (domain/parts.js):

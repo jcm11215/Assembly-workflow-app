@@ -318,6 +318,14 @@ t('no orientation and no telling category leaves it unknown', () => {
   const { components } = resolveLocations([unknown('Gasket', { position: { x: .1, y: .1 } })], { drive_end_side: 'unknown' });
   eq(components[0].installation_location, 'unknown', 'location');
 });
+t('with a drive on the list, a flanged end bearing nothing placed goes at the tail end', () => {
+  const { components } = resolveLocations([unknown('Drive'), unknown('Bearing'), unknown('Shaft')], null);
+  eq(components.map(c => c.installation_location).join(), 'drive_end,tail_end,tail_end', 'locations');
+});
+t('two rows with one part number and wording are one row, whatever their item numbers', () => {
+  const { parts } = dedupeParts([part(15, 'Drive', { part_number: 'SK6382' }), part(18, 'Drive', { part_number: 'SK6382' })]);
+  eq(parts.length, 1, 'rows');
+});
 t('an unplaced ambiguous part cannot be placed by position', () => {
   const { components } = resolveLocations([unknown('Bearing')], { drive_end_side: 'left' });
   eq(components[0].installation_location, 'unknown', 'location');

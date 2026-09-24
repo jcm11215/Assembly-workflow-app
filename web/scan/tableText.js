@@ -74,19 +74,83 @@ const isSubItem = s => String(s).includes('.');
 /** The parts table's header row -- an item column and at least one
  *  other kind on one line -- as [{p, kind}] left to right, or null. */
 export function findHeader(runs, ph = phrases(runs)){
-  const heads = ph.map(p => ({ p, kind: kindOf(p.str) })).filter(h => h.kind);
+  return headerGroups(runs, ph)[0] || null;
+}
+
+/** Each run on its own, shaped like a phrase. */
+const asPhrase = r => ({ str: r.str.trim(), x: r.x, y: r.y, w: r.w, h: r.h, runs: [r] });
+
+/**
+ * The header line's tables, left to right: a sheet can carry its parts
+ * list in two tables side by side under one header line. Headings printed
+ * close together ("ITEM" "QTY") run into one phrase, so a phrase that is
+ * no heading is tried run by run.
+ */
+function headerGroups(runs, ph = phrases(runs)){
+  const heads = [];
+  for(const p of ph){
+    const kind = kindOf(p.str);
+    if(kind){ heads.push({ p, kind }); continue; }
+    for(const r of p.runs || []){
+      const k = kindOf(r.str);
+      if(k) heads.push({ p: asPhrase(r), kind: k });
+    }
+  }
   let header = null;
   for(const h of heads){
     const row = heads.filter(o => Math.abs(centreY(o.p) - centreY(h.p)) < Math.max(0.006, h.p.h));
     const kinds = new Set(row.map(o => o.kind));
     if(kinds.has('item') && kinds.size >= 2 && (!header || row.length > header.length)) header = row;
   }
-  return header && header.slice().sort((a, b) => a.p.x - b.p.x);
+  if(!header) return [];
+  const groups = [];
+  for(const h of header.slice().sort((a, b) => a.p.x - b.p.x)){
+    const cur = groups[groups.length - 1];
+    if(!cur || (h.kind === 'item' && cur.some(o => o.kind === 'item'))) groups.push([h]);
+    else cur.push(h);
+  }
+  const kinds = g => new Set(g.map(o => o.kind));
+  return groups.filter(g => kinds(g).has('item') && kinds(g).size >= 2);
+}
+
+/** Item and quantity numbers printed tight against the text after them
+ *  ("16 1 CSW3") run into one phrase: the leading numbers are cut off
+ *  as phrases of their own. */
+function splitLeadingNumbers(ph){
+  const out = [];
+  for(const p of ph){
+    const runs = (p.runs || [p]).slice().sort((a, b) => a.x - b.x);
+    let i = 0;
+    while(i < runs.length - 1 && isItem(runs[i].str)) out.push(asPhrase(runs[i++]));
+    if(i === 0){ out.push(p); continue; }
+    const rest = runs.slice(i);
+    const x = rest[0].x, end = Math.max(...rest.map(r => r.x + r.w));
+    out.push({ str: rest.map(r => r.str.trim()).join(' '), x, y: Math.min(...rest.map(r => r.y)), w: end - x, h: Math.max(...rest.map(r => r.h)), runs: rest });
+  }
+  return out;
+}
+
+/**
+ * Every parts table on the sheet -- usually one, sometimes two side by
+ * side -- each as findTable() describes it.
+ */
+export function findTables(runs){
+  const all = phrases(runs);
+  const groups = headerGroups(runs, all);
+  return groups.map((header, i) => {
+    const left = Math.min(...header.map(h => h.p.x)) - 0.01;
+    const right = i + 1 < groups.length ? Math.min(...groups[i + 1].map(h => h.p.x)) - 0.002 : 1;
+    const inCols = all.filter(p => (p.runs || [p]).some(r => r.x >= left && r.x < right));
+    const own = splitLeadingNumbers(inCols).filter(p => p.x >= left && p.x < right);
+    return tableUnder(header.map(h => ({ ...h, p: own.find(o => o.str === h.p.str && Math.abs(o.x - h.p.x) < 0.002) || h.p })), own);
+  }).filter(Boolean);
 }
 
 export function findTable(runs){
-  const ph = phrases(runs);
-  const header = findHeader(runs, ph);
+  return findTables(runs)[0] || null;
+}
+
+function tableUnder(header, ph){
   if(!header) return null;
 
   const itemHead = header.find(h => h.kind === 'item').p;

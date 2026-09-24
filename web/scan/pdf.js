@@ -1,5 +1,5 @@
 /** PDF -> page images, and image downscaling for upload. */
-import { findHeader, findTable, readTable, tableIsClean } from './tableText.js';
+import { findHeader, findTables, readTable, tableIsClean } from './tableText.js';
 import { ocrRuns } from './ocr.js';
 
 export function fileToBase64Raw(file){
@@ -179,10 +179,14 @@ export function textRuns(items, toPage, size){
 export function indexPage(runs){
   const numbers = (runs || []).filter(r => /^\d{1,3}$/.test(r.str))
     .map(r => ({ n: Number(r.str), x: r.x + r.w / 2, y: r.y + r.h / 2 }));
-  const table = findTable(runs);
-  if(!table) return { numbers, bomBox: null, table: null };
-  const rows = readTable(table);
-  return { numbers, bomBox: table.bomBox, table: tableIsClean(rows) ? rows : null };
+  // One parts list, sometimes printed as two tables side by side.
+  const tables = findTables(runs);
+  if(!tables.length) return { numbers, bomBox: null, table: null };
+  const rows = tables.flatMap(readTable).sort((a, b) => a.balloon - b.balloon);
+  const boxes = tables.map(t => t.bomBox);
+  const x = Math.min(...boxes.map(b => b[0])), y = Math.min(...boxes.map(b => b[1]));
+  const bomBox = [x, y, Math.max(...boxes.map(b => b[0] + b[2])) - x, Math.max(...boxes.map(b => b[1] + b[3])) - y];
+  return { numbers, bomBox, table: tableIsClean(rows) ? rows : null };
 }
 
 /** Is a point inside [x, y, w, h]? */

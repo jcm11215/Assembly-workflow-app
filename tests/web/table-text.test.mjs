@@ -137,3 +137,15 @@ test('bolts, nuts, washers and plates never get on the list, whatever the AI cal
   ].map(checkType).filter(Boolean);
   assert.deepEqual(kept.map(p => p.item), ['Drive', 'Seal', 'Bearing', 'Coupling Bolts']);
 });
+
+test('a parts list in two tables side by side, headings run together (2501-010 _400)', async () => {
+  const fs = await import('node:fs');
+  const { findTables } = await import('../../web/scan/tableText.js');
+  const runs = JSON.parse(fs.readFileSync(new URL('./fixtures/2501-010-400-p1-runs.json', import.meta.url)));
+  const rows = findTables(runs).flatMap(readTable).sort((a, b) => a.balloon - b.balloon);
+  assert.equal(rows.length, 33);
+  assert.ok(tableIsClean(rows));
+  const kept = rows.filter(r => categorize(r.description)).map(r => [r.balloon, categorize(r.description)]);
+  assert.deepEqual(kept, [[5, 'Auger'], [6, 'Auger'], [9, 'Shaft'], [10, 'Hanger Bearing'], [16, 'Seal'], [17, 'Bearing'], [18, 'Drive']],
+    'covers with gaskets, trough ends, feet and hardware left out');
+});

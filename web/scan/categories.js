@@ -30,7 +30,7 @@ const RULES = [
  *  tracks, whatever else the description says: a "WASTEPACK SEAL PLATE"
  *  is a plate, a "HEX BOLT" is a fastener. (A "4-BOLT BEARING" and
  *  coupling bolts are still parts.) */
-const NOT_A_PART = /\b(plates?|brackets?|brkts?|guards?|washers?|nuts?|studs?|shims?|gussets?)\b|\b(hex|socket|cap|carriage|countersunk|set|machine|lag|u)[\s-]*(head\s*)?(bolts?|screws?)\b/i;
+const NOT_A_PART = /\b(plates?|brackets?|brkts?|guards?|covers?|buttstraps?|washers?|nuts?|studs?|shims?|gussets?)\b|\b(hex|socket|cap|carriage|countersunk|set|machine|lag|u)[\s-]*(head\s*)?(bolts?|screws?)\b/i;
 
 /** Words that mean the part merely carries a shaft: a foot, a saddle, an
  *  auger's flights or pipe. "AUGER W/ END SHAFT" is an auger and "FOOT
