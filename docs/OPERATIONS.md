@@ -128,3 +128,12 @@ Admins open **Activity** in the menu:
   - **Failed sign-ins**, highlighted in red.
 
 Sign-ins made before this was added are filled in from the sign-in sessions still saved on the server, dated when each began. Their device isn't known. An import from the old app adds each person's last sign-in there.
+
+## Removing someone
+
+On **Team**, there are two ways to stop someone using the app:
+
+- **Switch off**: keeps the login, so it can be switched back on later.
+- **Delete**: removes the login for good and signs the person out everywhere. The jobs, notes and activity they recorded stay, under their name.
+
+You can't delete yourself or the last admin.

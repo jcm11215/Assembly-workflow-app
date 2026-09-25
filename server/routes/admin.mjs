@@ -91,6 +91,22 @@ export default function register(r){
     return { user };
   }, { perm: 'team.manage' });
 
+  /**
+   * Deletes a login for good. Their past work stays: jobs, notes and the
+   * activity log keep their name, but they are no longer linked to an
+   * account. You cannot delete yourself or the last admin.
+   */
+  r.delete('/api/admin/users/:id', ctx => {
+    const row = loadUser(ctx.db, ctx.params.id);
+    if(row.id === ctx.user.id) throw conflict('You cannot delete your own login.', 'self');
+    keepAnAdmin(ctx.db, row.id, 'none', false);
+    endAllSessions(ctx.db, row.id);
+    disconnectUser(row.id);
+    ctx.db.run('delete from users where id = ?', row.id);
+    ctx.log('Team member deleted', { text: `${row.full_name} (${row.login}) deleted` });
+    broadcast('user-removed', { id: row.id });
+  }, { perm: 'team.manage' });
+
   r.put('/api/admin/users/:id/password', async ctx => {
     const row = loadUser(ctx.db, ctx.params.id);
     const { password } = await ctx.json();

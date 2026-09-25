@@ -42,6 +42,7 @@ const handlers = {
     team: upsert(s.team, u),
     me: s.me && s.me.id === u.id ? { ...s.me, fullName: u.fullName, role: u.role } : s.me
   })),
+  'user-removed': ({ id }) => setState(s => ({ team: (s.team || []).filter(u => u.id !== id) })),
   activity: a => setState(s => (s.activity ? { activity: [a, ...s.activity.filter(x => x.id !== a.id)].slice(0, 500) } : null)),
   ai: summary => setState({ ai: summary }),
   scan: sc => applyScan(sc),

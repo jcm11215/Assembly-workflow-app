@@ -421,3 +421,18 @@ test('sign-ins from before logging began are backfilled from saved sessions', as
   assert.equal(row.at, '2026-09-01T10:00:00.000Z');
   db.close();
 });
+
+test('an admin can delete a login for good; their past work keeps their name', async () => {
+  const gone = await srv.user('leaver', 'assembler', 'Lee Ver');
+  const job = (await gone.post('/api/jobs', { jobNumber: 'DEL-1', customer: 'Acme' }));
+  const id = srv.db.get("select id from users where login = 'leaver'").id;
+  assert.equal((await trainee.delete(`/api/admin/users/${id}`)).status, 403);
+  const me = srv.db.get("select id from users where login = 'boss'");
+  assert.equal((await admin.delete(`/api/admin/users/${me.id}`)).status, 409, 'not yourself');
+  assert.equal((await admin.delete(`/api/admin/users/${id}`)).status, 200);
+  assert.equal(srv.db.get('select count(*) as n from users where id = ?', id).n, 0);
+  assert.equal((await gone.get('/api/state')).status, 401, 'signed out everywhere');
+  assert.ok(srv.db.get("select 1 from activity where actor_name = 'Lee Ver'"), 'their activity keeps their name');
+  if(job.status === 201) assert.ok(srv.db.get("select 1 from jobs where job_number = 'DEL-1'"), 'their job stays');
+  assert.equal((await admin.delete(`/api/admin/users/${id}`)).status, 404);
+});

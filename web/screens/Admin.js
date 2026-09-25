@@ -49,6 +49,13 @@ function Team(){
     await change(u, { active: !u.active }, u.active ? `${u.fullName} switched off.` : `${u.fullName} switched on.`);
   };
 
+  const remove = async u => {
+    const ok = await confirmAction({ title: `Delete ${u.fullName}?`,
+      message: `Their login (${u.login}) is removed for good and they are signed out everywhere. The jobs, notes and activity they recorded stay, under their name. To keep the login but stop them signing in, switch them off instead.`,
+      confirmLabel: 'Delete', danger: true });
+    if(!ok) return;
+    await api.del(`/api/admin/users/${u.id}`).then(() => { load(); toast(`${u.fullName} deleted.`, { kind: 'ok' }); }).catch(toastError);
+  };
   const active = users.filter(u => u.active);
   return html`
     <div class="stat-grid">
@@ -72,6 +79,7 @@ function Team(){
           <div class="card-actions">
             <button class="btn btn-sm" onClick=${() => openModal(SetPassword, { user: u, onDone: load })}>Set password</button>
             <${AsyncButton} class="btn btn-sm" onClick=${() => setActive(u)}>${u.active ? 'Switch off' : 'Switch on'}<//>
+            ${u.id !== me.id && html`<${AsyncButton} class="btn btn-sm btn-danger" onClick=${() => remove(u)}>Delete<//>`}
           </div>
         </div>`)}
     </div>
