@@ -384,3 +384,40 @@ test('clearing away a repeated part teaches nothing', async () => {
   const names = (await admin.get('/api/parts/learned')).data.names;
   assert.ok(!names.some(n => n.key === 'FLG BRG 3 7 16 REPEAT'));
 });
+
+test('sign-ins, sign-outs and failed sign-ins are logged, and admins see who is on', async () => {
+  const bad = await srv.client().post('/api/session', { login: 'nobody-here', password: 'wrong-password' });
+  assert.equal(bad.status, 401);
+  const fresh = await srv.user('logme', 'assembler', 'Log Me');
+  await fresh.delete('/api/session');
+  const log = (await admin.get('/api/activity?kind=signins&limit=500')).data.entries;
+  assert.ok(log.some(e => e.action === 'Signed in' && e.actorName === 'Log Me' && /\(/.test(e.detail.text)));
+  assert.ok(log.some(e => e.action === 'Signed out' && e.actorName === 'Log Me'));
+  assert.ok(log.some(e => e.action === 'Sign-in failed' && /nobody-here/.test(e.detail.text)));
+  assert.ok(!(await admin.get('/api/activity?kind=work&limit=500')).data.entries.some(e => e.action === 'Signed in'));
+
+  const people = (await admin.get('/api/activity/people')).data.people;
+  const me = people.find(p => p.fullName === 'Log Me');
+  assert.ok(me.lastSignIn && me.lastActive);
+  assert.equal(me.online, false);
+  assert.equal((await fresh.get('/api/activity/people')).status, 401);
+  assert.equal((await trainee.get('/api/activity/people')).status, 403);
+});
+
+test('sign-ins from before logging began are backfilled from saved sessions', async () => {
+  const { openDb } = await import('../../server/db.mjs');
+  const { DatabaseSync } = await import('node:sqlite');
+  const os = await import('node:os'); const path = await import('node:path'); const fs = await import('node:fs');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'awt-mig-')), 'db.sqlite');
+  openDb(file).close();
+  const raw = new DatabaseSync(file);
+  raw.exec(`insert into users (id, login, full_name, role, active, created_at, updated_at) values ('u1', 'old', 'Old Timer', 'admin', 1, 'x', 'x');
+            insert into sessions (token_hash, user_id, created_at, expires_at, last_seen_at) values ('h', 'u1', '2026-09-01T10:00:00.000Z', 9e15, 0);
+            delete from activity; pragma user_version = 7;`);
+  raw.close();
+  const db = openDb(file);
+  const row = db.get(`select * from activity where action = 'Signed in'`);
+  assert.equal(row.actor_name, 'Old Timer');
+  assert.equal(row.at, '2026-09-01T10:00:00.000Z');
+  db.close();
+});

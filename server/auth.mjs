@@ -75,8 +75,9 @@ export function createSession(db, userId, days){
 
 /**
  * The signed-in user for a session token, or null. A session is
- * extended as it is used (at most once an hour, to keep writes rare),
- * so someone who opens the app every shift never gets signed out.
+ * extended as it is used (at most every five minutes, to keep writes
+ * rare), so someone who opens the app every shift never gets signed
+ * out; `last_seen_at` doubles as when they were last on the app.
  */
 export function userForSession(db, token, days){
   if(!token) return null;
@@ -91,7 +92,7 @@ export function userForSession(db, token, days){
     db.run('delete from sessions where token_hash = ?', hash);
     return null;
   }
-  if(t - row.last_seen_at > 3600000){
+  if(t - row.last_seen_at > 300000){
     db.run('update sessions set last_seen_at = ?, expires_at = ? where token_hash = ?', t, t + days * DAY, hash);
   }
   return { id: row.id, login: row.login, fullName: row.full_name, role: row.role };

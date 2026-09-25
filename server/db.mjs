@@ -314,6 +314,18 @@ const MIGRATIONS = [
     updated_at   text not null
   );
   alter table scans add column test_key_id text references answer_keys(id) on delete cascade;
+  `,
+
+  // 8: sign-ins are logged from now on. Sign-ins from before are known
+  // only from the sessions still saved; each becomes a "Signed in" entry
+  // at the time it started (device and address were never recorded).
+  `
+  insert into activity (actor_id, actor_name, action, entity_type, entity_id, detail, at)
+  select u.id, u.full_name, 'Signed in', 'user', u.id,
+         '{"text":"Earlier sign-in, found in saved sessions (device not recorded)","backfilled":true}', s.created_at
+    from sessions s join users u on u.id = s.user_id
+   order by s.created_at;
+  create index if not exists activity_action on activity(action, at desc);
   `
 ];
 

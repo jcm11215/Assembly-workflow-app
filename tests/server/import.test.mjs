@@ -49,7 +49,7 @@ const TABLES = {
 
 const LOGINS = [
   { id: U.boss, email: 'justin@iscmfg.com', created_at: '2026-08-01T00:00:00Z' },
-  { id: U.dana, email: 'dana@assembly.local', created_at: '2026-08-02T00:00:00Z' },
+  { id: U.dana, email: 'dana@assembly.local', created_at: '2026-08-02T00:00:00Z', last_sign_in_at: '2026-09-10T07:30:00Z' },
   { id: U.tim, email: 'tim@assembly.local', created_at: '2026-08-03T00:00:00Z' }
 ];
 
@@ -116,7 +116,10 @@ test('the old project is copied across, files and all', async () => {
     assert.equal(part.position_x, 0.86);
     assert.equal(part.confidence, 0.9);
 
-    assert.equal(db.get('select actor_id from activity').actor_id, U.dana);
+    assert.equal(db.get("select actor_id from activity where action = 'Stage moved'").actor_id, U.dana);
+    const signIn = db.get("select * from activity where action = 'Signed in'");
+    assert.equal(signIn.actor_id, U.dana);
+    assert.equal(signIn.at, '2026-09-10T07:30:00.000Z');
     assert.equal(db.get('select code from signup_codes').code, 'SHOP2026');
     assert.deepEqual(JSON.parse(db.get("select value from settings where key = 'legacyAuth'").value).anonKey, 'anon');
     db.close();

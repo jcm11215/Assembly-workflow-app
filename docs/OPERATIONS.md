@@ -108,3 +108,23 @@ DATA_DIR=/var/lib/assembly-workflow node server/cli.mjs legacy-auth off`.
   AI models are the other big thing: `ollama list`, and `ollama rm <model>`
   for any you don't use.
 - **Locked out of every admin account.** `assembly-workflow create-admin`.
+
+## Who signed in and what they did
+
+Admins open **Activity** in the menu:
+
+- **People**: everyone with an account. For each person it shows:
+  - whether they have the app open right now (green dot);
+  - when they last used the app;
+  - their last sign-in and the device it was on;
+  - how many changes they made this week;
+  - any failed sign-ins this week.
+
+  Click a person to see only their entries.
+- **Show**:
+  - **Everything**;
+  - **Work done**: jobs, checklists, parts, notes, and so on;
+  - **Sign-ins**: signed in, signed out, failed and refused sign-ins, each with the device and network address;
+  - **Failed sign-ins**, highlighted in red.
+
+Sign-ins made before this was added are filled in from the sign-in sessions still saved on the server, dated when each began. Their device isn't known. An import from the old app adds each person's last sign-in there.

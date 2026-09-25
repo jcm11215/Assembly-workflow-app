@@ -22,6 +22,22 @@ function startSession(ctx, userId){
   ctx.setSessionCookie(token, SESSION_SECONDS());
 }
 
+/** "iPhone · Safari" from a browser's user-agent, for the sign-in log. */
+export function deviceName(ua = ''){
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android'
+    : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'Chromebook'
+    : /Linux/.test(ua) ? 'Linux' : '';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\/|CriOS/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  return [os, browser].filter(Boolean).join(' · ') || 'an unknown device';
+}
+
+/** Where a sign-in came from, kept with its log entry. */
+const origin = ctx => {
+  const device = deviceName(String(ctx.req.headers['user-agent'] || ''));
+  return { device, ip: ctx.clientIp() };
+};
+
 const publicUser = u => ({ id: u.id, login: u.login, fullName: u.fullName, role: u.role });
 
 /** Validates the fields every new account needs; returns them cleaned. */
@@ -85,17 +101,25 @@ export default function register(r){
 
     if(!ok){
       recordFailure(key);
+      const from = origin(ctx);
+      if(row) logActivity(ctx.db, toUser(row), 'Sign-in failed', { text: `Wrong password, from ${from.device} (${from.ip})`, ...from }, { type: 'user', id: row.id });
+      else logActivity(ctx.db, null, 'Sign-in failed', { text: `Unknown username "${login.slice(0, 60)}", from ${from.device} (${from.ip})`, login: login.slice(0, 60), ...from });
       throw new HttpError(401, 'That username or password is not right.', 'bad_login');
     }
     if(!row.active){
+      const from = origin(ctx);
+      logActivity(ctx.db, toUser(row), 'Sign-in refused', { text: `Account is switched off, from ${from.device} (${from.ip})`, ...from }, { type: 'user', id: row.id });
       throw new HttpError(403, 'This account is switched off. Check with your supervisor.', 'inactive');
     }
     clearFailures(key);
     startSession(ctx, row.id);
+    const from = origin(ctx);
+    logActivity(ctx.db, toUser(row), 'Signed in', { text: `On ${from.device} (${from.ip})`, ...from }, { type: 'user', id: row.id });
     return { user: publicUser(toUser(row)) };
   }, { public: true });
 
   r.delete('/api/session', ctx => {
+    if(ctx.user) ctx.log('Signed out', { text: `On ${origin(ctx).device}` }, { type: 'user', id: ctx.user.id });
     endSession(ctx.db, ctx.token);
     ctx.setSessionCookie('', 0);
   }, { public: true });

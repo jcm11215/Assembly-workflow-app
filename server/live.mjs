@@ -68,6 +68,9 @@ export function updateUser(user){
   }
 }
 
+/** Who has the app open right now. */
+export const onlineUserIds = () => new Set([...clients].map(c => c.user.id));
+
 export const connectionCount = () => clients.size;
 
 export function closeAll(){

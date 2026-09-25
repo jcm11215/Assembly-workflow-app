@@ -134,6 +134,7 @@ async function main(){
       fullName: (p && p.full_name) || (u.user_metadata && u.user_metadata.full_name) || login,
       role: ROLE[p && p.role] || 'trainee',
       active: p ? p.active !== false : true,
+      lastSignIn: ts(u.last_sign_in_at),
       createdAt: ts(u.created_at) || new Date().toISOString(),
       updatedAt: ts((p && p.updated_at) || u.updated_at) || new Date().toISOString()
     });
@@ -248,6 +249,11 @@ async function main(){
       db.run(`insert into activity (actor_id, actor_name, action, entity_type, entity_id, detail, at) values (?, ?, ?, ?, ?, ?, ?)`,
         person(a.actor), a.actor_name || 'Unknown', a.action, a.entity_type || null, a.entity_id || null,
         JSON.stringify(a.detail && typeof a.detail === 'object' ? a.detail : { text: String(a.detail || '') }), ts(a.at));
+    }
+    // The old app kept each person's last sign-in, not a log of them.
+    for(const u of users.filter(u => u.lastSignIn)){
+      db.run(`insert into activity (actor_id, actor_name, action, entity_type, entity_id, detail, at) values (?, ?, 'Signed in', 'user', ?, ?, ?)`,
+        u.id, u.fullName, u.id, JSON.stringify({ text: 'Last sign-in on the old app', imported: true }), u.lastSignIn);
     }
     for(const c of codes){
       db.run('insert or ignore into signup_codes (code, label, active, created_at) values (?, ?, ?, ?)',
