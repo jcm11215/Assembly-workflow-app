@@ -1,112 +1,156 @@
 # Architecture
 
-Assembly Workflow Tracker — a shop-floor screw-conveyor assembly tracker. Vanilla ES modules, no build step, deployed as static files (GitHub Pages) against a Supabase backend. 75 modules, 0 circular dependencies, ~8,500 lines.
+One Node.js process serves both the app and its API. The database is one
+SQLite file, and the drawings are files in a folder beside it. The server
+runs on the shop's Linux machine, bound to localhost; `tailscale serve`
+publishes it to the tailnet over HTTPS. Nothing is installed from npm to run
+it: SQLite is built into Node 22, and the browser libraries are vendored.
 
 ```
-                              ┌─────────────────┐
-                              │   index.html    │  thin bootstrap shell
-                              └────────┬────────┘
-                                       │
-                              ┌────────▼────────┐
-                              │   src/app/       │  boot, event router, render bus
-                              └────────┬────────┘
-           ┌───────────────────────────┼───────────────────────────┐
-           │                           │                           │
-    ┌──────▼──────┐            ┌───────▼───────┐           ┌───────▼───────┐
-    │  src/auth/   │            │  src/jobs/     │           │  src/ai/       │
-    │              │            │  blockers/     │           │                │
-    │  Supabase    │            │  notes/        │           │  Action Layer  │
-    │  Auth        │            │  activity/     │           │  (chat → tools)│
-    └──────┬───────┘            └───────┬────────┘           └───────┬────────┘
-           │                            │                            │
-           │                    ┌───────▼────────┐                  │
-           │                    │  blueprints/    │                  │
-           │                    │  models/        │                  │
-           │                    │ (scan + pin map)│                  │
-           │                    └───────┬────────┘                  │
-           └────────────────────────────┼───────────────────────────┘
-                                         │
-                              ┌──────────▼──────────┐
-                              │      src/db/         │  the ONLY layer
-                              │  (repositories +      │  that touches
-                              │   supabaseClient)      │  Supabase
-                              └──────────┬──────────┘
-                                         │
-                    ┌────────────────────┼────────────────────┐
-                    │                    │                    │
-             ┌──────▼──────┐     ┌───────▼───────┐    ┌───────▼───────┐
-             │  Postgres    │     │  Realtime      │    │  Storage      │
-             │  (RLS +      │     │  (Phoenix      │    │  (blueprint   │
-             │  triggers)   │     │  Channels)     │    │  images)      │
-             └──────────────┘     └───────┬────────┘    └───────────────┘
-                                          │
-                                  ┌───────▼────────┐
-                                  │ src/realtime/   │  patches state
-                                  │ (patch-by-id)   │  by id, never
-                                  └────────────────┘  wholesale reload
+ phones / tablets / PCs  ──tailnet (HTTPS, *.ts.net)──▶  tailscale serve
+                                                              │
+                                                              ▼ 127.0.0.1:8080
+┌──────────────────────────── server/ (Node.js) ─────────────────────────────┐
+│  http.mjs     router, JSON, static files, security headers                  │
+│  auth.mjs     scrypt passwords, cookie sessions (hash stored), throttling   │
+│  routes/*     one file per area; permissions checked per handler            │
+│  records.mjs  rows → the exact objects the app renders                      │
+│  live.mjs     Server-Sent Events: every change pushed to every open app     │
+│  ai.mjs       AI settings, and asking the local AI                          │
+│  ollama.mjs   the local models: chat, drawings, embeddings, downloads       │
+│  scans.mjs    reading drawings in the background, one at a time             │
+│  knowledge.mjs  documents + corrections the assistant searches              │
+│  files.mjs    drawings on disk, a folder per job                            │
+│  backup.mjs   nightly VACUUM INTO copies                                    │
+└───────────────┬──────────────────────────────────────┬──────────────────────┘
+                ▼                                      ▼
+     data/assembly.db (SQLite)              data/files/<job>/<drawing>
+                                            data/files/knowledge/<doc>
+                ▲
+                └── Ollama on 127.0.0.1:11434 (or another tailnet machine)
 ```
 
-## Auth (`src/auth/`)
+## Folders
 
-Supabase Auth via plain `fetch` against the GoTrue REST API — no SDK, consistent with the rest of the app. Governed by one flag: `AUTH_ENABLED` (`authService.js`), currently `false` in production.
+| Folder | What's there |
+| --- | --- |
+| `shared/` | Pure rules both sides import: stages, the checklist and the stage-move rule (`procedure.js`), roles and permissions (`roles.js`), task recurrence, the error vocabulary and its rollups, calendar dates. |
+| `server/` | The server. `main.mjs` starts it; `app.mjs` builds the handler (tests run it on an in-memory database); `cli.mjs` is the admin tool; `models.mjs` picks and downloads the AI models; `import-supabase.mjs` and `import-localai.mjs` are one-time migrations. |
+| `web/` | The app. Preact + htm, vendored in `web/vendor/` with pdf.js and the Rubik and Mulish fonts (ISC's typefaces); plain ES modules, no build step. Dark by default, light per device in Settings (`theme-boot.js`, `lib/theme.js`). |
+| `web/lib/` | `api.js` (fetch), `store.js` (one state object + `useStore`), `actions.js` (every change, one function each), `live.js` (SSE), `router.js` (hash routes), `dashboard.js` (the Home dashboard's numbers: one set of filters shared by every chart). |
+| `web/screens/` | One file per screen. `web/jobs/` holds the pieces shared between job screens; `web/ui/` the shared building blocks, including the dashboard's charts (`charts.js`). |
+| `web/scan/` | Reading drawings (`pipeline.js`), one sheet per request. A CAD PDF's own text (or free Tesseract OCR, vendored in `web/vendor/tesseract`, for scans and photos) finds the parts table -- read straight from the text when it's clean (`tableText.js`, types from `categories.js` -- motor/drive, bearings, hangers, augers, seals, shafts, gaskets, coupling bolts and UHMW only), else sent to the AI as an enlarged crop -- and where the item numbers sit on the views. Then the balloons for exactly those item numbers, which end each is at, and a join (`scanJoin.js`) that keeps each table row once -- a table repeated on every sheet is read once, and a part ballooned in several views is one part -- sharing its quantity out over the ends it was seen at, never adding to it; corrections learned from earlier edits; a sort by location. Each scan records which scanner read it (`SCANNER`), so a list from the old scanner, which counted a part again in every view, can be told apart. The illustration tags each part with the drawing's own item number. |
+| `web/assistant/` | The assistant's tool list and its propose-then-confirm flow. |
+| `deploy/` | systemd unit, the install and update scripts, and the `assembly-workflow` admin command they install. |
+| `tests/` | `node:test` suites for the server, shared rules and app logic; an optional browser suite. |
 
-- **`sessionStore.js`** — pure data + pub/sub, zero dependencies (deliberately, to avoid a cycle with `authService.js`)
-- **`authService.js`** — login/logout/refresh/password-reset, and the **identity bridge**: `currentActorId()`/`currentActorName()` are what every repository and UI form calls, resolving to either a real `auth.uid()` (when `AUTH_ENABLED`) or the legacy device-local name (when not) — the one switch that governs the whole transition
-- **`permissions.js`** — synchronous role checks (`isAssembler()`, `isLeadOrAdmin()`, etc.), reading a cached profile so the UI never awaits a network call just to decide what to show
-- **`profileService.js`** — profile lookup/creation, defaulting every new signup to `assembler`
-- **`nameGate.js`** / **`loginView.js`** — the two mutually-exclusive first-run UIs, selected by `AUTH_ENABLED`
+## How a change flows
 
-**Enforcement is layered, not single-point**: `permissions.js` is advisory (UI hints, not gates — buttons aren't hidden); the real enforcement is Postgres RLS policies and triggers, which hold regardless of what the client does.
+1. A screen calls one function in `web/lib/actions.js`, e.g. `moveStage(job, 'layout')`.
+2. That sends one request (`POST /api/jobs/:id/stage { from, to }`).
+3. The route checks the signed-in person's permission (`shared/roles.js`)
+   and the business rule (`shared/procedure.js`'s `checkStageMove`), writes,
+   logs to the activity table, and pushes the updated job to every open app
+   over SSE.
+4. The response carries the same updated record, which the store merges by
+   id. The live echo arriving a moment later changes nothing.
 
-## Repositories (`src/db/`)
+Jobs carry two counters. `version` is bumped by edits and stage moves; an
+edit sent against an old version is refused with the current job ("someone
+else changed this"). `rev` is bumped by every change, so the app drops a
+copy older than the one it holds when a response and a live event cross.
 
-**The only layer permitted to talk to Supabase.** Nothing outside `src/db/` issues a raw `fetch` to Postgrest, Storage, or Realtime's REST surface.
+## Rules live in one place
 
-- **`supabaseClient.js`** — the PostgREST/Storage fetch wrapper, typed `DbError`, and the `currentUserId()` provider-injection seam (wired from `app.js`, avoiding a cycle back to `authService.js`)
-- **`mappers.js`** — the *only* place the relational (snake_case) row shape and the UI's (camelCase) object shape are translated — this is what let every later phase change the storage layer without touching UI code
-- **One file per table**: `jobsRepo.js`, `blockersRepo.js`, `notesRepo.js`, `checklistRepo.js`, `blueprintsRepo.js`, `activityRepo.js` — each does CRUD only, no cross-cutting concerns
-- **`repository.js`** — the Phase 3 migration adapter, presenting old blob-API function names (`loadAll`, `persistJobs`, etc.) backed by the relational repos underneath; shrinking as later phases increasingly import repos directly (see Dependency Report)
-- **`telemetry.js`, `cutover.js`, `parity.js`, `dryRun.js`** — the Phase 4 migration-verification toolkit (parity checking, dual-write cutover modes); scheduled for removal after 30 days of clean production `Relational Only` operation
+The stage gate (one stage at a time, the current stage's checklist
+finished, trainees can't sign into QC or Complete, backwards always
+allowed) is `checkStageMove` in `shared/procedure.js`. The server enforces
+it; the app runs the same function to explain a refusal before sending
+anything; the assistant runs it to show which steps it can't do.
 
-## Database (`supabase/*.sql`)
+Permissions are the table in `shared/roles.js`. The server checks it on
+every request; the app uses it to decide which buttons to show.
 
-Normalized relational schema (`schema.sql`): `profiles`, `jobs`, `job_checklist`, `blockers`, `notes`, `blueprints`, `blueprint_components`, `activity_log` — the last being **append-only for every role, including admin**; corrections are new rows, never edits. `triggers.sql` enforces the checklist-gate and no-stage-skipping rule **server-side** (mirroring `jobs/transitions.js`'s client-side check exactly, so there's one source of truth for the rule, verified in two places). `rls.sql` implements assembler/lead/admin policies per table; `role_harness.sql` is an executable test that impersonates each role and asserts the real access boundaries hold.
+## Sign-in
 
-## Realtime (`src/realtime/`)
+Usernames or emails with passwords (scrypt). A session is a random token in
+an HttpOnly cookie; the database stores only its SHA-256. Sessions last 30
+days and extend as they're used. Every write needs an `X-Requested-With`
+header, which another site can't send without a CORS preflight the server
+never approves. Switching someone off ends their sessions and closes their
+live stream immediately.
 
-Plain WebSocket against Supabase's Phoenix Channels protocol (`realtimeClient.js`) — one socket, one channel per subscribed table, exponential-backoff reconnect. Four channels per client: `jobs`, `blockers`, `notes`, `activity_log` (not `job_checklist` — a known scope gap, see Acceptance Report). Every table's realtime module **patches state by id**, never reloads wholesale; `jobsRealtime.js` additionally enforces version-ordering so a stale or out-of-order event can never regress state already advanced by a newer write. On reconnect after a genuine drop, `app.js` triggers exactly one full catch-up reload to close the gap, then resumes incremental patching.
+## Drawings
 
-## Blueprint workflow (`src/blueprints/`, `src/models/`)
+A scan runs on the server, so it carries on whatever the device that
+started it does -- the screen left, the phone locked, the app closed. The
+device does the quick part: it renders the pages and reads their text
+(a few seconds, with the screen kept on), then sends those pages and the
+original file in one upload (`POST /api/scans`: the pages as JSON, the
+file's bytes straight after, `?meta=` giving the JSON's length).
+`server/scans.mjs` runs the AI steps with the same code the app uses
+(`web/scan/pipeline.js`), one scan at a time since they share the GPU,
+and pushes progress to the person who started it; the app shows it at
+the top of every screen (`web/scan/ScanBanner.js`), on each of their
+devices. A re-scan saves itself as the job's newest blueprint. A new job
+from a drawing waits, read, until someone reviews it and creates the job
+(`POST /api/scans/:id/attach`). A scan can be stopped (after the question
+it is on) and a failed one tried again, asking only what failed. The
+pages wait in `files/scans/` until the scan is done with them; a scan a
+restart interrupted runs again, and finished ones are cleared after a
+week.
 
-PDF/image → page classification (cheap AI call) → main extraction (page-role-aware prompt) → `spec.js` normalizes every dimension with full provenance (`value`, `unit`, `source_page`, `confidence`, `method`) and **never lets the AI assign a component's assembly stage directly** — it reports `installation_location`, and `stageForLocation()` maps that to a stage in code, which is the specific fix for a drive/tail-end misclassification bug found in Phase 8. `validateExtraction()` composes spec-level and component-level checks (drive/tail swaps, bore inconsistency, missing critical parts). Each component carries **two names and never conflates them**: `item` is the category from the shop's fixed part list, normalized so parts group and colour-code consistently, while `item_as_drawn` is the wording printed on the drawing, kept verbatim (`HNGR BRG ASSY 2-7/16`) because that is what an assembler matches against the paper. Normalizing is what makes the list usable; keeping the original is what keeps it checkable, so the list shows the category as the heading and the drawing's wording underneath it. Those dimensions and checks do their work *during* the scan — they are what classify each component correctly and catch a drive/tail swap — and are then deliberately dropped: **only the components list and the original uploaded file survive a scan**. There is no engineering panel, no 3D view, and no approve/reject review step; a scan's output is the parts list and the drawing it came from. Every scan is still a new **version**, never an overwrite, and `getForJob()` serves the latest one. **Component map** (`blueprints/ui.js`'s `componentMapHtml()`): pins on the actual scanned drawing rather than a synthesized schematic — each component's `position` (a `{x,y}` fraction of its own `source_page`, from the same extraction call, normalized/validated by `spec.js`'s `normPosition()`) is never invented either; a component read from a BOM table with no visual location on any page gets `position: null` and simply isn't pinned. A PDF page is re-rendered client-side (`blueprints/pdf.js`, `images.js`'s `ensureComponentMapPageLoaded()`) from the same stored original file the AI itself read, so pin coordinates line up with what's actually shown.
+**Calibration** (the Scan testing screen). Marking a job's parts list
+correct (`POST /api/blueprints/:id/correct`) makes it that drawing's
+answer key (`answer_keys`), and the scan learns from the difference
+between what it found and the checked list: every part's type and end,
+and to leave out what it kept that isn't a part (`part_names`, the same
+table hand corrections go to). A test scan (`POST /api/scans` with
+`testKeyId`) reads the drawing again, is scored against the key
+(`shared/calibration.js`), and saves nothing to the job; Re-test all does
+every checked drawing, so a change to the scanner or the model shows
+straight away as scores going up or down.
 
-### Scanning in layers (`scanLayers.js`, `scanStore.js`, `scanMerge.js`, `scanJoin.js`)
+Every scan is kept as a new blueprint version; the newest drives the
+job. Files are named the way they were uploaded, in a folder per job
+number, so they can be found on the server without the app. A blueprint
+can also be saved directly, in two requests (`POST
+/api/jobs/:id/blueprints`, then `PUT /api/blueprints/:id/file`).
 
-A scan is not one call, it is four independent readings of the same sheets, arranged in layers by what they depend on:
+## AI
 
-| Layer | Costs requests | What it does |
-|---|---|---|
-| 0 prepare | no | render the sheets, hash each one by content |
-| 1 classify | yes | which kind of page each sheet is |
-| 2 read | yes | **parts**, **callouts**, **dimensions** — in parallel |
-| 3 assemble | no | whitelist, join balloons to parts, place them, validate |
+The AI runs on the shop's own hardware, with Ollama; no outside AI service
+is used. The app sends a prompt and content blocks to `POST /api/ai/chat`,
+and the server asks Ollama, trying once more if a model fails while
+loading.
 
-**Why split at all.** One call doing everything produced a reply long enough that a truncation came back looking like a drawing with no hardware on it, and each of the three jobs got a third of the attention. Splitting makes each reading narrow, lets layer 2 run concurrently (a scan takes about as long as its slowest reading, not the sum), and lets each reading see only the sheets it needs — layer 1 exists to shrink layers 2's uploads, which is why it pays for itself on a multi-sheet set and is skipped for a single page, where it cannot change anything.
+**Local AI.** `ollama.mjs` calls Ollama's native `/api/chat`, not its
+OpenAI-style endpoint, because only the native one honours `num_ctx`: a
+multi-page scan overflows a small context and Ollama silently drops the
+start of the prompt. Requests are sized up front (tokens per image by
+model family), refused with "too large" when they can't fit -- the scan
+pipeline answers that by halving the pages -- and checked afterwards for
+an overflow that slipped through. Drawings go to the vision model with
+each page's PDF text layer beside it; questions go to the chat model (or
+the vision model, until a chat model is picked).
 
-**Why layer 3 is code, not a prompt.** Matching item number 7 in the parts table to the balloons numbered 7 on the assembly view is a lookup with exactly one right answer, and so is deciding which end of the machine a motor goes on. A model asked to do those *while also* reading the table will occasionally produce a confident label on the wrong part; a join can only fail to match, which is visible and recoverable.
+**Setting it up.** The AI has three jobs -- answering questions, reading
+drawings, searching documents -- and `models.mjs` gives each a model. Any
+job without one gets an installed model that fits: the recommended one if
+it's there, else one of a sensible size. This happens when the server
+starts and whenever Settings is opened, so a model installed by hand is
+picked up too. **Set up the AI** in Settings downloads what's still
+missing, one model at a time, putting each to work as it lands; progress
+reaches admins over SSE (`ai-models`).
 
-**Requests are the scarce resource.** The free tier caps them per minute, so every reading in layers 1–2 is stored against the pages it covered *and the wording it was asked with* — `layerKey(question, promptVersion, pageHashes)` in `scanStore.js`, held in IndexedDB so it survives a reload. A second attempt at the same drawing asks only for what is still missing, usually one reading rather than four. **Bump the prompt's version in `PROMPT_VERSIONS` whenever you change its wording**, or stored answers get served against a question nobody asks any more — stale, invisible and confident.
-
-**Dividing on failure.** Asking once about a whole group is the cheapest way to get an answer, so it is always the first try. What happens next depends on why it failed, because the right response differs: a **quota** failure must not divide (two requests against the cap that just refused one — the provider layer has already waited the exact delay the server asked for), a **rejected key or missing model** must not divide (nothing about the pages is the problem), but a reply **too big to finish** must, because half the pages is half the output. A divided group caches its halves *and* the rejoined whole, so it is divided once ever rather than rediscovered on every attempt. `scanMerge.js` rejoins the halves — lists concatenate, and for dimensions a value that was actually read always beats one reported `not_found`, since the half that never saw a sheet has nothing to say about it and its silence must not overwrite the half that did.
-
-## AI Action Layer (`src/ai/`)
-
-Natural language → structured, reviewable, permission-checked repository calls. **Never touches the database directly** — every one of 13 registered actions (`toolRegistry.js`) resolves against already-loaded state, checks permission (`permissionAdapter.js`, bridging to `auth/permissions.js`), re-validates business rules by calling the *same* functions the human UI calls (e.g. `jobs/transitions.js`'s `validateStageTransition`, not a reimplementation), and only then calls a repository function. Two-phase by design (`workflowExecutor.js`): `proposeActions()` does all of the above and produces a human-readable preview with **zero writes**; nothing executes until `confirmAndExecute()` is called with that proposal's id, and permission/validation are re-checked at that point too, since state can change between propose and confirm. Every outcome — success, permission denial, validation failure, execution error — is logged via `actionAudit.js` with `action_source: 'ai'`.
-
-## Monitoring (`src/monitoring/`, `src/admin/`)
-
-`errorHandler.js`/`connectionMonitor.js` observe (never modify) the app's global error events and Realtime's connection state, writing rate-limited traces to the same `activity_log` every other mutation uses. `healthDashboard.js` reads from these plus `telemetry.js`, `cutover.js`, and `authService.js` — no metric is tracked twice in two places.
-
-## The one architectural rule that held across all 11 phases
-
-**UI never talks to Supabase.** Every mutation, human or AI-driven, goes: UI/tool → repository function → Supabase. This is what let Auth (Phase 5), RLS (Phase 6), Realtime (Phase 7), the review workflow (Phase 8), and the AI Action Layer (Phase 9) each land without rewriting anything upstream of the repository layer.
+**Knowledge base.** Admins add documents (Knowledge screen). Text comes
+from the file (text, Markdown, CSV, HTML, Word) or, for a PDF, from the
+browser's pdf.js text layer. It is cut into ~1400-character passages on
+paragraph boundaries and embedded by Ollama's embedding model; vectors
+live in SQLite as float32 blobs and are searched by dot product. When the
+assistant is asked something, `POST /api/ai/chat` gets `knowledge: <the
+question>` and adds the best passages -- weighted by collection, so the
+shop's own procedures outrank vendor catalogs -- and any staff correction
+to a similar question, labelled as overriding everything else. So a
+correction counts from the next question on, with no retraining. The
+search runs on the local embedding model.

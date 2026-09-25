@@ -1,0 +1,151 @@
+// Reading a parts table from a page's own text, without the AI.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { findTable, readTable, tableIsClean, phrases } from '../../web/scan/tableText.js';
+import { categorize } from '../../web/scan/categories.js';
+import { partsFromTable, applyLearned } from '../../web/scan/pipeline.js';
+import { learnKey } from '../../shared/partNames.js';
+
+const run = (str, x, y, w = Math.max(0.006, str.length * 0.006), h = 0.008) => ({ str, x, y: y - h / 2, w, h });
+
+// ITEM | QTY | PART NO. | DESCRIPTION, header on top, a description that
+// starts left of its (centred) header and one that wraps onto two lines.
+function table(headY, step){
+  const row = (i, qty, pn, desc, extra) => {
+    const y = headY + step * (i + 1);
+    const out = [run(String(i + 1), 0.608, y), run(String(qty), 0.648, y), run(pn, 0.68, y)];
+    desc.split(' ').reduce((x, word) => { out.push(run(word, x, y)); return x + word.length * 0.006 + 0.002; }, 0.745);
+    if(extra) out.push(run(extra, 0.745, y + 0.009));
+    return out;
+  };
+  return [
+    run('ITEM', 0.60, headY, 0.03), run('QTY', 0.64, headY, 0.025), run('PART', 0.68, headY, 0.028), run('NO.', 0.7095, headY, 0.016),
+    run('DESCRIPTION', 0.79, headY, 0.07),
+    ...row(0, 1, 'GM-5', 'GEARMOTOR, 5HP 39RPM'),
+    ...row(1, 2, 'HB-247', 'HNGR BRG ASSY', 'UHMW, 2-7/16 BORE'),
+    ...row(2, 3, '', '12" SECTIONAL FLIGHT'),
+    ...row(3, 4, 'P-9', 'END PLATE'),
+    run('12', 0.30, 0.40)               // a dimension elsewhere on the sheet
+  ];
+}
+
+test('words next to each other become one phrase', () => {
+  const p = phrases([run('ITEM', 0.1, 0.5, 0.03), run('NO.', 0.131, 0.5, 0.015), run('QTY', 0.2, 0.5, 0.025)]);
+  assert.deepEqual(p.map(x => x.str), ['ITEM NO.', 'QTY']);
+});
+
+test('a table under its header is read row by row, columns and all', () => {
+  const t = findTable(table(0.60, 0.022));
+  assert.ok(t, 'found the table');
+  const rows = readTable(t);
+  assert.deepEqual(rows.map(r => [r.balloon, r.quantity, r.part_number, r.description]), [
+    [1, 1, 'GM-5', 'GEARMOTOR, 5HP 39RPM'],
+    [2, 2, 'HB-247', 'HNGR BRG ASSY UHMW, 2-7/16 BORE'],
+    [3, 3, '', '12" SECTIONAL FLIGHT'],
+    [4, 4, 'P-9', 'END PLATE']
+  ]);
+  assert.ok(tableIsClean(rows));
+  const [x, y, w, h] = t.bomBox;
+  assert.ok(x < 0.60 && y < 0.60 && x + w > 0.85 && y + h > 0.69, 'the box holds the whole table');
+  assert.ok(!(0.30 > x && 0.30 < x + w), 'the stray dimension is outside it');
+});
+
+test('a table that grows upward from its header reads the same', () => {
+  const rows = readTable(findTable(table(0.90, -0.022)));
+  assert.deepEqual(rows.map(r => r.balloon), [1, 2, 3, 4]);
+  assert.equal(rows[0].description, 'GEARMOTOR, 5HP 39RPM');
+});
+
+test('no header, no table', () => {
+  assert.equal(findTable([run('NOTES', 0.1, 0.1), run('1', 0.1, 0.12), run('2', 0.1, 0.14)]), null);
+  assert.equal(tableIsClean([{ balloon: 1, description: 'X' }]), false);
+});
+
+test('descriptions sort into the shop\'s part types', () => {
+  assert.equal(categorize('GEARMOTOR, 5HP'), 'Motor');
+  assert.equal(categorize('HNGR BRG ASSY'), 'Hanger Bearing');
+  assert.equal(categorize('FLG BRG 2-7/16'), 'Bearing');
+  assert.equal(categorize('DRIVE SHAFT 2-7/16'), 'Drive Shaft');
+  assert.equal(categorize('SHAFT MOUNT DRIVE'), 'Drive');
+  assert.equal(categorize('12" SECTIONAL FLIGHT'), 'Auger');
+  assert.equal(categorize('CPLG BOLT'), 'Coupling Bolts');
+  assert.equal(categorize('GASKET'), 'Gasket');
+  assert.equal(categorize('HEX BOLT'), null, 'other fasteners are not tracked');
+  assert.equal(categorize('UHMW WEAR STRIP'), 'UHMW');
+  assert.equal(categorize('SHAFT, 2-7/16 C1045'), 'Shaft');
+  assert.equal(categorize('WASTE PACK SEAL'), 'Seal');
+  assert.equal(categorize('DRIVE END PLATE'), null);
+  assert.equal(categorize('CAP SCREW 1/2-13'), null);
+});
+
+test('table rows become parts; corrections people made are applied', () => {
+  const parts = partsFromTable([{ balloon: 5, description: 'FLG BRG 2-7/16', quantity: 2, part_number: '', specification: '' }], 2);
+  assert.equal(parts[0].item, 'Bearing');
+  assert.equal(parts[0].source_page, 2);
+  const learned = new Map([[learnKey('Flg. Brg 2-7/16'), { item: 'Bearing', location: 'tail_end' }]]);
+  const { parts: fixed, used } = applyLearned(parts, learned);
+  assert.equal(used, 1);
+  assert.equal(fixed[0].installation_location, 'tail_end');
+});
+
+test('a part that only carries a shaft is not a shaft', async () => {
+  const { checkShaft } = await import('../../web/scan/categories.js');
+  assert.equal(categorize('AUGER W/ END SHAFT'), 'Auger');
+  assert.equal(categorize('FOOT W/ END SHAFT'), null);
+  assert.equal(categorize('SADDLE, DRIVE SHAFT'), null);
+  assert.equal(categorize('DRIVE SHAFT 2-7/16 C1045'), 'Drive Shaft');
+  assert.equal(checkShaft({ item: 'Drive Shaft', item_as_drawn: '12" FLIGHTS ON 2-1/2 PIPE, END SHAFT' }).item, 'Auger');
+  assert.equal(checkShaft({ item: 'Drive Shaft', item_as_drawn: 'FEET W/ END SHAFT' }), null);
+  assert.equal(checkShaft({ item: 'Drive Shaft', item_as_drawn: 'DRIVE SHAFT 2-7/16' }).item, 'Drive Shaft');
+});
+
+test('a part someone removed is left out of later scans', () => {
+  const learned = new Map([[learnKey('FOOT ASSY'), { item: 'Not a part' }]]);
+  const { parts, used } = applyLearned([{ item: 'Shaft', item_as_drawn: 'Foot assy' }, { item: 'Motor', item_as_drawn: 'GEARMOTOR' }], learned);
+  assert.deepEqual(parts.map(p => p.item), ['Motor']);
+  assert.equal(used, 1);
+});
+
+test('a real assembly sheet: sub-items, a long table and its detail sheet (2501-010)', async () => {
+  const fs = await import('node:fs');
+  const { mainListFirst } = await import('../../web/scan/pipeline.js');
+  const { checkShaft } = await import('../../web/scan/categories.js');
+  const read = f => readTable(findTable(JSON.parse(fs.readFileSync(new URL(`./fixtures/2501-010-${f}-runs.json`, import.meta.url)))));
+  const main = read('p1'), hanger = read('p10');
+  assert.equal(main.length, 27, 'every numbered row, past the sub-items');
+  assert.deepEqual(main.slice(0, 4).map(r => [r.balloon, r.quantity]), [[1, 2], [2, 1], [3, 2], [4, 1]]);
+  assert.match(main[3].description, /^STD 2-7\/16", 2-BOLT END SHAFT$/, 'sub-item 3.3 kept out of item 4');
+  assert.ok(tableIsClean(main) && tableIsClean(hanger));
+  assert.deepEqual(hanger.map(r => r.quantity), [1, 1, 1, 1, 1], 'quantities are not item numbers');
+
+  const parts = mainListFirst([partsFromTable(main, 1), partsFromTable(hanger, 10)]).map(checkShaft).filter(Boolean)
+    .filter(p => categorize(p.item_as_drawn));
+  assert.deepEqual(parts.map(p => [p.balloon, p.item]), [
+    [3, 'Auger'], [4, 'Shaft'], [6, 'Hanger Bearing'], [13, 'Seal'], [14, 'Bearing'], [15, 'Drive'], [null, 'Coupling Shaft']
+  ]);
+});
+
+test('bolts, nuts, washers and plates never get on the list, whatever the AI called them', async () => {
+  const { checkType } = await import('../../web/scan/categories.js');
+  const ai = (item, drawn, balloon = 1) => ({ item, item_as_drawn: drawn, balloon });
+  const kept = [
+    ai('Bearing', '1/2" UNC13 HEX BOLT, 1 1/2" LG GRADE 5'), ai('Bearing', '5/8" LOCK WASHER'), ai('Seal', '1/2" UNC13 HEX NUT'),
+    ai('Seal', '3" WASTEPACK FRONT PLATE'), ai('Seal', '3" RADIAL SHAFT LIP SEAL', '1.4'),
+    ai('Motor', '15 HP @ 35 RPM ASSEMBLED CLASS II SCREW CONVEYOR DRIVE WITH CAST IRON DRIVE'),
+    ai('Seal', 'STD 3" DIA WASTE PACK/LIP SEAL'), ai('Bearing', 'STD 3" BORE DIA, 4-BOLT FLANGED BALL BEARING'),
+    ai('Coupling Bolts', '3/4" COUPLING BOLT W/ LOCK NUT')
+  ].map(checkType).filter(Boolean);
+  assert.deepEqual(kept.map(p => p.item), ['Drive', 'Seal', 'Bearing', 'Coupling Bolts']);
+});
+
+test('a parts list in two tables side by side, headings run together (2501-010 _400)', async () => {
+  const fs = await import('node:fs');
+  const { findTables } = await import('../../web/scan/tableText.js');
+  const runs = JSON.parse(fs.readFileSync(new URL('./fixtures/2501-010-400-p1-runs.json', import.meta.url)));
+  const rows = findTables(runs).flatMap(readTable).sort((a, b) => a.balloon - b.balloon);
+  assert.equal(rows.length, 33);
+  assert.ok(tableIsClean(rows));
+  const kept = rows.filter(r => categorize(r.description)).map(r => [r.balloon, categorize(r.description)]);
+  assert.deepEqual(kept, [[5, 'Auger'], [6, 'Auger'], [9, 'Shaft'], [10, 'Hanger Bearing'], [16, 'Seal'], [17, 'Bearing'], [18, 'Drive']],
+    'covers with gaskets, trough ends, feet and hardware left out');
+});

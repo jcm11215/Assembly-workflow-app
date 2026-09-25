@@ -2,7 +2,14 @@
   "name": "assembly-workflow-app",
   "private": true,
   "type": "module",
+  "description": "Shop-floor job tracking for screw conveyor assembly, self-hosted on one Linux server.",
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
-    "test": "bash scripts/run-tests.sh"
+    "start": "node --disable-warning=ExperimentalWarning server/main.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/server/*.test.mjs\" \"tests/shared/*.test.mjs\" \"tests/web/*.test.mjs\"",
+    "test:e2e": "node --disable-warning=ExperimentalWarning --test tests/e2e/browser.test.mjs",
+    "admin": "node --disable-warning=ExperimentalWarning server/cli.mjs"
   }
 }

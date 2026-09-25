@@ -1,0 +1,45 @@
+# Assembly Workflow Tracker
+
+Shop-floor job tracking for screw conveyor assembly at ISC Manufacturing:
+jobs moving through the assembly stages, the checklist that gates each
+stage, blueprint scanning that pulls the parts list off a drawing, blockers,
+an engineering/purchasing error log, daily tasks, notes, and an assistant
+that can answer questions about the shop or make changes you confirm.
+
+It runs entirely on one Linux machine: a single Node.js process with a
+SQLite database and the drawings in a folder beside it. Phones, tablets and
+computers reach it over [Tailscale](https://tailscale.com), so it is never
+on the public internet.
+
+The AI that reads drawings and answers the assistant runs on the same
+hardware: the app drives [Ollama](https://ollama.com) directly, and keeps a
+knowledge base of the shop's own documents and staff corrections that the
+assistant answers from. Nothing is sent to an outside AI service.
+
+## Running it
+
+- **On the shop server:** follow [docs/INSTALL.md](docs/INSTALL.md). With
+  Tailscale set up, it's one command, `sudo deploy/install.sh`. It offers to
+  install Node.js, Ollama and the AI models, then prints the `*.ts.net`
+  address to open. After that, `assembly-workflow help` lists everything
+  for looking after it.
+- **Moving from the old Supabase version:** [docs/MIGRATING.md](docs/MIGRATING.md).
+- **Backups, updates, restoring, troubleshooting:** [docs/OPERATIONS.md](docs/OPERATIONS.md).
+- **How it's put together:** [ARCHITECTURE.md](ARCHITECTURE.md).
+
+To try it on your own computer (Node.js 22.13 or newer, nothing to install):
+
+```bash
+npm start            # http://127.0.0.1:8080, data in ./data
+```
+
+The first page asks for a setup code, which the server prints when it
+starts (and keeps in `data/setup-code` until it's used). That creates the
+first admin.
+
+## Tests
+
+```bash
+npm test             # server, shared rules and app logic -- no dependencies
+npm run test:e2e     # the whole app in Chromium; needs Playwright (see the file)
+```
